@@ -38,17 +38,14 @@ float ClampAngle(float angle)
 }
 
 LightUploadData BuildLightUploadData(
-    const std::vector<const LightSceneProxy*>& lights,
+    const std::vector<LightSceneProxy>& lights,
     const cy::Matrix4f& view,
     LightId shadowLightId)
 {
     LightUploadData upload;
 
-    for (const LightSceneProxy* light : lights)
+    for (const LightSceneProxy& light : lights)
     {
-        if (light == nullptr)
-            continue;
-
         ++upload.sourceLightCount;
         if (upload.lightCount >= MaxForwardLights)
         {
@@ -57,43 +54,43 @@ LightUploadData BuildLightUploadData(
         }
 
         GpuLightData& gpuLight = upload.lights[upload.lightCount];
-        const cy::Vec3f positionView = TransformPoint(view, light->position);
+        const cy::Vec3f positionView = TransformPoint(view, light.position);
         const cy::Vec3f directionView = TransformDirection(
-            view, light->direction);
+            view, light.direction);
         const float innerAngle = ClampAngle(std::min(
-            light->innerConeAngle, light->outerConeAngle));
+            light.innerConeAngle, light.outerConeAngle));
         const float outerAngle = ClampAngle(std::max(
-            light->innerConeAngle, light->outerConeAngle));
+            light.innerConeAngle, light.outerConeAngle));
 
         gpuLight.positionAndType = {
             positionView.x,
             positionView.y,
             positionView.z,
-            static_cast<float>(light->type)
+            static_cast<float>(light.type)
         };
         gpuLight.directionAndRange = {
             directionView.x,
             directionView.y,
             directionView.z,
-            std::max(light->range, MinimumRange)
+            std::max(light.range, MinimumRange)
         };
         gpuLight.colorAndIntensity = {
-            std::max(light->color.x, 0.0f),
-            std::max(light->color.y, 0.0f),
-            std::max(light->color.z, 0.0f),
-            std::max(light->intensity, 0.0f)
+            std::max(light.color.x, 0.0f),
+            std::max(light.color.y, 0.0f),
+            std::max(light.color.z, 0.0f),
+            std::max(light.intensity, 0.0f)
         };
         gpuLight.spotAnglesAndShadow = {
             std::cos(innerAngle),
             std::cos(outerAngle),
-            light->castsShadow ? 1.0f : 0.0f,
+            light.castsShadow ? 1.0f : 0.0f,
             0.0f
         };
 
         if (shadowLightId != InvalidLightId &&
-            light->id == shadowLightId &&
-            light->castsShadow &&
-            light->type != LightType::Point)
+            light.id == shadowLightId &&
+            light.castsShadow &&
+            light.type != LightType::Point)
         {
             upload.shadowLightIndex = static_cast<int>(upload.lightCount);
         }

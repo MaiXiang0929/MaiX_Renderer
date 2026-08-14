@@ -16,7 +16,7 @@ constexpr std::array<const char*, 6> PassNames = {
 
 void RendererStatisticsPanel::Draw(Renderer& renderer)
 {
-    ImGui::SetNextWindowSize(ImVec2(700.0f, 680.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(860.0f, 680.0f), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowPos(ImVec2(16.0f, 16.0f), ImGuiCond_FirstUseEver);
     if (!ImGui::Begin("Renderer Statistics"))
     {
@@ -29,8 +29,10 @@ void RendererStatisticsPanel::Draw(Renderer& renderer)
         scene.sourcePrimitiveCount,
         scene.visiblePrimitiveCount,
         scene.culledPrimitiveCount);
-    ImGui::Text("Draw lists: %zu opaque  %zu translucent",
-        scene.opaqueDrawCount, scene.translucentDrawCount);
+    ImGui::Text("Draw lists: %zu opaque in %zu batches  %zu translucent",
+        scene.opaqueDrawCount,
+        scene.opaqueBatchCount,
+        scene.translucentDrawCount);
     ImGui::Text("Groups: %zu shader  %zu material  %zu mesh",
         scene.shaderGroupCount, scene.materialGroupCount, scene.meshGroupCount);
     ImGui::Text("Resources: %zu meshes  %zu materials",
@@ -38,11 +40,12 @@ void RendererStatisticsPanel::Draw(Renderer& renderer)
 
     ImGui::SeparatorText("CPU Submission");
     const RenderSubmissionSnapshot submission = renderer.GetSubmissionSnapshot();
-    if (submission.valid && ImGui::BeginTable("CpuStats", 6,
+    if (submission.valid && ImGui::BeginTable("CpuStats", 7,
         ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit))
     {
         ImGui::TableSetupColumn("Pass");
-        ImGui::TableSetupColumn("Draws");
+        ImGui::TableSetupColumn("Draws / instanced");
+        ImGui::TableSetupColumn("Instances");
         ImGui::TableSetupColumn("Shader req/change");
         ImGui::TableSetupColumn("Material req/change");
         ImGui::TableSetupColumn("Mesh req/change");
@@ -53,11 +56,12 @@ void RendererStatisticsPanel::Draw(Renderer& renderer)
             const PassSubmissionStats& stats = submission.passes[index];
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted(PassNames[index]);
-            ImGui::TableSetColumnIndex(1); ImGui::Text("%zu", stats.drawCalls);
-            ImGui::TableSetColumnIndex(2); ImGui::Text("%zu / %zu", stats.shaderBindRequests, stats.shaderChanges);
-            ImGui::TableSetColumnIndex(3); ImGui::Text("%zu / %zu", stats.materialBindRequests, stats.materialChanges);
-            ImGui::TableSetColumnIndex(4); ImGui::Text("%zu / %zu", stats.meshBindRequests, stats.meshChanges);
-            ImGui::TableSetColumnIndex(5); ImGui::Text("%zu / %zu", stats.textureBindRequests, stats.textureChanges);
+            ImGui::TableSetColumnIndex(1); ImGui::Text("%zu / %zu", stats.drawCalls, stats.instancedDrawCalls);
+            ImGui::TableSetColumnIndex(2); ImGui::Text("%zu", stats.submittedInstances);
+            ImGui::TableSetColumnIndex(3); ImGui::Text("%zu / %zu", stats.shaderBindRequests, stats.shaderChanges);
+            ImGui::TableSetColumnIndex(4); ImGui::Text("%zu / %zu", stats.materialBindRequests, stats.materialChanges);
+            ImGui::TableSetColumnIndex(5); ImGui::Text("%zu / %zu", stats.meshBindRequests, stats.meshChanges);
+            ImGui::TableSetColumnIndex(6); ImGui::Text("%zu / %zu", stats.textureBindRequests, stats.textureChanges);
         }
         ImGui::EndTable();
     }

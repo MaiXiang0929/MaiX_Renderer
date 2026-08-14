@@ -214,6 +214,38 @@ void TestSharedResourceIdentitySurvivesViewBuild()
         view.opaqueItems[1].materialId == 12,
         "Shared mesh instances must retain independent material identities.");
 }
+
+void TestLightViewIsAnIndependentSnapshot()
+{
+    RenderScene scene;
+    LightSceneProxy original;
+    original.type = LightType::Spot;
+    original.position = cy::Vec3f(1.0f, 2.0f, 3.0f);
+    const LightId originalId = scene.AddLight(original);
+
+    RenderView view;
+    view.frustumCullingEnabled = false;
+    scene.BuildRenderView(view);
+
+    LightSceneProxy updated = original;
+    updated.position = cy::Vec3f(9.0f, 8.0f, 7.0f);
+    Require(scene.UpdateLight(originalId, updated),
+        "The source light should be updateable after view construction.");
+    Require(scene.RemoveLight(originalId),
+        "The source light should be removable after view construction.");
+    for (int index = 0; index < 32; ++index)
+        scene.AddLight(LightSceneProxy{});
+
+    Require(view.lights.size() == 1,
+        "Scene mutations must not change an already-built light view.");
+    Require(
+        view.lights[0].id == originalId &&
+        view.lights[0].type == LightType::Spot &&
+        view.lights[0].position.x == 1.0f &&
+        view.lights[0].position.y == 2.0f &&
+        view.lights[0].position.z == 3.0f,
+        "A render view must retain its original light snapshot values.");
+}
 }
 
 int main()
@@ -224,6 +256,7 @@ int main()
     TestTranslucentBackToFrontStableSorting();
     TestReflectionTranslucentSortingUsesReflectionView();
     TestSharedResourceIdentitySurvivesViewBuild();
+    TestLightViewIsAnIndependentSnapshot();
     std::cout << "RenderScene tests passed." << std::endl;
     return EXIT_SUCCESS;
 }

@@ -72,3 +72,22 @@ Renderer 资源数仍保持 2 Mesh / 4 Material，主视图可见 259 个 Primit
 Mesh `258/3`、Texture `1030/9`，因此下一步优先实现共享资源不透明批次的
 Instancing；Texture cache 在 Instancing 后重新评估。完整数据与 CPU/GPU 数据流见
 `docs/instance-benchmark.md`。
+
+## 不透明 Instancing 结果（2026-08-14）
+
+主视图、反射视图和阴影视图现在消费按 Shader/Material/Mesh 稳定 ID 构建的不透明
+批次。最终实现使用 Pass 自有的六区域流式 UBO，每实例仅上传 64 字节 model-view
+矩阵；Forward GPU 由每视图 uniform 将观察空间位置继续变换到裁剪空间和灯光空间。
+单个 16 KiB std140 块可移植地容纳 256 个实例。
+
+优化后的 16x16 捕获为 `captures/maix_instanced_16_frame2.rdc`，大小约 95.8 MiB。
+`renderdoccmd thumb` 回放成功，缩略图确认网格、反射和统计面板均有效。捕获帧中
+Shadow 为 `1 Draw / 1 instanced`，Reflection 为 `2 / 1`，Forward 为 `3 / 1`；
+对应优化前分别为 256、65、258 Draw。Forward Material 请求由 256 降为 1，
+Texture 请求由 1030 降为 10。
+
+GPU Timer Query 在本机存在 Reflection 周期性峰值，因此独立运行的最终 EMA 只作为
+方向性快照。同构建 A/B 的稳定帧样本约为 Instancing `1.47-1.49 ms`、逐项 Forward/
+Reflection 提交 `1.50-1.52 ms`。结论限定为：CPU/API 提交冗余已显著消除，最终紧凑
+布局未显示明确 GPU 回归；不能据此宣称具有统计意义的 GPU 加速。详细数据和被淘汰
+方案见 `docs/instance-benchmark.md`。

@@ -33,7 +33,7 @@ void TestViewSpacePacking()
     point.range = 12.0f;
     point.castsShadow = false;
 
-    const std::vector<const LightSceneProxy*> lights{ &point };
+    const std::vector<LightSceneProxy> lights{ point };
     const cy::Matrix4f view = cy::Matrix4f::Translation(
         cy::Vec3f(-1.0f, -2.0f, -3.0f));
     const LightUploadData upload = BuildLightUploadData(
@@ -77,14 +77,12 @@ void TestSpotAnglesAndShadowSelection()
     secondShadow.id = 9;
     secondShadow.castsShadow = true;
 
-    const std::vector<const LightSceneProxy*> lights{
-        nullptr, &fill, &spot, &secondShadow
-    };
+    const std::vector<LightSceneProxy> lights{ fill, spot, secondShadow };
     const LightUploadData upload = BuildLightUploadData(
         lights, cy::Matrix4f::Identity(), spot.id);
 
     Require(upload.sourceLightCount == 3 && upload.lightCount == 3,
-        "Null light entries should be ignored.");
+        "All light snapshots should be uploaded.");
     Require(upload.shadowLightIndex == 1,
         "The light matching shadowLightId should own the shadow map.");
     Require(NearlyEqual(
@@ -109,7 +107,7 @@ void TestDirectionalPacking()
     directional.castsShadow = true;
     directional.id = 3;
 
-    const std::vector<const LightSceneProxy*> lights{ &directional };
+    const std::vector<LightSceneProxy> lights{ directional };
     const cy::Matrix4f view = cy::Matrix4f::RotationZ(
         3.14159265358979323846f * 0.5f);
     const LightUploadData upload = BuildLightUploadData(
@@ -126,18 +124,15 @@ void TestDirectionalPacking()
 
 void TestDeterministicTruncation()
 {
-    std::vector<LightSceneProxy> storage(MaxForwardLights + 3);
-    std::vector<const LightSceneProxy*> lights;
-    lights.reserve(storage.size());
-    for (std::size_t index = 0; index < storage.size(); ++index)
+    std::vector<LightSceneProxy> lights(MaxForwardLights + 3);
+    for (std::size_t index = 0; index < lights.size(); ++index)
     {
-        storage[index].position.x = static_cast<float>(index);
-        storage[index].castsShadow = index == MaxForwardLights + 1;
-        lights.push_back(&storage[index]);
+        lights[index].position.x = static_cast<float>(index);
+        lights[index].castsShadow = index == MaxForwardLights + 1;
     }
 
     const LightUploadData upload = BuildLightUploadData(
-        lights, cy::Matrix4f::Identity(), storage[MaxForwardLights + 1].id);
+        lights, cy::Matrix4f::Identity(), lights[MaxForwardLights + 1].id);
 
     Require(upload.sourceLightCount == MaxForwardLights + 3,
         "Source count should include lights beyond the GPU limit.");

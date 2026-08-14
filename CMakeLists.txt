@@ -70,6 +70,7 @@ set(SOURCES
     # Renderer View
     src/Renderer/View/Frustum.cpp
     src/Renderer/View/LightRenderData.cpp
+    src/Renderer/View/RenderBatch.cpp
 
     # Renderer Passes
     src/Renderer/Passes/ForwardPass.cpp
@@ -86,6 +87,7 @@ set(SOURCES
     src/Renderer/Resources/Material.cpp
     src/Renderer/Resources/CubemapTexture.cpp
     src/Renderer/Resources/Framebuffer.cpp
+    src/Renderer/Resources/InstanceBuffer.cpp
     src/Renderer/Resources/ShadowMap.cpp
 
     # GLAD
@@ -222,6 +224,7 @@ if(BUILD_TESTING)
         src/Renderer/Scene/RenderScene.cpp
         src/Renderer/Scene/PrimitiveSceneProxy.cpp
         src/Renderer/View/Frustum.cpp
+        src/Renderer/View/RenderBatch.cpp
     )
 
     target_include_directories(
@@ -289,4 +292,32 @@ if(BUILD_TESTING)
     )
 
     add_test(NAME ApplicationBenchmarkTests COMMAND ApplicationBenchmarkTests)
+
+    add_executable(
+        RenderBatchTests
+        tests/Renderer/View/RenderBatchTests.cpp
+        src/Renderer/View/RenderBatch.cpp
+    )
+
+    target_include_directories(
+        RenderBatchTests
+        PRIVATE
+        ${SRC_DIR}
+        ${THIRD_PARTY_DIR}/cyCodeBase
+    )
+
+    add_test(NAME RenderBatchTests COMMAND RenderBatchTests)
+
+    add_executable(
+        MaterialTypesTests
+        tests/Renderer/Resources/MaterialTypesTests.cpp
+    )
+
+    target_include_directories(
+        MaterialTypesTests
+        PRIVATE
+        ${SRC_DIR}
+    )
+
+    add_test(NAME MaterialTypesTests COMMAND MaterialTypesTests)
 endif()

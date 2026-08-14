@@ -35,6 +35,6 @@ struct LightUploadData
 };
 
 LightUploadData BuildLightUploadData(
-    const std::vector<const LightSceneProxy*>& lights,
+    const std::vector<LightSceneProxy>& lights,
     const cy::Matrix4f& view,
     LightId shadowLightId);

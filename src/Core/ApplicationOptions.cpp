@@ -52,6 +52,16 @@ bool ParseApplicationOptions(
             }
             continue;
         }
+        if (argument == "--material-lab")
+        {
+            if (options.materialLab)
+            {
+                errorMessage = "--material-lab may only be specified once.";
+                return false;
+            }
+            options.materialLab = true;
+            continue;
+        }
         if (!argument.empty() && argument.front() == '-')
         {
             errorMessage = "Unknown option: " + argument;
@@ -65,6 +75,12 @@ bool ParseApplicationOptions(
         errorMessage = "Expected at most a normal map and a displacement map.";
         return false;
     }
+    if (options.materialLab && options.instanceGridSize != 0)
+    {
+        errorMessage =
+            "--material-lab and --instance-grid cannot be used together.";
+        return false;
+    }
     if (!positionalArguments.empty())
         options.normalMapPath = positionalArguments[0];
     if (positionalArguments.size() == 2)
@@ -76,7 +92,9 @@ const char* GetApplicationUsage()
 {
     return
         "Usage: OpenGL_Project [normal.png] [displacement.png] "
-        "[--instance-grid N]\n"
+        "[--instance-grid N] [--material-lab]\n"
         "  --instance-grid N  Submit an N x N shared-resource benchmark grid "
-        "(1-32).";
+        "(1-32).\n"
+        "  --material-lab     Show four PBR reference materials using shared "
+        "geometry.";
 }

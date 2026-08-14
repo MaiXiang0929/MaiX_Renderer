@@ -33,6 +33,8 @@ std::size_t TextureTargetIndex(GLenum target)
 bool PassSubmissionStats::operator==(const PassSubmissionStats& other) const
 {
     return drawCalls == other.drawCalls &&
+        instancedDrawCalls == other.instancedDrawCalls &&
+        submittedInstances == other.submittedInstances &&
         shaderBindRequests == other.shaderBindRequests &&
         shaderChanges == other.shaderChanges &&
         materialBindRequests == other.materialBindRequests &&
@@ -82,6 +84,8 @@ void RenderSubmissionStats::EndFrame()
         std::cout
             << "[RenderStats][" << ToString(type) << "]"
             << " draws=" << stats.drawCalls
+            << " instanced=" << stats.instancedDrawCalls
+            << " instances=" << stats.submittedInstances
             << " shader=" << stats.shaderBindRequests
             << "/" << stats.shaderChanges
             << " material=" << stats.materialBindRequests
@@ -129,6 +133,25 @@ void RenderSubmissionStats::RecordMeshDraw(GLuint vao)
         return;
     PassSubmissionStats& stats = m_Current[ToIndex(m_CurrentPass)];
     ++stats.drawCalls;
+    ++stats.submittedInstances;
+    ++stats.meshBindRequests;
+    if (m_LastVao != vao)
+    {
+        ++stats.meshChanges;
+        m_LastVao = vao;
+    }
+}
+
+void RenderSubmissionStats::RecordMeshDrawInstanced(
+    GLuint vao,
+    std::size_t instanceCount)
+{
+    if (!m_PassActive || instanceCount == 0)
+        return;
+    PassSubmissionStats& stats = m_Current[ToIndex(m_CurrentPass)];
+    ++stats.drawCalls;
+    ++stats.instancedDrawCalls;
+    stats.submittedInstances += instanceCount;
     ++stats.meshBindRequests;
     if (m_LastVao != vao)
     {
@@ -165,7 +188,10 @@ void RenderSubmissionStats::RecordTextureBind(
 void RenderSubmissionStats::RecordDrawCall()
 {
     if (m_PassActive)
+    {
         ++m_Current[ToIndex(m_CurrentPass)].drawCalls;
+        ++m_Current[ToIndex(m_CurrentPass)].submittedInstances;
+    }
 }
 
 RenderSubmissionSnapshot RenderSubmissionStats::GetSnapshot() const

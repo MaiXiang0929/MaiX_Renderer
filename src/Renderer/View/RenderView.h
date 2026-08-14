@@ -5,10 +5,10 @@
 
 #include "cyMatrix.h"
 #include "cyVector.h"
+#include "Renderer/Scene/LightSceneProxy.h"
 #include "Renderer/View/RenderItem.h"
+#include "Renderer/View/RenderBatch.h"
 #include "Renderer/View/Frustum.h"
-
-struct LightSceneProxy;
 
 enum class RenderViewType
 {
@@ -36,8 +36,10 @@ struct RenderView
     size_t opaqueShaderGroupCount = 0;
     size_t opaqueMaterialGroupCount = 0;
     size_t opaqueMeshGroupCount = 0;
+    size_t opaqueBatchCount = 0;
 
     std::vector<RenderItem> opaqueItems;
+    std::vector<OpaqueRenderBatch> opaqueBatches;
     std::vector<RenderItem> translucentItems;
-    std::vector<const LightSceneProxy*> lights;
+    std::vector<LightSceneProxy> lights;
 };

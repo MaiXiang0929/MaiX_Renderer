@@ -71,6 +71,7 @@ void UpdateOpaqueStats(RenderView& view)
     view.opaqueShaderGroupCount = 0;
     view.opaqueMaterialGroupCount = 0;
     view.opaqueMeshGroupCount = 0;
+    view.opaqueBatchCount = 0;
 
     const RenderItem* previous = nullptr;
     for (const RenderItem& item : view.opaqueItems)
@@ -217,8 +218,8 @@ void RenderScene::BuildRenderView(RenderView& view) const
     SortOpaqueItems(view);
     SortTranslucentItems(view);
     UpdateOpaqueStats(view);
+    view.opaqueBatches = BuildOpaqueRenderBatches(view.opaqueItems);
+    view.opaqueBatchCount = view.opaqueBatches.size();
 
-    view.lights.reserve(m_Lights.size());
-    for (const LightSceneProxy& light : m_Lights)
-        view.lights.push_back(&light);
+    view.lights = m_Lights;
 }

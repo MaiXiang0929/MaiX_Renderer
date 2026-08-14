@@ -12,6 +12,8 @@
 struct PassSubmissionStats
 {
     std::size_t drawCalls = 0;
+    std::size_t instancedDrawCalls = 0;
+    std::size_t submittedInstances = 0;
     std::size_t shaderBindRequests = 0;
     std::size_t shaderChanges = 0;
     std::size_t materialBindRequests = 0;
@@ -45,6 +47,7 @@ public:
     void RecordShaderBind(GLuint program);
     void RecordMaterialBind(const void* material);
     void RecordMeshDraw(GLuint vao);
+    void RecordMeshDrawInstanced(GLuint vao, std::size_t instanceCount);
     void RecordTextureBind(GLenum target, unsigned int unit, GLuint texture);
     void RecordDrawCall();
 

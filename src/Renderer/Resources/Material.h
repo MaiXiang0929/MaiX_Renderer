@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <array>
 #include <memory>
 
 #include "cyVector.h"
@@ -28,6 +29,7 @@ struct MaterialProperties
     float metallic = 0.0f;
     float roughness = 0.5f;
     float ambientOcclusion = 1.0f;
+    float normalScale = 1.0f;
     // 透明 Pass 使用的整体不透明度；管线分类仍由 Primitive 单独决定。
     float opacity = 1.0f;
 };
@@ -43,17 +45,22 @@ public:
     MaterialProperties& GetProperties() { return m_Properties; }
     const MaterialProperties& GetProperties() const { return m_Properties; }
 
+    bool SetTexture(
+        MaterialTextureSlot slot,
+        std::shared_ptr<Texture2D> texture);
+    const std::shared_ptr<Texture2D>& GetTexture(
+        MaterialTextureSlot slot) const;
+
     void SetAlbedoMap(std::shared_ptr<Texture2D> texture);
     void SetSpecularMap(std::shared_ptr<Texture2D> texture);
     void SetNormalMap(std::shared_ptr<Texture2D> texture);
+    void SetOcclusionRoughnessMetallicMap(
+        std::shared_ptr<Texture2D> texture);
     void SetDisplacementMap(std::shared_ptr<Texture2D> texture);
     void BindDisplacement(Shader& shader, unsigned int textureUnit) const;
 
 private:
     BlendMode m_BlendMode = BlendMode::Opaque;
     MaterialProperties m_Properties;
-    std::shared_ptr<Texture2D> m_AlbedoMap;
-    std::shared_ptr<Texture2D> m_SpecularMap;
-    std::shared_ptr<Texture2D> m_NormalMap;
-    std::shared_ptr<Texture2D> m_DisplacementMap;
+    std::array<std::shared_ptr<Texture2D>, MaterialTextureSlotCount> m_Textures;
 };

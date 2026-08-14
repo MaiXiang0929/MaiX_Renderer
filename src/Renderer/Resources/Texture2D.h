@@ -14,11 +14,7 @@
 
 #include <glad/glad.h>
 
-enum class TextureColorSpace
-{
-    Linear,
-    SRGB
-};
+#include "Renderer/Resources/TextureTypes.h"
 
 class Texture2D
 {
@@ -42,9 +38,15 @@ public:
     void Bind(unsigned int textureUnit) const;
     bool IsValid() const { return m_TextureID != 0; }
     GLuint GetID() const { return m_TextureID; }
+    TextureColorSpace GetColorSpace() const { return m_ColorSpace; }
 
 private:
-    explicit Texture2D(GLuint textureID) : m_TextureID(textureID) {}
+    Texture2D(GLuint textureID, TextureColorSpace colorSpace)
+        : m_TextureID(textureID)
+        , m_ColorSpace(colorSpace)
+    {
+    }
 
     GLuint m_TextureID = 0;
+    TextureColorSpace m_ColorSpace = TextureColorSpace::Linear;
 };

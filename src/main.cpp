@@ -39,7 +39,8 @@ int main(int argc, char** argv)
     Application app(
         options.normalMapPath,
         options.displacementMapPath,
-        options.instanceGridSize);
+        options.instanceGridSize,
+        options.materialLab);
     app.Run();
     return 0;
 }

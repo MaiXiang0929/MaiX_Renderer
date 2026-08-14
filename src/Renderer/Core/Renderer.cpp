@@ -192,6 +192,7 @@ void Renderer::ExecutePipeline(RenderFrameData& frame)
         mainView.visiblePrimitiveCount,
         mainView.culledPrimitiveCount,
         mainView.opaqueDrawCount,
+        mainView.opaqueBatchCount,
         mainView.translucentItems.size(),
         mainView.opaqueShaderGroupCount,
         mainView.opaqueMaterialGroupCount,
@@ -237,11 +238,12 @@ void Renderer::ExecutePipeline(RenderFrameData& frame)
 
 void Renderer::LogMainViewStatsIfChanged(const RenderView& view)
 {
-    const std::array<std::size_t, 9> stats = {
+    const std::array<std::size_t, 10> stats = {
         view.sourcePrimitiveCount,
         view.visiblePrimitiveCount,
         view.culledPrimitiveCount,
         view.opaqueDrawCount,
+        view.opaqueBatchCount,
         view.opaqueShaderGroupCount,
         view.opaqueMaterialGroupCount,
         view.opaqueMeshGroupCount,
@@ -258,11 +260,12 @@ void Renderer::LogMainViewStatsIfChanged(const RenderView& view)
         << " visible=" << stats[1]
         << " culled=" << stats[2]
         << " opaqueDraws=" << stats[3]
-        << " shaderGroups=" << stats[4]
-        << " materialGroups=" << stats[5]
-        << " meshGroups=" << stats[6]
-        << " meshResources=" << stats[7]
-        << " materialResources=" << stats[8]
+        << " opaqueBatches=" << stats[4]
+        << " shaderGroups=" << stats[5]
+        << " materialGroups=" << stats[6]
+        << " meshGroups=" << stats[7]
+        << " meshResources=" << stats[8]
+        << " materialResources=" << stats[9]
         << std::endl;
 }
 

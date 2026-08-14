@@ -10,6 +10,7 @@
 
 #include <vector>
 #include <glad/glad.h>
+#include "cyMatrix.h"
 #include "cyVector.h"
 
 /// @brief 顶点结构体，包含位置、法线和纹理坐标
@@ -38,6 +39,8 @@ public:
 
     void Draw() const;
 
+    void DrawInstanced(std::size_t instanceCount) const;
+
     void DrawPatches() const;
 
     int GetVertexCount() const;
@@ -58,4 +61,5 @@ private:
 
     /// @brief 设置 Vertex Attribute Layout
     void SetupVertexAttributes();
+
 };

@@ -102,8 +102,9 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 - [x] Primitive/RenderItem 已具备稳定 Shader、Material、Mesh 排序 ID；主/反射视图按 Shader / Material / Mesh 排序，阴影视图按 Shader / Mesh / Material 排序
 - [x] 不透明排序已有多 Primitive 的 `RenderSceneTests`，主视图运行时输出 Draw 与资源分组统计，排序策略记录于 `docs/opaque-render-sorting.md`
 - [x] Forward fragment shader 从 Blinn-Phong 升级为 Cook-Torrance BRDF
-- [x] PBR metallic / roughness / AO 参数接入 Material
-- [x] Albedo、Normal、Specular、Displacement 纹理接口保留
+- [x] PBR metallic / roughness / AO 参数与 ORM 纹理接入 Material，ORM 使用 R=AO/G=Roughness/B=Metallic
+- [x] Base Color、Normal、ORM、Displacement 具备固定槽位与 sRGB/Linear 校验；Legacy Specular 保留兼容回退
+- [x] `--material-lab` 提供铜、塑料、陶瓷、粗糙金属四种共享 Mesh 测试材质，数据流记录于 `docs/pbr-material-workflow.md`
 - [x] 标准 PBR 与曲面细分/位移路径可切换
 - [x] Directional/Spot 阴影基础流程与 PCF
 - [x] Cubemap、反射地面、离屏 Framebuffer、Present 流程
@@ -112,6 +113,7 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 - [x] PBR 使用 std140 UBO 消费最多 16 盏 Directional/Point/Spot 灯光，并为单一 2D shadow map 记录对应灯光索引
 - [x] Renderer 已提供强类型 Mesh/Material Handle 与共享资源提交接口；透明测试场景的三张平面共享一份 Mesh
 - [x] `--instance-grid N` 已提供默认关闭的共享资源多实例基准；1/64/256 实例运行数据与 RenderDoc 捕获记录于 `docs/instance-benchmark.md`
+- [x] 不透明标准三角形已按 Shader/Material/Mesh 批次执行 Instancing；256 实例时 Shadow/Reflection/Forward 分别降为 1/2/3 Draw，单实例与 Tessellation 保持原路径
 - [x] RenderPipeline 已加入可选 GPU Debug Group，各 Pass 具备 Draw 与 Shader/Material/Mesh/Texture 提交统计
 - [x] 基于 `TranslucencyPass mesh=3/1` 基线实现最小 VAO 状态缓存，RenderDoc 捕获流程和数据记录于 `docs/renderdoc-baseline.md`
 - [x] 三帧缓冲的 GPU Timer Query 已输出各 Pass last/EMA 时间，并以非阻塞方式处理尚未完成的 Query
@@ -119,7 +121,7 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 - [x] Forward 与 Reflection 离屏目标已随窗口 framebuffer 动态重建；反射保持半分辨率，最小化时跳过零尺寸渲染
 - [x] Forward Scene Color 已升级为 RGBA16F，PresentPass 支持手动曝光、ACES Tone Mapping 与 sRGB 输出编码
 - [x] CMake 构建时清理并复制最新 assets
-- [x] CMake 配置、编译、链接与 6 项测试通过；多实例 1/8/16 网格运行诊断及 16x16 RenderDoc 捕获完成
+- [x] CMake 配置、编译、链接与 8 项测试通过；Material Lab、默认/Instancing/Tessellation 路径及 RenderDoc 捕获完成
 
 ### 部分完成
 
@@ -129,7 +131,7 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 
 ### 尚未开始
 
-- [ ] 共享 Mesh/Material、VAO 状态缓存与多实例基线已完成，但 Shader/Texture 缓存、Instancing 和批处理尚未实现
+- [ ] 共享 Mesh/Material、VAO 状态缓存与不透明 Instancing 已完成，但 Shader/Texture 缓存和跨材质批处理尚未实现
 - [ ] HDR Scene Color、手动曝光与 Tone Mapping 已完成；Bloom、自动曝光与 SSAO 尚未实现
 - [ ] Cascaded Shadow Maps（CSM）
 - [ ] NPR Anime Shader：Toon、Face Shadow、Outline、Rim Light、Hair Highlight
@@ -202,9 +204,9 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 
 下一次实现前仍遵循“先给方案、确认后执行”的协作流程。建议优先顺序为：
 
-1. 将视图、提交统计与 GPU Pass 时间快照接入后续 ImGui 性能面板。
-2. 基于 256 实例 Forward `258 Draw`、Material `256/1`、Texture `1030/9` 基线，实现共享 Shader/Material/Mesh 不透明批次的 Instancing；完成后再评估 Texture cache。
-3. 为透明材质补充 Masked/Additive 模式前，先明确 Alpha Cutout 阴影、排序和混合策略。
+1. 基于现有强类型 Material Handle 设计最小 Material Editor 更新接口，避免向编辑器暴露 Renderer 内部资源表。
+2. 为透明材质补充 Masked/Additive 模式前，先明确 Alpha Cutout 阴影、排序和混合策略。
+3. 进入 HDR 后处理扩展前，拆分 PresentPass 中的 Tone Mapping，为独立 Bloom Pass 建立资源边界。
 
 ## 7. 当前技术债与约束
 
@@ -213,7 +215,7 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 - RenderPass 之间仍通过共享 `RenderPassContext` 和 Pass 之间的直接引用传递视图及纹理资源，资源读写依赖尚未显式声明，后续可引入 Render Graph。
 - 当前裁剪只使用世界空间包围球，非均匀缩放取最大轴形成保守半径；细长物体可能产生误保留，但不会错误剔除。遮挡裁剪与距离裁剪尚未实现。
 - 主视图、反射视图和阴影视图每帧分别遍历场景并重建 `RenderItem` 列表；对象规模扩大后需要评估重复 CPU 遍历、容器填充和包围体变换成本。
-- 不透明列表已按稳定资源 ID 排序并支持共享 Mesh/Material；256 实例基线已证明 Instancing 的提交冗余，VAO 由状态缓存管理，Texture cache 留待 Instancing 后重新评估。
+- 不透明列表已按稳定资源 ID 排序并按 Shader/Material/Mesh 批次执行 Instancing；每实例通过 64 字节 model-view UBO 输入，OpenGL 4.0 的 16 KiB 可移植上限使单 Draw 最多容纳 256 个实例。透明与 Tessellation 仍使用逐项提交，Texture cache 留待多批次场景重新评估。
 - 透明排序使用各自主视图/反射视图下的物体包围球中心观察空间深度；相交网格、网格内部三角形顺序、Alpha Cutout 阴影与 OIT 仍未处理。
 - Resize 会在渲染线程立即重建 Forward/Reflection 颜色与深度附件；持续拖动窗口可能产生重复 GPU 分配，后续可结合 Render Graph 资源池或 resize debounce 优化。
 - Forward PBR 最多消费 16 盏灯；当前仍只有一张 2D shadow map，Point Light 阴影与多阴影灯尚未实现。
@@ -233,3 +235,40 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 ```
 
 项目最终应能清楚展示：C++、OpenGL、GLSL、PBR、NPR、Render Pipeline、RenderDoc 与技术美术工具开发能力。
+
+## 9. 下一步方案对齐门禁
+
+每次提出或修改“下一步执行方案”前，必须重新检查第 8 节的 60 秒最终展示目标，不能因为某个已有模块仍可继续完善，就默认深化该模块。
+
+规划前必须回答：
+
+1. 本步骤对应最终展示的哪个时间段？
+2. 它补齐哪个尚未展示的核心能力？
+3. 如果不做，是否会阻塞最终 Demo？
+4. 本轮最小可展示实现是什么？
+5. 哪些扩展明确留到以后？
+
+优先级依次为：
+
+1. 补齐最终 Demo 中尚未出现的能力。
+2. 修复阻塞展示的正确性、稳定性或工作流问题。
+3. 完成连接已有能力所必需的最小架构调整。
+4. 仅在基准或 RenderDoc 证据表明存在瓶颈时进行性能优化。
+
+以下事项不得自动成为近期优先项：
+
+- 没有基准数据支持的缓存、批处理或底层优化。
+- 不影响最终展示画面的通用化和跨 API 抽象。
+- 暂无实际使用者的扩展接口或资源系统。
+- 测试场景、材质变体和调试统计的无限扩充。
+- 与 60 秒展示内容没有直接关系的小功能完整性完善。
+
+每份下一步执行方案必须包含：
+
+- **展示目标映射**：对应第 8 节的具体时间段和画面。
+- **当前关键缺口**：说明为什么此项比其他未完成项更优先。
+- **本轮最小交付**：只包含形成可运行、可观察结果所需的工作。
+- **验收方式**：定义画面、交互、测试或 RenderDoc 证据。
+- **明确不做**：列出本轮不会顺带扩展的内容。
+
+单个子系统达到“可展示、可解释、无明显正确性错误”后即停止扩展，重新回到第 8 节选择下一个关键缺口。

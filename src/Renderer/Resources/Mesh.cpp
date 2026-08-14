@@ -52,6 +52,24 @@ void Mesh::Draw() const
     glDrawArrays(GL_TRIANGLES, 0, m_VertexCount);
 }
 
+void Mesh::DrawInstanced(std::size_t instanceCount) const
+{
+    if (m_VertexCount == 0 || instanceCount == 0)
+        return;
+    if (instanceCount >
+        static_cast<std::size_t>(std::numeric_limits<GLsizei>::max()))
+        throw std::length_error("Mesh instance count exceeds OpenGL draw range");
+
+    RenderSubmissionStats::Get().RecordMeshDrawInstanced(
+        m_VAO, instanceCount);
+    OpenGLStateCache::Get().BindVertexArray(m_VAO);
+    glDrawArraysInstanced(
+        GL_TRIANGLES,
+        0,
+        m_VertexCount,
+        static_cast<GLsizei>(instanceCount));
+}
+
 void Mesh::DrawPatches() const
 {
     if (m_VertexCount == 0) return;

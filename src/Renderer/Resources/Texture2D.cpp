@@ -82,7 +82,7 @@ std::shared_ptr<Texture2D> Texture2D::CreateRGBA8(
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glBindTexture(GL_TEXTURE_2D, 0);
 
-    return std::shared_ptr<Texture2D>(new Texture2D(textureID));
+    return std::shared_ptr<Texture2D>(new Texture2D(textureID, colorSpace));
 }
 
 void Texture2D::Bind(unsigned int textureUnit) const

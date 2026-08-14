@@ -29,7 +29,8 @@ public:
     Application(
         std::string normalMapPath,
         std::string displacementMapPath,
-        std::uint32_t instanceGridSize = 0);
+        std::uint32_t instanceGridSize = 0,
+        bool materialLab = false);
 
 	/// @brief 析构函数，自动调用 Shutdown 释放资源
     ~Application();
@@ -53,8 +54,9 @@ private:
 
 	std::string m_ObjPath = "assets/models/teapot.obj";
 	std::string m_NormalMapPath;
-	std::string m_DisplacementMapPath;
+    std::string m_DisplacementMapPath;
     std::uint32_t m_InstanceGridSize = 0;
+    bool m_MaterialLab = false;
     float m_SceneRadius = 1.0f;
 
     bool m_Initialized          = false;        ///< 应用程序是否已初始化

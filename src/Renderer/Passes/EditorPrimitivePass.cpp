@@ -73,14 +73,14 @@ void EditorPrimitivePass::Execute(RenderPassContext& context)
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    for (const LightSceneProxy* light : context.mainView.lights)
+    for (const LightSceneProxy& light : context.mainView.lights)
     {
-        if (light == nullptr || light->type == LightType::Directional)
+        if (light.type == LightType::Directional)
             continue;
 
-        DrawBillboard(context, light->position, light->color);
-        if (light->type == LightType::Spot)
-            DrawSpotCone(context, *light);
+        DrawBillboard(context, light.position, light.color);
+        if (light.type == LightType::Spot)
+            DrawSpotCone(context, light);
     }
 
     if (!blendEnabled) glDisable(GL_BLEND);

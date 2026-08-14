@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #include "ForwardPass.h"
 
+#include <algorithm>
 #include <iostream>
 
 #include "Renderer/Resources/CubemapTexture.h"
@@ -11,6 +12,18 @@
 #include "Renderer/Scene/LightSceneProxy.h"
 #include "Renderer/View/RenderView.h"
 
+namespace
+{
+InstanceTransformData BuildInstanceTransform(
+    const cy::Matrix4f& view,
+    const cy::Matrix4f& model)
+{
+    InstanceTransformData instance;
+    instance.modelView = view * model;
+    return instance;
+}
+}
+
 ForwardPass::~ForwardPass()
 {
     if (m_LightBuffer != 0)
@@ -20,6 +33,7 @@ ForwardPass::~ForwardPass()
 bool ForwardPass::Init()
 {
     const bool loaded = ReloadShaders();
+    const bool instanceBufferInitialized = m_InstanceBuffer.Init();
     glGenBuffers(1, &m_LightBuffer);
     glBindBuffer(GL_UNIFORM_BUFFER, m_LightBuffer);
     glBufferData(
@@ -28,7 +42,7 @@ bool ForwardPass::Init()
         nullptr,
         GL_DYNAMIC_DRAW);
     glBindBuffer(GL_UNIFORM_BUFFER, 0);
-    return loaded && m_LightBuffer != 0;
+    return loaded && instanceBufferInitialized && m_LightBuffer != 0;
 }
 
 bool ForwardPass::Resize(unsigned int width, unsigned int height)
@@ -44,6 +58,9 @@ bool ForwardPass::ReloadShaders()
     const bool standardLoaded = m_StandardShader.Load(
         "assets/shaders/pbr/pbr.vert",
         "assets/shaders/pbr/pbr.frag");
+    const bool instancedStandardLoaded = m_InstancedStandardShader.Load(
+        "assets/shaders/pbr/pbr_instanced.vert",
+        "assets/shaders/pbr/pbr.frag");
     const bool tessellationLoaded = m_TessellationShader.LoadTessellation(
         "assets/shaders/pbr/tessellation/pbr_tess.vert",
         "assets/shaders/pbr/tessellation/pbr_tess.tesc",
@@ -57,10 +74,13 @@ bool ForwardPass::ReloadShaders()
         "assets/shaders/reflection/ground.frag");
     const bool standardBlockBound = standardLoaded &&
         BindForwardLightsBlock(m_StandardShader);
+    const bool instancedStandardBlockBound = instancedStandardLoaded &&
+        BindForwardLightsBlock(m_InstancedStandardShader) &&
+        m_InstanceBuffer.BindShaderBlock(m_InstancedStandardShader);
     const bool tessellationBlockBound = tessellationLoaded &&
         BindForwardLightsBlock(m_TessellationShader);
-    return standardBlockBound && tessellationBlockBound && skyboxLoaded &&
-        groundLoaded;
+    return standardBlockBound && instancedStandardBlockBound &&
+        tessellationBlockBound && skyboxLoaded && groundLoaded;
 }
 
 bool ForwardPass::BindForwardLightsBlock(const Shader& shader) const
@@ -153,6 +173,15 @@ void ForwardPass::RenderSurface(
     RenderPassContext& context,
     RenderView& renderView)
 {
+    const bool hasInstancedBatch = std::any_of(
+        renderView.opaqueBatches.begin(),
+        renderView.opaqueBatches.end(),
+        ShouldUseInstancing);
+    if (!context.tessellation.enabled && hasInstancedBatch)
+    {
+        RenderOpaqueBatches(context, renderView);
+        return;
+    }
     RenderItems(context, renderView, renderView.opaqueItems, true);
 }
 
@@ -169,45 +198,14 @@ void ForwardPass::RenderItems(
     const std::vector<RenderItem>& items,
     bool allowWireframeOverlay)
 {
-    const cy::Matrix4f& view = renderView.view;
-    const cy::Matrix4f& viewProjection = renderView.viewProjection;
-
     Shader& shader = context.tessellation.enabled
         ? m_TessellationShader
         : m_StandardShader;
-    shader.Bind();
-    const LightUploadData lightUpload = UploadLights(
-        renderView, context.frame.shadowLightId);
-    shader.SetInt("lightCount", static_cast<int>(lightUpload.lightCount));
-    shader.SetInt("shadowLightIndex", lightUpload.shadowLightIndex);
+    PrepareSurfaceShader(
+        context, renderView, shader, context.tessellation.enabled);
 
-    const float viewToWorld[9] = {
-        view.cell[0], view.cell[4], view.cell[8],
-        view.cell[1], view.cell[5], view.cell[9],
-        view.cell[2], view.cell[6], view.cell[10]
-    };
-    const GLint viewToWorldLocation = glGetUniformLocation(
-        shader.GetProgramID(), "viewToWorld");
-    if (viewToWorldLocation != -1)
-        glUniformMatrix3fv(viewToWorldLocation, 1, GL_FALSE, viewToWorld);
-
-    if (context.tessellation.enabled)
-    {
-        shader.SetFloat("tessellationLevel", context.tessellation.level);
-        shader.SetFloat(
-            "displacementScale", context.tessellation.displacementScale);
-    }
-    shader.SetInt("wireframePass", 0);
-
-    context.cubemap.Bind(4);
-    shader.SetInt("cubemap", 4);
-    glActiveTexture(GL_TEXTURE5);
-    RenderSubmissionStats::Get().RecordTextureBind(
-        GL_TEXTURE_2D, 5, context.shadowTexture);
-    glBindTexture(GL_TEXTURE_2D, context.shadowTexture);
-    shader.SetInt("shadowMap", 5);
-    shader.SetInt(
-        "shadowsEnabled", context.frame.shadowsEnabled ? 1 : 0);
+    const cy::Matrix4f& view = renderView.view;
+    const cy::Matrix4f& viewProjection = renderView.viewProjection;
 
     for (const RenderItem& item : items)
     {
@@ -243,6 +241,187 @@ void ForwardPass::RenderItems(
         glDisable(GL_POLYGON_OFFSET_LINE);
         shader.SetInt("wireframePass", 0);
     }
+}
+
+void ForwardPass::RenderOpaqueBatches(
+    RenderPassContext& context,
+    RenderView& renderView)
+{
+    std::size_t uploadChunkCount = 0;
+    for (const OpaqueRenderBatch& batch : renderView.opaqueBatches)
+    {
+        if (!ShouldUseInstancing(batch) ||
+            batch.firstItem >= renderView.opaqueItems.size())
+            continue;
+        const RenderItem& firstItem =
+            renderView.opaqueItems[batch.firstItem];
+        if (firstItem.mesh == nullptr || firstItem.material == nullptr)
+            continue;
+
+        const std::size_t availableItemCount = std::min(
+            batch.itemCount,
+            renderView.opaqueItems.size() - batch.firstItem);
+        uploadChunkCount +=
+            (availableItemCount + InstanceBuffer::MaxInstancesPerDraw - 1) /
+            InstanceBuffer::MaxInstancesPerDraw;
+    }
+
+    m_InstanceTransforms.assign(
+        uploadChunkCount * InstanceBuffer::MaxInstancesPerDraw,
+        InstanceTransformData{});
+    std::size_t buildChunkIndex = 0;
+    for (const OpaqueRenderBatch& batch : renderView.opaqueBatches)
+    {
+        if (!ShouldUseInstancing(batch) ||
+            batch.firstItem >= renderView.opaqueItems.size())
+            continue;
+        const RenderItem& firstItem =
+            renderView.opaqueItems[batch.firstItem];
+        if (firstItem.mesh == nullptr || firstItem.material == nullptr)
+            continue;
+
+        const std::size_t endItem = std::min(
+            batch.firstItem + batch.itemCount,
+            renderView.opaqueItems.size());
+        for (std::size_t firstInstance = batch.firstItem;
+            firstInstance < endItem;
+            firstInstance += InstanceBuffer::MaxInstancesPerDraw)
+        {
+            const std::size_t instanceCount = std::min(
+                InstanceBuffer::MaxInstancesPerDraw,
+                endItem - firstInstance);
+            InstanceTransformData* destination =
+                m_InstanceTransforms.data() +
+                buildChunkIndex * InstanceBuffer::MaxInstancesPerDraw;
+            for (std::size_t instanceIndex = 0;
+                instanceIndex < instanceCount;
+                ++instanceIndex)
+            {
+                destination[instanceIndex] = BuildInstanceTransform(
+                    renderView.view,
+                    renderView.opaqueItems[
+                        firstInstance + instanceIndex].model);
+            }
+            ++buildChunkIndex;
+        }
+    }
+
+    if (uploadChunkCount > 0 && !m_InstanceBuffer.UploadChunks(
+            m_InstanceTransforms.data(), uploadChunkCount))
+    {
+        RenderItems(context, renderView, renderView.opaqueItems, true);
+        return;
+    }
+
+    Shader* activeShader = nullptr;
+    std::size_t drawChunkIndex = 0;
+    for (const OpaqueRenderBatch& batch : renderView.opaqueBatches)
+    {
+        if (batch.itemCount == 0 ||
+            batch.firstItem >= renderView.opaqueItems.size())
+            continue;
+
+        const RenderItem& firstItem =
+            renderView.opaqueItems[batch.firstItem];
+        if (firstItem.mesh == nullptr || firstItem.material == nullptr)
+            continue;
+
+        if (ShouldUseInstancing(batch))
+        {
+            if (activeShader != &m_InstancedStandardShader)
+            {
+                activeShader = &m_InstancedStandardShader;
+                PrepareSurfaceShader(
+                    context, renderView, *activeShader, false);
+                const cy::Matrix4f viewToWorld =
+                    renderView.view.GetInverse();
+                const cy::Matrix4f projectionFromView =
+                    renderView.viewProjection * viewToWorld;
+                const cy::Matrix4f lightFromView =
+                    context.frame.lightVP * viewToWorld;
+                activeShader->SetMatrix4(
+                    "projectionFromView", &projectionFromView.cell[0]);
+                activeShader->SetMatrix4(
+                    "lightFromView", &lightFromView.cell[0]);
+            }
+
+            firstItem.material->Bind(*activeShader, 0);
+            const std::size_t endItem = std::min(
+                batch.firstItem + batch.itemCount,
+                renderView.opaqueItems.size());
+            for (std::size_t firstInstance = batch.firstItem;
+                firstInstance < endItem;
+                firstInstance += InstanceBuffer::MaxInstancesPerDraw)
+            {
+                const std::size_t instanceCount = std::min(
+                    InstanceBuffer::MaxInstancesPerDraw,
+                    endItem - firstInstance);
+                m_InstanceBuffer.BindChunk(drawChunkIndex);
+                firstItem.mesh->DrawInstanced(instanceCount);
+                ++drawChunkIndex;
+            }
+            continue;
+        }
+
+        if (activeShader != &m_StandardShader)
+        {
+            activeShader = &m_StandardShader;
+            PrepareSurfaceShader(context, renderView, *activeShader, false);
+        }
+        const cy::Matrix4f mv = renderView.view * firstItem.model;
+        const cy::Matrix4f mvp =
+            renderView.viewProjection * firstItem.model;
+        const cy::Matrix4f lightMvp =
+            context.frame.lightVP * firstItem.model;
+        activeShader->SetMatrix4("mvp", &mvp.cell[0]);
+        activeShader->SetMatrix4("mv", &mv.cell[0]);
+        activeShader->SetMatrix4("lightMvp", &lightMvp.cell[0]);
+        firstItem.material->Bind(*activeShader, 0);
+        firstItem.mesh->Draw();
+    }
+}
+
+void ForwardPass::PrepareSurfaceShader(
+    RenderPassContext& context,
+    RenderView& renderView,
+    Shader& shader,
+    bool tessellationEnabled)
+{
+    const cy::Matrix4f& view = renderView.view;
+    shader.Bind();
+    const LightUploadData lightUpload = UploadLights(
+        renderView, context.frame.shadowLightId);
+    shader.SetInt("lightCount", static_cast<int>(lightUpload.lightCount));
+    shader.SetInt("shadowLightIndex", lightUpload.shadowLightIndex);
+
+    const float viewToWorld[9] = {
+        view.cell[0], view.cell[4], view.cell[8],
+        view.cell[1], view.cell[5], view.cell[9],
+        view.cell[2], view.cell[6], view.cell[10]
+    };
+    const GLint viewToWorldLocation = glGetUniformLocation(
+        shader.GetProgramID(), "viewToWorld");
+    if (viewToWorldLocation != -1)
+        glUniformMatrix3fv(viewToWorldLocation, 1, GL_FALSE, viewToWorld);
+
+    if (tessellationEnabled)
+    {
+        shader.SetFloat("tessellationLevel", context.tessellation.level);
+        shader.SetFloat(
+            "displacementScale", context.tessellation.displacementScale);
+    }
+    shader.SetInt("wireframePass", 0);
+
+    context.cubemap.Bind(4);
+    shader.SetInt("cubemap", 4);
+    glActiveTexture(GL_TEXTURE5);
+    RenderSubmissionStats::Get().RecordTextureBind(
+        GL_TEXTURE_2D, 5, context.shadowTexture);
+    glBindTexture(GL_TEXTURE_2D, context.shadowTexture);
+    shader.SetInt("shadowMap", 5);
+    shader.SetInt(
+        "shadowsEnabled", context.frame.shadowsEnabled ? 1 : 0);
+
 }
 
 void ForwardPass::RenderSkybox(

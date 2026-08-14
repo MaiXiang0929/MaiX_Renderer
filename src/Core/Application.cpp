@@ -19,17 +19,37 @@
 #include "cyTriMesh.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <filesystem>
 #include <iostream>
 #include <utility>
 #include <vector>
 
+namespace
+{
+std::shared_ptr<Texture2D> CreateOrmCheckerTexture(
+    unsigned char roughnessLow,
+    unsigned char roughnessHigh,
+    unsigned char metallic)
+{
+    const std::vector<unsigned char> pixels = {
+        255, roughnessLow,  metallic, 255,
+        210, roughnessHigh, metallic, 255,
+        210, roughnessHigh, metallic, 255,
+        255, roughnessLow,  metallic, 255
+    };
+    return Texture2D::CreateRGBA8(
+        2, 2, pixels, TextureColorSpace::Linear);
+}
+}
+
 /// @brief 构造函数
 Application::Application(
     std::string normalMapPath,
     std::string displacementMapPath,
-    std::uint32_t instanceGridSize)
+    std::uint32_t instanceGridSize,
+    bool materialLab)
     :
     m_Camera(
         cy::Vec3f(0, 0, 0),
@@ -41,7 +61,8 @@ Application::Application(
     ),
     m_NormalMapPath(std::move(normalMapPath)),
     m_DisplacementMapPath(std::move(displacementMapPath)),
-    m_InstanceGridSize(instanceGridSize)
+    m_InstanceGridSize(instanceGridSize),
+    m_MaterialLab(materialLab)
 {
     
 }
@@ -332,8 +353,9 @@ bool Application::Init() {
     PrimitiveBounds bounds;
     bounds.center = m_ObjCenter;
     bounds.radius = m_ModelDiameter * 0.5f;
-    const std::uint32_t effectiveGridSize =
-        m_InstanceGridSize == 0 ? 1 : m_InstanceGridSize;
+    const std::uint32_t effectiveGridSize = m_MaterialLab
+        ? 2
+        : (m_InstanceGridSize == 0 ? 1 : m_InstanceGridSize);
     const float instanceSpacing = std::max(m_ModelDiameter * 1.25f, 0.001f);
     const std::vector<cy::Vec3f> instanceOffsets = BuildInstanceGridOffsets(
         effectiveGridSize, instanceSpacing);
@@ -352,27 +374,107 @@ bool Application::Init() {
         std::max(1000.0f, cameraDistance + m_SceneRadius * 1.5f));
 
     const MeshHandle instanceMesh = m_Renderer->CreateMesh(vertices);
-    const MaterialHandle instanceMaterial =
-        m_Renderer->CreateMaterial(std::move(mainMaterial));
-    if (!instanceMesh.IsValid() || !instanceMaterial.IsValid())
+    if (!instanceMesh.IsValid())
     {
-        std::cerr << "[Error] Failed to create shared instance resources."
+        std::cerr << "[Error] Failed to create the shared surface mesh."
                   << std::endl;
         return false;
     }
+    MaterialHandle instanceMaterial;
 
-    for (const cy::Vec3f& offset : instanceOffsets)
+    if (m_MaterialLab)
     {
-        const cy::Matrix4f localToWorld =
-            cy::Matrix4f::Translation(offset) *
-            cy::Matrix4f::Translation(-m_ObjCenter);
-        const PrimitiveId primitiveId = m_Renderer->AddPrimitive(
-            instanceMesh,
-            instanceMaterial,
-            localToWorld,
-            bounds);
-        if (m_MainPrimitiveId == InvalidPrimitiveId)
-            m_MainPrimitiveId = primitiveId;
+        struct LabMaterialDescription
+        {
+            const char* name;
+            cy::Vec3f baseColor;
+            float metallic;
+            float roughness;
+            float normalScale;
+            bool useNormalMap;
+            std::shared_ptr<Texture2D> ormMap;
+        };
+
+        const std::shared_ptr<Texture2D> copperOrm =
+            CreateOrmCheckerTexture(42, 86, 255);
+        const std::shared_ptr<Texture2D> roughMetalOrm =
+            CreateOrmCheckerTexture(190, 235, 255);
+        const std::array<LabMaterialDescription, 4> descriptions = {{
+            {"Copper", {0.95f, 0.42f, 0.18f}, 1.0f, 1.0f, 1.0f,
+                false, copperOrm},
+            {"Plastic", {0.04f, 0.32f, 0.92f}, 0.0f, 0.28f, 1.0f,
+                false, nullptr},
+            {"Ceramic", {0.92f, 0.90f, 0.82f}, 0.0f, 0.18f, 0.55f,
+                true, nullptr},
+            {"RoughMetal", {0.38f, 0.42f, 0.46f}, 1.0f, 1.0f, 1.0f,
+                false, roughMetalOrm}
+        }};
+
+        for (std::size_t index = 0; index < descriptions.size(); ++index)
+        {
+            const LabMaterialDescription& description = descriptions[index];
+            Material material = mainMaterial;
+            MaterialProperties& properties = material.GetProperties();
+            properties.baseColor = description.baseColor;
+            properties.specularColor = cy::Vec3f(1.0f, 1.0f, 1.0f);
+            properties.metallic = description.metallic;
+            properties.roughness = description.roughness;
+            properties.ambientOcclusion = 1.0f;
+            properties.normalScale = description.normalScale;
+            properties.environmentReflectivity = 0.35f;
+
+            material.SetAlbedoMap(nullptr);
+            material.SetSpecularMap(nullptr);
+            material.SetDisplacementMap(nullptr);
+            if (!description.useNormalMap)
+                material.SetNormalMap(nullptr);
+            material.SetOcclusionRoughnessMetallicMap(description.ormMap);
+
+            const MaterialHandle materialHandle =
+                m_Renderer->CreateMaterial(std::move(material));
+            if (!materialHandle.IsValid())
+                continue;
+
+            const cy::Matrix4f localToWorld =
+                cy::Matrix4f::Translation(instanceOffsets[index]) *
+                cy::Matrix4f::Translation(-m_ObjCenter);
+            const PrimitiveId primitiveId = m_Renderer->AddPrimitive(
+                instanceMesh,
+                materialHandle,
+                localToWorld,
+                bounds);
+            if (m_MainPrimitiveId == InvalidPrimitiveId)
+                m_MainPrimitiveId = primitiveId;
+        }
+
+        std::cout
+            << "[MaterialLab] materials=4 meshResource=" << instanceMesh.id
+            << " layout=2x2 orm=R:AO,G:Roughness,B:Metallic"
+            << std::endl;
+    }
+    else
+    {
+        instanceMaterial = m_Renderer->CreateMaterial(std::move(mainMaterial));
+        if (!instanceMaterial.IsValid())
+        {
+            std::cerr << "[Error] Failed to create the surface material."
+                      << std::endl;
+            return false;
+        }
+
+        for (const cy::Vec3f& offset : instanceOffsets)
+        {
+            const cy::Matrix4f localToWorld =
+                cy::Matrix4f::Translation(offset) *
+                cy::Matrix4f::Translation(-m_ObjCenter);
+            const PrimitiveId primitiveId = m_Renderer->AddPrimitive(
+                instanceMesh,
+                instanceMaterial,
+                localToWorld,
+                bounds);
+            if (m_MainPrimitiveId == InvalidPrimitiveId)
+                m_MainPrimitiveId = primitiveId;
+        }
     }
     if (m_MainPrimitiveId == InvalidPrimitiveId)
     {

@@ -4,9 +4,11 @@
 #include <vector>
 
 #include "Renderer/Resources/Framebuffer.h"
+#include "Renderer/Resources/InstanceBuffer.h"
 #include "Renderer/Pipeline/RenderPass.h"
 #include "Renderer/Resources/Shader.h"
 #include "Renderer/View/LightRenderData.h"
+#include "Renderer/View/InstanceTransformData.h"
 
 struct RenderItem;
 
@@ -54,12 +56,23 @@ private:
         RenderView& renderView,
         const std::vector<RenderItem>& items,
         bool allowWireframeOverlay);
+    void RenderOpaqueBatches(
+        RenderPassContext& context,
+        RenderView& renderView);
+    void PrepareSurfaceShader(
+        RenderPassContext& context,
+        RenderView& renderView,
+        Shader& shader,
+        bool tessellationEnabled);
 
     Shader m_StandardShader;
+    Shader m_InstancedStandardShader;
     Shader m_TessellationShader;
     Shader m_SkyboxShader;
     Shader m_GroundShader;
     Framebuffer m_Framebuffer;
+    InstanceBuffer m_InstanceBuffer;
     GLuint m_LightBuffer = 0;
     bool m_LightLimitWarningIssued = false;
+    std::vector<InstanceTransformData> m_InstanceTransforms;
 };

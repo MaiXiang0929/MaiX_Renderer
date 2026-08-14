@@ -8,9 +8,13 @@
 
 #pragma once
 
+#include <vector>
+
 #include "Renderer/Pipeline/RenderPass.h"
 #include "Renderer/Resources/Shader.h"
+#include "Renderer/Resources/InstanceBuffer.h"
 #include "Renderer/Resources/ShadowMap.h"
+#include "Renderer/View/InstanceTransformData.h"
 
 /// @brief 阴影 Pass：普通和 Tessellation 路径共享同一张主深度纹理。
 class ShadowPass final : public RenderPass
@@ -26,6 +30,10 @@ public:
 
 private:
     Shader m_StandardShader;
+    Shader m_InstancedStandardShader;
     Shader m_TessellationShader;
     ShadowMap m_ShadowMap;
+    InstanceBuffer m_InstanceBuffer;
+    std::vector<InstanceTransformData> m_InstanceTransforms;
+    std::vector<std::size_t> m_BatchInstanceCounts;
 };

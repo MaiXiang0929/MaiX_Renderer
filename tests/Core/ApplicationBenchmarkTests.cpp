@@ -32,8 +32,27 @@ void TestDefaultOptions()
         "Empty arguments should use the default scene.");
     Require(options.instanceGridSize == 0,
         "The benchmark must be disabled by default.");
+    Require(!options.materialLab,
+        "The material lab must be disabled by default.");
     Require(options.normalMapPath.empty() && options.displacementMapPath.empty(),
         "Default map paths should be resolved by the application entry point.");
+}
+
+void TestMaterialLabOptions()
+{
+    ApplicationOptions options;
+    std::string error;
+    Require(ParseApplicationOptions(
+        {"normal.png", "--material-lab"}, options, error),
+        "The material lab should preserve a supplied normal map path.");
+    Require(options.materialLab && options.normalMapPath == "normal.png",
+        "The material lab option was not parsed correctly.");
+    Require(!ParseApplicationOptions(
+        {"--material-lab", "--instance-grid", "8"}, options, error),
+        "The material lab and instance benchmark must be mutually exclusive.");
+    Require(!ParseApplicationOptions(
+        {"--material-lab", "--material-lab"}, options, error),
+        "Duplicate material lab options must be rejected.");
 }
 
 void TestGridAndMaterialMapOptions()
@@ -112,6 +131,7 @@ int main()
 {
     TestDefaultOptions();
     TestGridAndMaterialMapOptions();
+    TestMaterialLabOptions();
     TestInvalidOptions();
     TestCenteredGridLayout();
     TestSceneRadius();

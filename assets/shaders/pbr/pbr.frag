@@ -18,13 +18,16 @@ struct MaterialData
     float metallic;
     float roughness;
     float ambientOcclusion;
+    float normalScale;
     float opacity;
 
     sampler2D albedoMap;
+    sampler2D ormMap;
     sampler2D specularMap;
     sampler2D normalMap;
     sampler2D displacementMap;
     bool hasAlbedoMap;
+    bool hasOrmMap;
     bool hasSpecularMap;
     bool hasNormalMap;
     bool hasDisplacementMap;
@@ -144,7 +147,10 @@ vec3 ResolveSurfaceNormal()
 
     vec3 T = normalize(fragTangent - N * dot(N, fragTangent));
     vec3 B = normalize(cross(N, T)) * fragTangentSign;
-    vec3 tangentNormal = texture(material.normalMap, fragTexCoord).xyz * 2.0 - 1.0;
+    vec3 tangentNormal =
+        texture(material.normalMap, fragTexCoord).xyz * 2.0 - 1.0;
+    tangentNormal.xy *= clamp(material.normalScale, 0.0, 2.0);
+    tangentNormal = normalize(tangentNormal);
     return normalize(mat3(T, B, N) * tangentNormal);
 }
 
@@ -165,9 +171,14 @@ void main()
     if (material.hasSpecularMap)
         specularTint *= texture(material.specularMap, fragTexCoord).rgb;
 
-    float metallic = clamp(material.metallic, 0.0, 1.0);
-    float roughness = clamp(material.roughness, 0.045, 1.0);
-    float ao = clamp(material.ambientOcclusion, 0.0, 1.0);
+    vec3 ormSample = vec3(1.0);
+    if (material.hasOrmMap)
+        ormSample = texture(material.ormMap, fragTexCoord).rgb;
+    float metallic = clamp(material.metallic * ormSample.b, 0.0, 1.0);
+    float roughness = clamp(
+        material.roughness * ormSample.g, 0.045, 1.0);
+    float ao = clamp(
+        material.ambientOcclusion * ormSample.r, 0.0, 1.0);
 
     vec3 N = ResolveSurfaceNormal();
     vec3 V = normalize(-fragPos);

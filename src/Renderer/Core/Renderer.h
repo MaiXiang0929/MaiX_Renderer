@@ -32,6 +32,7 @@ public:
         std::size_t visiblePrimitiveCount = 0;
         std::size_t culledPrimitiveCount = 0;
         std::size_t opaqueDrawCount = 0;
+        std::size_t opaqueBatchCount = 0;
         std::size_t translucentDrawCount = 0;
         std::size_t shaderGroupCount = 0;
         std::size_t materialGroupCount = 0;
@@ -164,7 +165,7 @@ private:
     TessellationSettings m_Tessellation;
     PostProcessSettings m_PostProcess;
     StatisticsSnapshot m_StatisticsSnapshot;
-    std::array<std::size_t, 9> m_LastMainViewStats{};
+    std::array<std::size_t, 10> m_LastMainViewStats{};
     bool m_HasMainViewStats = false;
     bool m_ShadowsEnabled = true;
     bool m_EditorPrimitivesEnabled = true;

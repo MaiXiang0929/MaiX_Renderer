@@ -25,7 +25,8 @@ CLI grid size
     -> one shared MeshHandle + MaterialHandle
     -> N * N PrimitiveSceneProxy objects
     -> per-view culling and RenderItem sorting
-    -> current one-draw-per-item GPU path
+    -> contiguous Shader/Material/Mesh batches
+    -> one instanced draw per batch (up to 256 instances per draw)
 ```
 
 The benchmark scene radius drives camera distance, the camera far plane, ground
@@ -67,13 +68,70 @@ It is excluded from source control. `renderdoccmd thumb` successfully replayed
 the capture, and the thumbnail confirms all 259 scene primitives visible in the
 main view plus the independently culled reflection result.
 
-## Optimization decision
+## Instanced implementation
 
-The next optimization should batch contiguous opaque items with the same
-Shader, Material, and Mesh into an instanced draw in Forward, Shadow, and
-Reflection views. Per-instance model transforms should move to an instance
-vertex buffer or equivalent GPU input.
+After stable resource sorting, `BuildOpaqueRenderBatches()` groups contiguous
+items by Shader, Material, and Mesh IDs. Forward, Reflection, and Shadow use the
+batch list for standard triangle rendering. Single-item batches keep the
+existing non-instanced path; translucent and tessellated rendering are also
+unchanged.
 
-A standalone texture cache is deferred. Instancing will collapse most of the
-redundant material and texture requests in the measured shared-resource case,
-so texture caching should be evaluated again after the instanced baseline.
+The CPU computes one model-view matrix per visible instance. `ForwardPass` and
+`ShadowPass` each own a six-region streaming `InstanceBuffer`; Reflection reuses
+the Forward resource. Each upload region prevents the CPU from immediately
+overwriting data that an earlier frame may still consume. The OpenGL 4.0
+minimum 16 KiB uniform-block size holds 256 `mat4` values, so a larger batch is
+split only at that portable limit.
+
+```text
+CPU local-to-world
+    -> view * local-to-world = model-view
+    -> one aligned std140 upload per view
+    -> bind one 16 KiB range per batch chunk
+GPU model-view * local position = view position
+    -> projection-from-view * view position = clip position
+    -> light-from-view * view position = shadow position
+```
+
+The standard and instanced PBR shaders therefore agree on coordinate spaces.
+The instanced shader deliberately computes the normal matrix from model-view,
+matching the original shader and keeping each instance record at 64 bytes.
+
+## Optimized submission results
+
+Environment is unchanged. The optimized runs were collected independently, so
+the final GPU EMA remains directional. Reflection showed periodic timing spikes
+during both optimized and non-instanced A/B runs.
+
+| Grid | Opaque instances | Shadow draws / instanced | Reflection draws / instanced | Forward draws / instanced | GPU frame EMA |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 1x1 | 1 | 1 / 0 | 5 / 0 | 3 / 0 | 0.780 ms |
+| 8x8 | 64 | 1 / 1 | 2 / 1 | 3 / 1 | 1.323 ms |
+| 16x16 | 256 | 1 / 1 | 2 / 1 | 3 / 1 | 1.776 ms |
+
+The 16x16 Forward path dropped from 258 Draws to 3, including skybox and
+reflection ground. Its opaque material requests dropped from 256 to 1 and
+texture requests from 1030 to 10. Shadow dropped from 256 Draws to 1, while
+Reflection dropped from 65 to 2 for the captured view.
+
+A same-build 16x16 A/B check measured steady frame samples around
+`1.47-1.49 ms` with instancing and `1.50-1.52 ms` with per-item Forward and
+Reflection submission. This is not a statistically rigorous GPU benchmark,
+but it confirms that the final compact layout does not reproduce the clear GPU
+regression seen in discarded 240-byte UBO and vertex-attribute prototypes. The
+primary verified gain is CPU/API submission reduction, not a claimed GPU
+speedup.
+
+The optimized local RenderDoc capture is
+`captures/maix_instanced_16_frame2.rdc` (about 95.8 MiB). CLI thumbnail replay
+succeeded and confirmed the grid, reflection result, and the `1/2/3` Draw
+counts for Shadow/Reflection/Forward. Capture files and thumbnails remain
+excluded from source control.
+
+Tessellation intentionally falls back to per-item patch submission because its
+per-material displacement path has not been made instanced. An 8x8 runtime
+toggle verified 64 Shadow, 25 Reflection, and 66 Forward non-instanced Draws.
+
+A standalone texture cache remains deferred: instancing already removes the
+dominant repeated material and texture requests in the measured shared-resource
+case. Re-evaluate it only with a scene containing many distinct batches.

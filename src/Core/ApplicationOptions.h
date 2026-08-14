@@ -12,6 +12,7 @@ struct ApplicationOptions
     std::string normalMapPath;
     std::string displacementMapPath;
     std::uint32_t instanceGridSize = 0;
+    bool materialLab = false;
     bool showHelp = false;
 };
 
