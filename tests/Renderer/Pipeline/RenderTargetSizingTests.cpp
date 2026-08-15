@@ -38,6 +38,21 @@ int main()
     Require(minimized.width == 0 && minimized.height == 0,
         "A minimized viewport should not request a render target.");
 
+    const RenderTargetExtent bloomHd =
+        CalculateBloomTargetExtent(1920, 1080);
+    Require(bloomHd.width == 960 && bloomHd.height == 540,
+        "Bloom should use an exact half-resolution target for even extents.");
+
+    const RenderTargetExtent bloomOdd =
+        CalculateBloomTargetExtent(1279, 719);
+    Require(bloomOdd.width == 640 && bloomOdd.height == 360,
+        "Bloom should round odd half-resolution extents up.");
+
+    const RenderTargetExtent bloomMinimum =
+        CalculateBloomTargetExtent(1, 1);
+    Require(bloomMinimum.width == 1 && bloomMinimum.height == 1,
+        "Bloom should preserve a valid one-pixel viewport.");
+
     std::cout << "RenderTargetSizingTests passed." << std::endl;
     return EXIT_SUCCESS;
 }

@@ -49,7 +49,7 @@ src/
 ├─ Renderer/
 │  ├─ Core/              Renderer 门面与 GPU 资源所有权
 │  ├─ Pipeline/          RenderPipeline、RenderPass 契约、RenderSettings
-│  ├─ Passes/            Shadow、Reflection、Forward、Present
+│  ├─ Passes/            Shadow、Reflection、Forward、Bloom、PostProcess、Present
 │  ├─ Resources/         Mesh、Material、Shader、Texture、Framebuffer
 │  ├─ Scene/             RenderScene 与 Scene Proxy
 │  └─ View/              RenderView 与 RenderItem
@@ -92,7 +92,7 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 
 - [x] Renderer 目录按 Core / Pipeline / Passes / Resources / Scene / View 拆分
 - [x] Shader 目录按渲染用途拆分
-- [x] `RenderPipeline` 按固定顺序执行 Shadow、Reflection、Forward、Translucency、EditorPrimitive、Present
+- [x] `RenderPipeline` 按固定顺序执行 Shadow、Reflection、Forward、Translucency、EditorPrimitive、Bloom、PostProcess、Present
 - [x] `RenderScene`、`PrimitiveSceneProxy`、`LightSceneProxy` 已建立
 - [x] `RenderView`、`RenderItem` 已建立，支持 opaque/translucent 分类
 - [x] Renderer 持有 Primitive 的 Mesh 与 Material，Scene Proxy 使用非 owning 指针
@@ -119,20 +119,21 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 - [x] 三帧缓冲的 GPU Timer Query 已输出各 Pass last/EMA 时间，并以非阻塞方式处理尚未完成的 Query
 - [x] ImGui `Renderer Statistics` 面板已显示场景、资源、CPU/GPU Pass 统计，并提供常用渲染调试参数
 - [x] Forward 与 Reflection 离屏目标已随窗口 framebuffer 动态重建；反射保持半分辨率，最小化时跳过零尺寸渲染
-- [x] Forward Scene Color 已升级为 RGBA16F，PresentPass 支持手动曝光、ACES Tone Mapping 与 sRGB 输出编码
+- [x] Forward Scene Color 已升级为 RGBA16F，PostProcessPass 支持手动曝光、ACES Tone Mapping 与 sRGB 输出编码
+- [x] BloomPass 已完成半分辨率 HDR 高亮提取与双向模糊；PostProcessPass 负责 Bloom 合成、曝光、ACES 与 sRGB 编码，PresentPass 仅负责最终显示
 - [x] CMake 构建时清理并复制最新 assets
 - [x] CMake 配置、编译、链接与 8 项测试通过；Material Lab、默认/Instancing/Tessellation 路径及 RenderDoc 捕获完成
 
 ### 部分完成
 
 - [ ] RenderPipeline 已具备 Pass 边界，但资源依赖仍主要通过共享 Frame Context 传递
-- [ ] HDR Scene Color、曝光与色调映射已完成，但后处理仍由 PresentPass 执行，尚未拆分独立 PostProcess Pass
+- [ ] HDR Scene Color、Bloom、曝光与色调映射已完成并拆分独立 PostProcess Pass；自动曝光与 SSAO 尚未实现
 - [ ] 视锥体裁剪已完成包围球粗裁剪，但遮挡裁剪、距离裁剪和更精确的包围体尚未实现
 
 ### 尚未开始
 
 - [ ] 共享 Mesh/Material、VAO 状态缓存与不透明 Instancing 已完成，但 Shader/Texture 缓存和跨材质批处理尚未实现
-- [ ] HDR Scene Color、手动曝光与 Tone Mapping 已完成；Bloom、自动曝光与 SSAO 尚未实现
+- [ ] HDR Scene Color、Bloom、手动曝光与 Tone Mapping 已完成；自动曝光与 SSAO 尚未实现
 - [ ] Cascaded Shadow Maps（CSM）
 - [ ] NPR Anime Shader：Toon、Face Shadow、Outline、Rim Light、Hair Highlight
 - [ ] ImGui 统计面板已完成；Scene Window、Inspector、Material Editor 尚未开始
@@ -206,7 +207,7 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 
 1. 基于现有强类型 Material Handle 设计最小 Material Editor 更新接口，避免向编辑器暴露 Renderer 内部资源表。
 2. 为透明材质补充 Masked/Additive 模式前，先明确 Alpha Cutout 阴影、排序和混合策略。
-3. 进入 HDR 后处理扩展前，拆分 PresentPass 中的 Tone Mapping，为独立 Bloom Pass 建立资源边界。
+3. Bloom 与 PostProcess 资源边界已建立；进入 SSAO 前先明确可采样深度与屏幕空间法线来源。
 
 ## 7. 当前技术债与约束
 

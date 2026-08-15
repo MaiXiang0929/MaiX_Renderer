@@ -26,6 +26,8 @@ const char* GetPassDebugName(RenderPassType type)
     case RenderPassType::Forward: return "MaiX.ForwardPass";
     case RenderPassType::Translucency: return "MaiX.TranslucencyPass";
     case RenderPassType::EditorPrimitive: return "MaiX.EditorPrimitivePass";
+    case RenderPassType::Bloom: return "MaiX.BloomPass";
+    case RenderPassType::PostProcess: return "MaiX.PostProcessPass";
     case RenderPassType::Present: return "MaiX.PresentPass";
     }
     return "MaiX.UnknownPass";
@@ -36,7 +38,8 @@ RenderPipeline::RenderPipeline()
     : m_TranslucencyPass(m_ForwardPass)
     , m_EditorPrimitivePass(m_ForwardPass)
     , m_ReflectionPass(m_ForwardPass, m_TranslucencyPass)
-    , m_PresentPass(m_ForwardPass)
+    , m_BloomPass(m_ForwardPass)
+    , m_PostProcessPass(m_ForwardPass)
 {
     // 顺序由 GPU 资源依赖决定：阴影和反射必须先于主颜色与 Present。
     m_Passes = {
@@ -45,6 +48,8 @@ RenderPipeline::RenderPipeline()
         &m_ForwardPass,
         &m_TranslucencyPass,
         &m_EditorPrimitivePass,
+        &m_BloomPass,
+        &m_PostProcessPass,
         &m_PresentPass
     };
 }
@@ -55,6 +60,8 @@ bool RenderPipeline::Init()
     const bool shadowLoaded = m_ShadowPass.Init(2048, 2048);
     const bool reflectionLoaded = m_ReflectionPass.Init();
     const bool editorPrimitivesLoaded = m_EditorPrimitivePass.Init();
+    const bool bloomLoaded = m_BloomPass.Init();
+    const bool postProcessLoaded = m_PostProcessPass.Init();
     const bool presentLoaded = m_PresentPass.Init();
     const bool profilerInitialized = m_GpuProfiler.Init();
     if (!profilerInitialized)
@@ -65,7 +72,8 @@ bool RenderPipeline::Init()
             << std::endl;
     }
     return forwardLoaded && shadowLoaded && reflectionLoaded &&
-        editorPrimitivesLoaded && presentLoaded;
+        editorPrimitivesLoaded && bloomLoaded && postProcessLoaded &&
+        presentLoaded;
 }
 
 bool RenderPipeline::ReloadShaders()
@@ -74,6 +82,8 @@ bool RenderPipeline::ReloadShaders()
         m_ShadowPass.ReloadShaders() &&
         m_ReflectionPass.ReloadShaders() &&
         m_EditorPrimitivePass.ReloadShaders() &&
+        m_BloomPass.ReloadShaders() &&
+        m_PostProcessPass.ReloadShaders() &&
         m_PresentPass.ReloadShaders();
 }
 
@@ -130,13 +140,35 @@ bool RenderPipeline::EnsureRenderTargetExtents(
         return false;
     resized |= !reflectionMatches;
 
+    const RenderTargetExtent bloomExtent =
+        CalculateBloomTargetExtent(viewportWidth, viewportHeight);
+    const bool bloomMatches =
+        m_BloomPass.GetTargetWidth() == static_cast<int>(bloomExtent.width) &&
+        m_BloomPass.GetTargetHeight() == static_cast<int>(bloomExtent.height);
+    if (!bloomMatches && !m_BloomPass.Resize(
+            bloomExtent.width, bloomExtent.height))
+        return false;
+    resized |= !bloomMatches;
+
+    const bool postProcessMatches =
+        m_PostProcessPass.GetTargetWidth() == static_cast<int>(viewportWidth) &&
+        m_PostProcessPass.GetTargetHeight() == static_cast<int>(viewportHeight);
+    if (!postProcessMatches && !m_PostProcessPass.Resize(
+            viewportWidth, viewportHeight))
+        return false;
+    resized |= !postProcessMatches;
+
     if (resized)
     {
         std::cout
             << "[RenderPipeline] Render targets resized: Forward="
             << viewportWidth << "x" << viewportHeight
             << ", Reflection=" << reflectionExtent.width << "x"
-            << reflectionExtent.height << std::endl;
+            << reflectionExtent.height
+            << ", Bloom=" << bloomExtent.width << "x"
+            << bloomExtent.height
+            << ", PostProcess=" << viewportWidth << "x"
+            << viewportHeight << std::endl;
     }
 
     return true;

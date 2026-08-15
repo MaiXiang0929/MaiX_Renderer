@@ -12,6 +12,8 @@
 
 #include "Renderer/Passes/ForwardPass.h"
 #include "Renderer/Passes/EditorPrimitivePass.h"
+#include "Renderer/Passes/BloomPass.h"
+#include "Renderer/Passes/PostProcessPass.h"
 #include "Renderer/Passes/PresentPass.h"
 #include "Renderer/Passes/ReflectionPass.h"
 #include "RenderPass.h"
@@ -19,7 +21,7 @@
 #include "Renderer/Passes/TranslucencyPass.h"
 #include "Renderer/Diagnostics/GpuPassProfiler.h"
 
-/// @brief 直接拥有并按固定顺序执行四个真实渲染 Pass。
+/// @brief Owns and executes the renderer's ordered pass sequence.
 class RenderPipeline
 {
 public:
@@ -48,6 +50,8 @@ private:
     EditorPrimitivePass m_EditorPrimitivePass;
     ShadowPass m_ShadowPass;
     ReflectionPass m_ReflectionPass;
+    BloomPass m_BloomPass;
+    PostProcessPass m_PostProcessPass;
     PresentPass m_PresentPass;
     GpuPassProfiler m_GpuProfiler;
     std::vector<RenderPass*> m_Passes;

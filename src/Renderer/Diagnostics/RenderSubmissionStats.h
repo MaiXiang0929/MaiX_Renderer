@@ -28,7 +28,7 @@ struct PassSubmissionStats
 
 struct RenderSubmissionSnapshot
 {
-    static constexpr std::size_t PassCount = 6;
+    static constexpr std::size_t PassCount = 8;
     std::array<PassSubmissionStats, PassCount> passes{};
     bool valid = false;
 };

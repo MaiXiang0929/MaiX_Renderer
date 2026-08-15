@@ -354,3 +354,13 @@ void Renderer::SetExposureCompensation(float exposure)
 {
     m_PostProcess.exposureCompensation = ClampExposureCompensation(exposure);
 }
+
+void Renderer::SetBloomThreshold(float threshold)
+{
+    m_PostProcess.bloomThreshold = ClampBloomThreshold(threshold);
+}
+
+void Renderer::SetBloomIntensity(float intensity)
+{
+    m_PostProcess.bloomIntensity = ClampBloomIntensity(intensity);
+}

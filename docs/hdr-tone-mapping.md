@@ -11,17 +11,18 @@ sRGB material and cubemap textures
     -> hardware sRGB decode
     -> linear PBR lighting and blending
     -> Forward RGBA16F scene color
-    -> exposure compensation (2^EV)
-    -> ACES fitted tone mapping
+    -> half-resolution HDR Bloom
+    -> PostProcess exposure compensation (2^EV)
+    -> PostProcess ACES fitted tone mapping
     -> linear-to-sRGB encoding
     -> default window framebuffer
     -> ImGui overlay
 ```
 
-CPU responsibilities are color-format allocation and submission of the two
-artist-facing settings: tone mapping enabled and exposure compensation in EV.
-The GPU performs exposure, tone mapping, and output encoding once per presented
-pixel in `present.frag`.
+CPU responsibilities are color-format allocation and submission of the
+artist-facing settings. The GPU composites Bloom, then performs exposure, tone
+mapping, and output encoding once per pixel in `postprocess.frag`. `PresentPass`
+only copies the display-ready texture to the default framebuffer.
 
 ## Color spaces
 
@@ -51,6 +52,6 @@ or histogram pass and temporal adaptation, which are outside this stage.
 ## Performance and memory
 
 At 1920x1080, an `RGBA16F` color surface occupies roughly 15.8 MiB before mip
-levels, twice the storage of `RGBA8`. Tone mapping adds one compact full-screen
-fragment-shader evaluation to the existing Present draw. No CPU readback or GPU
-synchronization is introduced.
+levels, twice the storage of `RGBA8`. Bloom adds three half-resolution HDR
+working targets. PostProcess adds one full-resolution `RGBA8` display target.
+No CPU readback or GPU synchronization is introduced.

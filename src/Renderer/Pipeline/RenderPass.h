@@ -20,6 +20,8 @@ enum class RenderPassType
     Forward,
     Translucency,
     EditorPrimitive,
+    Bloom,
+    PostProcess,
     Present
 };
 
@@ -67,6 +69,8 @@ struct RenderPassContext
     // 前序 Pass 生成、后序 Pass 消费的 GPU 纹理句柄。
     GLuint shadowTexture = 0;
     GLuint reflectionTexture = 0;
+    GLuint bloomTexture = 0;
+    GLuint postProcessTexture = 0;
 };
 
 /// @brief 所有真实渲染阶段的统一接口。

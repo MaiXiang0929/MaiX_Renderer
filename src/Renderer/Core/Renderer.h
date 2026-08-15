@@ -164,6 +164,12 @@ public:
     {
         return m_PostProcess.exposureCompensation;
     }
+    void SetBloomEnabled(bool enabled) { m_PostProcess.bloomEnabled = enabled; }
+    bool IsBloomEnabled() const { return m_PostProcess.bloomEnabled; }
+    void SetBloomThreshold(float threshold);
+    float GetBloomThreshold() const { return m_PostProcess.bloomThreshold; }
+    void SetBloomIntensity(float intensity);
+    float GetBloomIntensity() const { return m_PostProcess.bloomIntensity; }
 
 private:
     void LogMainViewStatsIfChanged(const RenderView& view);

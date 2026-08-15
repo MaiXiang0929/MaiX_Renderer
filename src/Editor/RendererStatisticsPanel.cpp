@@ -9,8 +9,9 @@
 
 namespace
 {
-constexpr std::array<const char*, 6> PassNames = {
-    "Shadow", "Reflection", "Forward", "Translucency", "Editor", "Present"
+constexpr std::array<const char*, 8> PassNames = {
+    "Shadow", "Reflection", "Forward", "Translucency", "Editor", "Bloom",
+    "PostProcess", "Present"
 };
 }
 
@@ -97,6 +98,21 @@ void RendererStatisticsPanel::Draw(Renderer& renderer)
     if (ImGui::Checkbox("Editor primitives", &editor)) renderer.SetEditorPrimitivesEnabled(editor);
     bool toneMapping = renderer.IsToneMappingEnabled();
     if (ImGui::Checkbox("Tone mapping", &toneMapping)) renderer.SetToneMappingEnabled(toneMapping);
+    bool bloom = renderer.IsBloomEnabled();
+    if (ImGui::Checkbox("Bloom", &bloom)) renderer.SetBloomEnabled(bloom);
+    if (bloom)
+    {
+        float threshold = renderer.GetBloomThreshold();
+        if (ImGui::SliderFloat(
+                "Bloom threshold", &threshold,
+                MinimumBloomThreshold, MaximumBloomThreshold, "%.2f"))
+            renderer.SetBloomThreshold(threshold);
+        float intensity = renderer.GetBloomIntensity();
+        if (ImGui::SliderFloat(
+                "Bloom intensity", &intensity,
+                MinimumBloomIntensity, MaximumBloomIntensity, "%.2f"))
+            renderer.SetBloomIntensity(intensity);
+    }
     float exposure = renderer.GetExposureCompensation();
     if (ImGui::SliderFloat(
             "Exposure (EV)",

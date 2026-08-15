@@ -20,3 +20,17 @@ constexpr RenderTargetExtent CalculateReflectionTargetExtent(
         viewportHeight / 2 + viewportHeight % 2
     };
 }
+
+/// Bloom uses a half-resolution HDR working set to limit blur bandwidth.
+constexpr RenderTargetExtent CalculateBloomTargetExtent(
+    unsigned int viewportWidth,
+    unsigned int viewportHeight)
+{
+    if (viewportWidth == 0 || viewportHeight == 0)
+        return {};
+
+    return {
+        viewportWidth / 2 + viewportWidth % 2,
+        viewportHeight / 2 + viewportHeight % 2
+    };
+}

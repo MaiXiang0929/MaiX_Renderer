@@ -79,6 +79,8 @@ set(SOURCES
     src/Renderer/Passes/EditorPrimitivePass.cpp
     src/Renderer/Passes/ShadowPass.cpp
     src/Renderer/Passes/ReflectionPass.cpp
+    src/Renderer/Passes/BloomPass.cpp
+    src/Renderer/Passes/PostProcessPass.cpp
     src/Renderer/Passes/PresentPass.cpp
 
     # Renderer Resources

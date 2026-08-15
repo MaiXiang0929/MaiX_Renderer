@@ -19,6 +19,12 @@ void Require(bool condition, const char* message)
 int main()
 {
     const PostProcessSettings defaults;
+    Require(defaults.bloomEnabled,
+        "Bloom should be enabled by default.");
+    Require(defaults.bloomThreshold == 1.0f,
+        "Default bloom threshold should select HDR highlights.");
+    Require(defaults.bloomIntensity == 0.35f,
+        "Default bloom intensity should remain restrained.");
     Require(defaults.toneMappingEnabled,
         "Tone mapping should be enabled by default.");
     Require(defaults.exposureCompensation == 0.0f,
@@ -31,6 +37,14 @@ int main()
         "Exposure should clamp to its upper artist-facing limit.");
     Require(ClampExposureCompensation(1.5f) == 1.5f,
         "Exposure inside the supported range should remain unchanged.");
+    Require(ClampBloomThreshold(-1.0f) == MinimumBloomThreshold,
+        "Bloom threshold should clamp to its lower limit.");
+    Require(ClampBloomThreshold(20.0f) == MaximumBloomThreshold,
+        "Bloom threshold should clamp to its upper limit.");
+    Require(ClampBloomIntensity(-1.0f) == MinimumBloomIntensity,
+        "Bloom intensity should clamp to its lower limit.");
+    Require(ClampBloomIntensity(8.0f) == MaximumBloomIntensity,
+        "Bloom intensity should clamp to its upper limit.");
 
     std::cout << "PostProcessSettingsTests passed." << std::endl;
     return EXIT_SUCCESS;
