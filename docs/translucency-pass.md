@@ -7,7 +7,9 @@
 ```text
 ForwardPass（不透明颜色与深度）
     -> TranslucencyPass（透明颜色混合，保留不透明深度）
-    -> EditorPrimitivePass
+    -> BloomPass
+    -> PostProcessPass
+    -> EditorPrimitivePass（独立 Overlay Buffer）
     -> PresentPass
 ```
 

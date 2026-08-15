@@ -92,7 +92,7 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 
 - [x] Renderer 目录按 Core / Pipeline / Passes / Resources / Scene / View 拆分
 - [x] Shader 目录按渲染用途拆分
-- [x] `RenderPipeline` 按固定顺序执行 Shadow、Reflection、Forward、Translucency、EditorPrimitive、Bloom、PostProcess、Present
+- [x] `RenderPipeline` 按固定顺序执行 Shadow、Reflection、Forward、Outline、Translucency、Bloom、PostProcess、EditorPrimitive、Present
 - [x] `RenderScene`、`PrimitiveSceneProxy`、`LightSceneProxy` 已建立
 - [x] `RenderView`、`RenderItem` 已建立，支持 opaque/translucent 分类
 - [x] Renderer 持有 Primitive 的 Mesh 与 Material，Scene Proxy 使用非 owning 指针
@@ -108,7 +108,7 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 - [x] 标准 PBR 与曲面细分/位移路径可切换
 - [x] Directional/Spot 阴影基础流程与 PCF
 - [x] Cubemap、反射地面、离屏 Framebuffer、Present 流程
-- [x] Light Gizmo 已迁移为独立 `EditorPrimitivePass`，在 Present 前写入 Forward 颜色目标
+- [x] Light Gizmo 由 `EditorPrimitivePass` 写入独立全分辨率 Overlay Buffer，使用预乘 Alpha 并在 Present 合成，不受 Bloom、曝光或 Tone Mapping 影响
 - [x] 独立 `TranslucencyPass` 已支持主视图与反射视图透明物体从后向前稳定排序、纹理 Alpha、显式 Blend Mode、Alpha Blend 和深度只读
 - [x] PBR 使用 std140 UBO 消费最多 16 盏 Directional/Point/Spot 灯光，并为单一 2D shadow map 记录对应灯光索引
 - [x] Renderer 已提供强类型 Mesh/Material Handle 与共享资源提交接口；透明测试场景的三张平面共享一份 Mesh
@@ -121,8 +121,12 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 - [x] Forward 与 Reflection 离屏目标已随窗口 framebuffer 动态重建；反射保持半分辨率，最小化时跳过零尺寸渲染
 - [x] Forward Scene Color 已升级为 RGBA16F，PostProcessPass 支持手动曝光、ACES Tone Mapping 与 sRGB 输出编码
 - [x] BloomPass 已完成半分辨率 HDR 高亮提取与双向模糊；PostProcessPass 负责 Bloom 合成、曝光、ACES 与 sRGB 编码，PresentPass 仅负责最终显示
+- [x] Toon Shading Model 已接入 Forward PBR Shader，支持分段漫反射、阴影色和 Rim Light，并由 Material Editor 实时调节
+- [x] 独立 `OutlinePass` 已使用 Inverted Hull 写入 Forward HDR Scene Color；仅处理主视图不透明 Toon 材质，并复用 Forward 深度
+- [x] Material Editor 已支持材质选择、PBR/Toon 切换、Toon Outline 参数和 Renderer-owned Material 更新边界
+- [x] Outline Pass 已接入 CPU/GPU 提交统计、GPU Timer Query、Shader Reload 和独立 NPR Shader 资源
 - [x] CMake 构建时清理并复制最新 assets
-- [x] CMake 配置、编译、链接与 8 项测试通过；Material Lab、默认/Instancing/Tessellation 路径及 RenderDoc 捕获完成
+- [x] CMake 配置、编译、链接与 9 项测试通过；Material Lab、默认/Instancing/Tessellation 路径及 Outline Shader 初始化检查完成
 
 ### 部分完成
 
@@ -135,8 +139,8 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 - [ ] 共享 Mesh/Material、VAO 状态缓存与不透明 Instancing 已完成，但 Shader/Texture 缓存和跨材质批处理尚未实现
 - [ ] HDR Scene Color、Bloom、手动曝光与 Tone Mapping 已完成；自动曝光与 SSAO 尚未实现
 - [ ] Cascaded Shadow Maps（CSM）
-- [ ] NPR Anime Shader：Toon、Face Shadow、Outline、Rim Light、Hair Highlight
-- [ ] ImGui 统计面板已完成；Scene Window、Inspector、Material Editor 尚未开始
+- [ ] NPR Anime Shader：Toon、Rim Light、Outline 已完成；Face Shadow、Hair Highlight 尚未实现
+- [ ] ImGui 统计面板和最小 Material Editor 已完成；Scene Window、Inspector 尚未开始
 - [ ] RenderDoc 性能采集和 GPU Pass 统计文档
 
 ## 5. 分阶段实施计划
@@ -205,9 +209,9 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 
 下一次实现前仍遵循“先给方案、确认后执行”的协作流程。建议优先顺序为：
 
-1. 基于现有强类型 Material Handle 设计最小 Material Editor 更新接口，避免向编辑器暴露 Renderer 内部资源表。
-2. 为透明材质补充 Masked/Additive 模式前，先明确 Alpha Cutout 阴影、排序和混合策略。
-3. Bloom 与 PostProcess 资源边界已建立；进入 SSAO 前先明确可采样深度与屏幕空间法线来源。
+1. 进入 SSAO 前先明确可采样深度与屏幕空间法线来源，补齐最终展示 40-50s 的屏幕空间环境遮蔽能力。
+2. 为 NPR Face Shadow 评估角色资产、面部朝向参数和阴影纹理契约，再决定最小可展示实现。
+3. 为透明材质补充 Masked/Additive 模式前，先明确 Alpha Cutout 阴影、排序和混合策略。
 
 ## 7. 当前技术债与约束
 
@@ -220,6 +224,7 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 - 透明排序使用各自主视图/反射视图下的物体包围球中心观察空间深度；相交网格、网格内部三角形顺序、Alpha Cutout 阴影与 OIT 仍未处理。
 - Resize 会在渲染线程立即重建 Forward/Reflection 颜色与深度附件；持续拖动窗口可能产生重复 GPU 分配，后续可结合 Render Graph 资源池或 resize debounce 优化。
 - Forward PBR 最多消费 16 盏灯；当前仍只有一张 2D shadow map，Point Light 阴影与多阴影灯尚未实现。
+- Outline 使用观察空间厚度，当前只覆盖主视图不透明 Toon 材质；Tessellation 开启时跳过，透明/反射描边、屏幕空间恒定像素宽度和 Outline Instancing 尚未处理。
 - 透明、HDR、后处理和多灯光会显著扩大 GPU 资源与调试范围，应逐步加入 RenderDoc 基线。
 
 

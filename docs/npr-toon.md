@@ -15,5 +15,5 @@ strength, and rim parameters. Renderer clamps these values before writing the
 owning material, so all Forward, Reflection, and Translucency submissions see
 the same update on the next frame.
 
-This milestone does not include outlines, face shadow textures, hair highlight,
-or a separate NPR pass.
+The follow-up inverted hull Outline pass is documented in `npr-outline.md`.
+Face shadow textures and hair highlight remain future milestones.

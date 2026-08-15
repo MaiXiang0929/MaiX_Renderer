@@ -3,8 +3,8 @@
 ## Pipeline position
 
 The Forward color target uses `RGBA16F`. Opaque surfaces, translucent surfaces,
-the skybox, the reflective ground, and editor primitives therefore accumulate
-into one linear HDR scene-color texture before presentation.
+the skybox, and the reflective ground accumulate into one linear HDR
+scene-color texture. Editor primitives use an independent display-space buffer.
 
 ```text
 sRGB material and cubemap textures
@@ -15,6 +15,7 @@ sRGB material and cubemap textures
     -> PostProcess exposure compensation (2^EV)
     -> PostProcess ACES fitted tone mapping
     -> linear-to-sRGB encoding
+    -> composite Editor Overlay Buffer
     -> default window framebuffer
     -> ImGui overlay
 ```
@@ -34,8 +35,8 @@ only copies the display-ready texture to the default framebuffer.
   above `1.0` until Present.
 - Reflection remains half-resolution `RGBA8` for now. It is a secondary linear
   input to the reflective ground and does not receive display encoding.
-- ImGui renders after Present directly to the default framebuffer, so editor UI
-  colors are not affected by scene exposure or tone mapping.
+- Editor Overlay and ImGui are outside HDR post-processing, so their colors are
+  not affected by scene exposure or tone mapping.
 
 ## Artist controls
 

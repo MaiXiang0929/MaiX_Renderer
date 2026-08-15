@@ -15,6 +15,15 @@ enum class FramebufferColorFormat
     RGBA16F
 };
 
+struct FramebufferSpecification
+{
+    int width = 0;
+    int height = 0;
+    FramebufferColorFormat colorFormat = FramebufferColorFormat::RGBA8;
+    bool depthStencilEnabled = true;
+    bool mipmapsEnabled = true;
+};
+
 class Framebuffer {
 public:
     Framebuffer() = default;
@@ -31,6 +40,7 @@ public:
         int width,
         int height,
         FramebufferColorFormat colorFormat = FramebufferColorFormat::RGBA8);
+    bool Init(const FramebufferSpecification& specification);
 
     /// @brief 释放内部 OpenGL 资源
     void Cleanup();
@@ -50,6 +60,8 @@ public:
     int GetWidth() const { return m_Width; }
     int GetHeight() const { return m_Height; }
     FramebufferColorFormat GetColorFormat() const { return m_ColorFormat; }
+    bool HasDepthStencil() const { return m_DepthStencilEnabled; }
+    bool HasMipmaps() const { return m_MipmapsEnabled; }
 
 private:
     GLuint m_FBO = 0;
@@ -59,4 +71,6 @@ private:
     int m_Width = 0;
     int m_Height = 0;
     FramebufferColorFormat m_ColorFormat = FramebufferColorFormat::RGBA8;
+    bool m_DepthStencilEnabled = true;
+    bool m_MipmapsEnabled = true;
 };

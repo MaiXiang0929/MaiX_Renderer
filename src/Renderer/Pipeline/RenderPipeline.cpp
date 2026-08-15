@@ -24,19 +24,21 @@ const char* GetPassDebugName(RenderPassType type)
     case RenderPassType::Shadow: return "MaiX.ShadowPass";
     case RenderPassType::Reflection: return "MaiX.ReflectionPass";
     case RenderPassType::Forward: return "MaiX.ForwardPass";
+    case RenderPassType::Outline: return "MaiX.OutlinePass";
     case RenderPassType::Translucency: return "MaiX.TranslucencyPass";
     case RenderPassType::EditorPrimitive: return "MaiX.EditorPrimitivePass";
     case RenderPassType::Bloom: return "MaiX.BloomPass";
     case RenderPassType::PostProcess: return "MaiX.PostProcessPass";
     case RenderPassType::Present: return "MaiX.PresentPass";
+    case RenderPassType::Count: break;
     }
     return "MaiX.UnknownPass";
 }
 }
 
 RenderPipeline::RenderPipeline()
-    : m_TranslucencyPass(m_ForwardPass)
-    , m_EditorPrimitivePass(m_ForwardPass)
+    : m_OutlinePass(m_ForwardPass)
+    , m_TranslucencyPass(m_ForwardPass)
     , m_ReflectionPass(m_ForwardPass, m_TranslucencyPass)
     , m_BloomPass(m_ForwardPass)
     , m_PostProcessPass(m_ForwardPass)
@@ -46,10 +48,11 @@ RenderPipeline::RenderPipeline()
         &m_ShadowPass,
         &m_ReflectionPass,
         &m_ForwardPass,
+        &m_OutlinePass,
         &m_TranslucencyPass,
-        &m_EditorPrimitivePass,
         &m_BloomPass,
         &m_PostProcessPass,
+        &m_EditorPrimitivePass,
         &m_PresentPass
     };
 }
@@ -57,6 +60,7 @@ RenderPipeline::RenderPipeline()
 bool RenderPipeline::Init()
 {
     const bool forwardLoaded = m_ForwardPass.Init();
+    const bool outlineLoaded = m_OutlinePass.Init();
     const bool shadowLoaded = m_ShadowPass.Init(2048, 2048);
     const bool reflectionLoaded = m_ReflectionPass.Init();
     const bool editorPrimitivesLoaded = m_EditorPrimitivePass.Init();
@@ -71,7 +75,7 @@ bool RenderPipeline::Init()
             << "initialization failed."
             << std::endl;
     }
-    return forwardLoaded && shadowLoaded && reflectionLoaded &&
+    return forwardLoaded && outlineLoaded && shadowLoaded && reflectionLoaded &&
         editorPrimitivesLoaded && bloomLoaded && postProcessLoaded &&
         presentLoaded;
 }
@@ -79,6 +83,7 @@ bool RenderPipeline::Init()
 bool RenderPipeline::ReloadShaders()
 {
     return m_ForwardPass.ReloadShaders() &&
+        m_OutlinePass.ReloadShaders() &&
         m_ShadowPass.ReloadShaders() &&
         m_ReflectionPass.ReloadShaders() &&
         m_EditorPrimitivePass.ReloadShaders() &&
@@ -158,6 +163,18 @@ bool RenderPipeline::EnsureRenderTargetExtents(
         return false;
     resized |= !postProcessMatches;
 
+    const RenderTargetExtent editorOverlayExtent =
+        CalculateEditorOverlayTargetExtent(viewportWidth, viewportHeight);
+    const bool editorOverlayMatches =
+        m_EditorPrimitivePass.GetTargetWidth() ==
+            static_cast<int>(editorOverlayExtent.width) &&
+        m_EditorPrimitivePass.GetTargetHeight() ==
+            static_cast<int>(editorOverlayExtent.height);
+    if (!editorOverlayMatches && !m_EditorPrimitivePass.Resize(
+            editorOverlayExtent.width, editorOverlayExtent.height))
+        return false;
+    resized |= !editorOverlayMatches;
+
     if (resized)
     {
         std::cout
@@ -168,7 +185,9 @@ bool RenderPipeline::EnsureRenderTargetExtents(
             << ", Bloom=" << bloomExtent.width << "x"
             << bloomExtent.height
             << ", PostProcess=" << viewportWidth << "x"
-            << viewportHeight << std::endl;
+            << viewportHeight
+            << ", EditorOverlay=" << editorOverlayExtent.width << "x"
+            << editorOverlayExtent.height << std::endl;
     }
 
     return true;

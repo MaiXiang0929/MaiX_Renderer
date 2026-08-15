@@ -18,7 +18,8 @@ struct GpuPassTiming
 
 struct GpuTimingSnapshot
 {
-    static constexpr std::size_t PassCount = 8;
+    static constexpr std::size_t PassCount =
+        static_cast<std::size_t>(RenderPassType::Count);
 
     std::array<GpuPassTiming, PassCount> passes{};
     double totalLastMilliseconds = 0.0;

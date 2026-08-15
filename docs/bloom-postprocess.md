@@ -5,12 +5,12 @@
 The main view now keeps display mapping separate from presentation:
 
 ```text
-Forward / Translucency / EditorPrimitive
+Forward / Translucency
     -> RGBA16F linear HDR Scene Color
     -> BloomPass: half-resolution highlight extraction and separable blur
     -> PostProcessPass: HDR bloom composite, exposure, ACES, sRGB encoding
     -> RGBA8 display color
-    -> PresentPass: copy to the default framebuffer
+    -> PresentPass: composite with the independent Editor Overlay Buffer
     -> ImGui
 ```
 
@@ -30,6 +30,10 @@ The GPU extracts pixels above the threshold, performs eight alternating
 horizontal and vertical five-tap blur draws, composites the result with HDR
 Scene Color, and applies the display transform. No CPU readback or synchronous
 GPU query is introduced.
+
+Editor primitives render after PostProcess into a separate display-space
+Overlay Buffer. They are not sampled by Bloom and are not modified by exposure
+or tone mapping. Present is the only scene/overlay composition point.
 
 ## Artist controls
 

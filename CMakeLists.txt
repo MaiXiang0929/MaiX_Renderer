@@ -75,6 +75,7 @@ set(SOURCES
 
     # Renderer Passes
     src/Renderer/Passes/ForwardPass.cpp
+    src/Renderer/Passes/OutlinePass.cpp
     src/Renderer/Passes/TranslucencyPass.cpp
     src/Renderer/Passes/EditorPrimitivePass.cpp
     src/Renderer/Passes/ShadowPass.cpp
@@ -323,4 +324,19 @@ if(BUILD_TESTING)
     )
 
     add_test(NAME MaterialTypesTests COMMAND MaterialTypesTests)
+
+    add_executable(
+        RenderPassContractTests
+        tests/Renderer/Pipeline/RenderPassContractTests.cpp
+    )
+
+    target_include_directories(
+        RenderPassContractTests
+        PRIVATE
+        ${SRC_DIR}
+        ${THIRD_PARTY_DIR}/glad/include
+        ${THIRD_PARTY_DIR}/cyCodeBase
+    )
+
+    add_test(NAME RenderPassContractTests COMMAND RenderPassContractTests)
 endif()

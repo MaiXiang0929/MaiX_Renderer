@@ -1,61 +1,64 @@
 # Editor Light Visualization
 
-## 目标
-
-使用独立编辑器渲染阶段显示光源位置与影响范围，同时保持场景光照、阴影和反射结果不受辅助图形影响。
-
-## 管线位置
+## Pipeline position
 
 ```text
-ShadowPass
-ReflectionPass
-ForwardPass
-EditorPrimitivePass
-PresentPass
+Shadow -> Reflection -> Forward -> Translucency -> Bloom -> PostProcess
+                                                        |          |
+                                          display color |          | editor overlay
+                                                        v          v
+                                                         Present -> ImGui
 ```
 
-`EditorPrimitivePass` 在主场景渲染完成后写入 Forward 场景颜色目标。辅助图形因此会显示在最终 Scene Viewport 中，但不会进入 Shadow Map、Reflection Texture 或 PBR 光照计算。
+`EditorPrimitivePass` executes after `PostProcessPass` and renders into its own
+full-resolution `RGBA8` Overlay Buffer. `PresentPass` composites the display
+color and overlay. Editor visualization therefore never enters HDR Scene Color,
+Bloom, exposure, or tone mapping.
 
-## 可视化内容
+## Resource ownership
 
-- Point/Spot Light：使用固定屏幕像素尺寸的 Billboard 标记世界空间位置。
-- Spot Light：额外绘制线框圆锥，表示方向、范围和外锥角。
-- Directional Light：当前不绘制位置 Billboard；后续应使用方向箭头表达其无位置属性的语义。
+`EditorPrimitivePass` owns:
 
-Billboard 在裁剪空间展开，不随观察距离改变屏幕尺寸。Spot Light 圆锥使用静态单位线框网格，GPU 根据 `position`、`direction`、`range` 和 `outerConeAngle` 转换到世界空间。
+- A full-resolution `RGBA8` color target.
+- No depth/stencil attachment.
+- A mip chain for transformed or minified Present sampling.
+- Billboard and line shaders, VAOs, and VBOs.
 
-## 数据流
+Resize follows the window framebuffer. The target is cleared to transparent
+black every frame, including when editor primitives are disabled, so stale
+gizmos cannot survive an enable-state change.
+
+## Data flow
 
 ```text
-Application 更新 LightSceneProxy
-        ↓
-RenderScene::BuildRenderView
-        ↓
-RenderView::lights
-        ↓
-EditorPrimitivePass
-        ↓
-Forward framebuffer
-        ↓
-PresentPass
+Application updates LightSceneProxy
+    -> RenderScene::BuildRenderView
+    -> RenderView::lights
+    -> EditorPrimitivePass
+    -> premultiplied editorOverlayTexture
+    -> PresentPass composite
 ```
 
-CPU 负责维护灯光代理、选择可视化类型并提交参数；GPU 负责 Billboard 展开、圆锥定向以及辅助图元光栅化。
+The CPU owns the overlay lifetime and submits light proxy parameters. The GPU
+expands billboards, transforms spot cones, rasterizes them into the overlay,
+and composites the overlay with display-ready scene color.
 
-## 渲染状态
+## Alpha and color space
 
-- 默认关闭深度测试和深度写入，确保光源辅助图形始终可见。
-- 启用 Alpha Blend，用于 Billboard 边缘和半透明圆锥线框。
-- Pass 完成后恢复进入 Pass 前的深度测试、深度写入和混合状态。
-- `L` 键控制整个 `EditorPrimitivePass` 的显示，不影响实际灯光与阴影。
+Editor shaders output premultiplied alpha and use:
 
-## 资源所有权
+```text
+source      = ONE
+destination = ONE_MINUS_SRC_ALPHA
+```
 
-`EditorPrimitivePass` 持有 Billboard/线框 Shader 以及对应 VAO、VBO，并负责初始化和清理。`Application` 不再直接提交编辑器 OpenGL 绘制命令，Renderer 与 Pipeline 统一管理场景视口的渲染顺序。
+Present evaluates `overlay.rgb + scene.rgb * (1 - overlay.a)`. Both inputs are
+display-encoded `RGBA8` values, so editor colors remain stable when Bloom,
+exposure, or tone mapping changes. Premultiplication also keeps filtered
+billboard edges free of dark fringes.
 
-## 扩展方向
+## Current depth behavior
 
-- 为 Directional Light 增加方向箭头。
-- 为 Point Light 增加影响范围线框球。
-- 增加深度感知与始终可见两种显示模式。
-- 增加 Picking ID，使 Billboard 和线框支持编辑器选择。
+Depth testing and depth writes remain disabled. Light gizmos are always visible,
+matching the existing editor behavior. Depth-aware, X-ray, picking, and hit
+proxy paths remain future work.

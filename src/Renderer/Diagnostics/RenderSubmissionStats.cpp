@@ -17,11 +17,13 @@ const char* ToString(RenderPassType type)
     case RenderPassType::Shadow: return "Shadow";
     case RenderPassType::Reflection: return "Reflection";
     case RenderPassType::Forward: return "Forward";
+    case RenderPassType::Outline: return "Outline";
     case RenderPassType::Translucency: return "Translucency";
     case RenderPassType::EditorPrimitive: return "EditorPrimitive";
     case RenderPassType::Bloom: return "Bloom";
     case RenderPassType::PostProcess: return "PostProcess";
     case RenderPassType::Present: return "Present";
+    case RenderPassType::Count: break;
     }
     return "Unknown";
 }

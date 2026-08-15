@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "Renderer/Passes/ForwardPass.h"
+#include "Renderer/Passes/OutlinePass.h"
 #include "Renderer/Passes/EditorPrimitivePass.h"
 #include "Renderer/Passes/BloomPass.h"
 #include "Renderer/Passes/PostProcessPass.h"
@@ -46,6 +47,7 @@ private:
         unsigned int viewportHeight);
 
     ForwardPass m_ForwardPass;
+    OutlinePass m_OutlinePass;
     TranslucencyPass m_TranslucencyPass;
     EditorPrimitivePass m_EditorPrimitivePass;
     ShadowPass m_ShadowPass;

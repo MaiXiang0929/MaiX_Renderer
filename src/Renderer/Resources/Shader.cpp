@@ -233,6 +233,20 @@ void Shader::SetInt(
 	);
 }
 
+void Shader::SetMatrix3(
+	const std::string& name,
+	const float* data
+)
+{
+	const GLint location = glGetUniformLocation(m_ProgramID, name.c_str());
+	if (location == -1)
+	{
+		std::cerr << "[Shader Warning] Uniform not found: " << name << std::endl;
+		return;
+	}
+	glUniformMatrix3fv(location, 1, GL_FALSE, data);
+}
+
 void Shader::SetFloat(const std::string& name, float value)
 {
 	glUniform1f(glGetUniformLocation(m_ProgramID, name.c_str()), value);

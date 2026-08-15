@@ -4,7 +4,6 @@
 #include <cmath>
 #include <vector>
 
-#include "Renderer/Passes/ForwardPass.h"
 #include "Renderer/Core/OpenGLStateCache.h"
 #include "Renderer/Diagnostics/RenderSubmissionStats.h"
 #include "Renderer/Scene/LightSceneProxy.h"
@@ -32,6 +31,17 @@ bool EditorPrimitivePass::Init()
     return ReloadShaders();
 }
 
+bool EditorPrimitivePass::Resize(unsigned int width, unsigned int height)
+{
+    FramebufferSpecification specification;
+    specification.width = static_cast<int>(width);
+    specification.height = static_cast<int>(height);
+    specification.colorFormat = FramebufferColorFormat::RGBA8;
+    specification.depthStencilEnabled = false;
+    specification.mipmapsEnabled = true;
+    return m_OverlayTarget.Init(specification);
+}
+
 bool EditorPrimitivePass::ReloadShaders()
 {
     const bool billboardLoaded = m_BillboardShader.Load(
@@ -45,11 +55,18 @@ bool EditorPrimitivePass::ReloadShaders()
 
 void EditorPrimitivePass::Execute(RenderPassContext& context)
 {
+    m_OverlayTarget.Bind();
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    context.editorOverlayTexture = GetColorTexture();
+
     if (!context.frame.editorPrimitivesEnabled ||
         context.mainView.lights.empty())
+    {
+        m_OverlayTarget.Unbind();
+        m_OverlayTarget.GenerateMipmaps();
         return;
-
-    m_ForwardPass.BindColorTarget();
+    }
 
     const GLboolean depthTestEnabled = glIsEnabled(GL_DEPTH_TEST);
     const GLboolean blendEnabled = glIsEnabled(GL_BLEND);
@@ -71,7 +88,12 @@ void EditorPrimitivePass::Execute(RenderPassContext& context)
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
+    glBlendFuncSeparate(
+        GL_ONE,
+        GL_ONE_MINUS_SRC_ALPHA,
+        GL_ONE,
+        GL_ONE_MINUS_SRC_ALPHA);
 
     for (const LightSceneProxy& light : context.mainView.lights)
     {
@@ -91,7 +113,8 @@ void EditorPrimitivePass::Execute(RenderPassContext& context)
     if (depthTestEnabled) glEnable(GL_DEPTH_TEST);
     glDepthMask(depthWriteEnabled);
 
-    m_ForwardPass.UnbindColorTarget();
+    m_OverlayTarget.Unbind();
+    m_OverlayTarget.GenerateMipmaps();
 }
 
 void EditorPrimitivePass::CreateBillboardMesh()
@@ -164,9 +187,9 @@ void EditorPrimitivePass::DrawBillboard(
     m_BillboardShader.SetVec3("worldPosition", position.x, position.y, position.z);
     m_BillboardShader.SetVec3("iconColor", color.x, color.y, color.z);
     m_BillboardShader.SetFloat(
-        "viewportWidth", static_cast<float>(m_ForwardPass.GetTargetWidth()));
+        "viewportWidth", static_cast<float>(GetTargetWidth()));
     m_BillboardShader.SetFloat(
-        "viewportHeight", static_cast<float>(m_ForwardPass.GetTargetHeight()));
+        "viewportHeight", static_cast<float>(GetTargetHeight()));
     m_BillboardShader.SetFloat("iconSizePixels", 28.0f);
     RenderSubmissionStats::Get().RecordMeshDraw(m_BillboardVao);
     OpenGLStateCache::Get().BindVertexArray(m_BillboardVao);

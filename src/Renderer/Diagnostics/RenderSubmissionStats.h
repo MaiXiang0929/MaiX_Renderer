@@ -28,7 +28,8 @@ struct PassSubmissionStats
 
 struct RenderSubmissionSnapshot
 {
-    static constexpr std::size_t PassCount = 8;
+    static constexpr std::size_t PassCount =
+        static_cast<std::size_t>(RenderPassType::Count);
     std::array<PassSubmissionStats, PassCount> passes{};
     bool valid = false;
 };

@@ -47,6 +47,10 @@ public:
 		const std::string& name,
 		const float* data
 	);
+	void SetMatrix3(
+		const std::string& name,
+		const float* data
+	);
 
 	void SetVec3(
 		const std::string& name,

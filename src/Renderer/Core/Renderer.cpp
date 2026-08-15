@@ -142,6 +142,7 @@ bool Renderer::UpdateMaterial(
     clamped.toonThreshold = std::clamp(clamped.toonThreshold, 0.0f, 1.0f);
     clamped.toonShadowStrength = std::clamp(clamped.toonShadowStrength, 0.0f, 1.0f);
     clamped.rimLightStrength = std::clamp(clamped.rimLightStrength, 0.0f, 4.0f);
+    clamped.outlineThickness = ClampOutlineThickness(clamped.outlineThickness);
     clamped.baseColor.x = std::clamp(clamped.baseColor.x, 0.0f, 1.0f);
     clamped.baseColor.y = std::clamp(clamped.baseColor.y, 0.0f, 1.0f);
     clamped.baseColor.z = std::clamp(clamped.baseColor.z, 0.0f, 1.0f);
@@ -151,6 +152,9 @@ bool Renderer::UpdateMaterial(
     clamped.rimLightColor.x = std::clamp(clamped.rimLightColor.x, 0.0f, 1.0f);
     clamped.rimLightColor.y = std::clamp(clamped.rimLightColor.y, 0.0f, 1.0f);
     clamped.rimLightColor.z = std::clamp(clamped.rimLightColor.z, 0.0f, 1.0f);
+    clamped.outlineColor.x = std::clamp(clamped.outlineColor.x, 0.0f, 1.0f);
+    clamped.outlineColor.y = std::clamp(clamped.outlineColor.y, 0.0f, 1.0f);
+    clamped.outlineColor.z = std::clamp(clamped.outlineColor.z, 0.0f, 1.0f);
 
     Material& material = *m_MaterialResources[handle.id];
     material.GetProperties() = clamped;

@@ -38,10 +38,11 @@ public:
     int GetTargetWidth() const { return m_Framebuffer.GetWidth(); }
     int GetTargetHeight() const { return m_Framebuffer.GetHeight(); }
     void BindColorTarget() const { m_Framebuffer.Bind(); }
-    void UnbindColorTarget() const
+    void UnbindColorTarget(bool generateMipmaps = true) const
     {
         m_Framebuffer.Unbind();
-        m_Framebuffer.GenerateMipmaps();
+        if (generateMipmaps)
+            m_Framebuffer.GenerateMipmaps();
     }
 
 private:

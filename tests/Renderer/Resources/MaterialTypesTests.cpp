@@ -30,6 +30,16 @@ void TestShadingModels()
         "Shading model values must match the GLSL material contract.");
 }
 
+void TestOutlineThicknessClamp()
+{
+    Require(ClampOutlineThickness(-1.0f) == MinimumOutlineThickness,
+        "Outline thickness should clamp negative values.");
+    Require(ClampOutlineThickness(0.05f) == 0.05f,
+        "Outline thickness should retain values inside the supported range.");
+    Require(ClampOutlineThickness(1.0f) == MaximumOutlineThickness,
+        "Outline thickness should clamp values above the supported range.");
+}
+
 void TestFixedTextureUnits()
 {
     Require(GetMaterialTextureUnitOffset(MaterialTextureSlot::BaseColor) == 0,
@@ -66,6 +76,7 @@ int main()
 {
     TestTextureSlotIndices();
     TestShadingModels();
+    TestOutlineThicknessClamp();
     TestFixedTextureUnits();
     TestTextureColorSpaces();
     std::cout << "Material type tests passed." << std::endl;

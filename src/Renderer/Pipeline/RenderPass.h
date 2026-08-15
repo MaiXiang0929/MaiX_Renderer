@@ -18,11 +18,13 @@ enum class RenderPassType
     Shadow,
     Reflection,
     Forward,
+    Outline,
     Translucency,
-    EditorPrimitive,
     Bloom,
     PostProcess,
-    Present
+    EditorPrimitive,
+    Present,
+    Count
 };
 
 /// @brief Application 每帧提交给渲染器的纯场景数据。
@@ -71,6 +73,7 @@ struct RenderPassContext
     GLuint reflectionTexture = 0;
     GLuint bloomTexture = 0;
     GLuint postProcessTexture = 0;
+    GLuint editorOverlayTexture = 0;
 };
 
 /// @brief 所有真实渲染阶段的统一接口。

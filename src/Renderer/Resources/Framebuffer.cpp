@@ -38,19 +38,34 @@ bool Framebuffer::Init(
     int width,
     int height,
     FramebufferColorFormat colorFormat) {
-    if (width <= 0 || height <= 0) {
+    FramebufferSpecification specification;
+    specification.width = width;
+    specification.height = height;
+    specification.colorFormat = colorFormat;
+    return Init(specification);
+}
+
+bool Framebuffer::Init(const FramebufferSpecification& specification) {
+    if (specification.width <= 0 || specification.height <= 0) {
         std::cerr << "[Framebuffer] Rejected invalid extent "
-                  << width << "x" << height << "." << std::endl;
+                  << specification.width << "x" << specification.height
+                  << "." << std::endl;
         return false;
     }
-    if (m_Width == width && m_Height == height &&
-        m_ColorFormat == colorFormat && m_FBO != 0) return true;
+    if (m_Width == specification.width &&
+        m_Height == specification.height &&
+        m_ColorFormat == specification.colorFormat &&
+        m_DepthStencilEnabled == specification.depthStencilEnabled &&
+        m_MipmapsEnabled == specification.mipmapsEnabled &&
+        m_FBO != 0) return true;
 
     Cleanup(); // 清理旧数据（防止 Resize 时内存泄漏）
 
-    m_Width = width;
-    m_Height = height;
-    m_ColorFormat = colorFormat;
+    m_Width = specification.width;
+    m_Height = specification.height;
+    m_ColorFormat = specification.colorFormat;
+    m_DepthStencilEnabled = specification.depthStencilEnabled;
+    m_MipmapsEnabled = specification.mipmapsEnabled;
 
     // 1. 创建 FBO
     glGenFramebuffers(1, &m_FBO);
@@ -59,10 +74,11 @@ bool Framebuffer::Init(
     // 2. 创建 Color Texture Attachment
     glGenTextures(1, &m_ColorTexture);
     glBindTexture(GL_TEXTURE_2D, m_ColorTexture);
-    const GLint internalFormat = colorFormat == FramebufferColorFormat::RGBA16F
+    const GLint internalFormat =
+        m_ColorFormat == FramebufferColorFormat::RGBA16F
         ? GL_RGBA16F
         : GL_RGBA8;
-    const GLenum dataType = colorFormat == FramebufferColorFormat::RGBA16F
+    const GLenum dataType = m_ColorFormat == FramebufferColorFormat::RGBA16F
         ? GL_FLOAT
         : GL_UNSIGNED_BYTE;
     glTexImage2D(
@@ -76,26 +92,35 @@ bool Framebuffer::Init(
         dataType,
         nullptr);
 
-    // 先创建完整的 MipMap 链，保证使用 MipMap 过滤时纹理仍然完整。
-    glGenerateMipmap(GL_TEXTURE_2D);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    if (m_MipmapsEnabled)
+        glGenerateMipmap(GL_TEXTURE_2D);
+    glTexParameteri(
+        GL_TEXTURE_2D,
+        GL_TEXTURE_MIN_FILTER,
+        m_MipmapsEnabled ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
     // 驱动支持时使用硬件允许的最大各向异性等级，改善倾斜平面的缩小采样质量。
-    if (SupportsAnisotropicFiltering()) {
+    if (m_MipmapsEnabled && SupportsAnisotropicFiltering()) {
         GLfloat maxAnisotropy = 1.0f;
         glGetFloatv(MaxTextureMaxAnisotropyExt, &maxAnisotropy);
         glTexParameterf(GL_TEXTURE_2D, TextureMaxAnisotropyExt, maxAnisotropy);
     }
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_ColorTexture, 0);
 
-    // 3. 创建 Depth & Stencil Renderbuffer Attachment (RBO)
-    glGenRenderbuffers(1, &m_RBO);
-    glBindRenderbuffer(GL_RENDERBUFFER, m_RBO);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, m_Width, m_Height);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, m_RBO);
+    if (m_DepthStencilEnabled) {
+        glGenRenderbuffers(1, &m_RBO);
+        glBindRenderbuffer(GL_RENDERBUFFER, m_RBO);
+        glRenderbufferStorage(
+            GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, m_Width, m_Height);
+        glFramebufferRenderbuffer(
+            GL_FRAMEBUFFER,
+            GL_DEPTH_STENCIL_ATTACHMENT,
+            GL_RENDERBUFFER,
+            m_RBO);
+    }
 
     // 4. 检查 FBO 完整性
     const bool complete =
@@ -104,7 +129,7 @@ bool Framebuffer::Init(
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     if (!complete) {
         std::cerr << "[Framebuffer] Incomplete framebuffer at "
-                  << width << "x" << height << "." << std::endl;
+                  << m_Width << "x" << m_Height << "." << std::endl;
         Cleanup();
         return false;
     }
@@ -118,6 +143,8 @@ void Framebuffer::Cleanup() {
     m_Width = 0;
     m_Height = 0;
     m_ColorFormat = FramebufferColorFormat::RGBA8;
+    m_DepthStencilEnabled = true;
+    m_MipmapsEnabled = true;
 }
 
 void Framebuffer::Bind() const {
@@ -130,6 +157,8 @@ void Framebuffer::Unbind() const {
 }
 
 void Framebuffer::GenerateMipmaps() const {
+    if (!m_MipmapsEnabled || m_ColorTexture == 0)
+        return;
     // 颜色附件每帧都会被重绘，旧的低分辨率层级必须随之更新。
     glBindTexture(GL_TEXTURE_2D, m_ColorTexture);
     glGenerateMipmap(GL_TEXTURE_2D);

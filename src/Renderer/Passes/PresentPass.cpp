@@ -34,5 +34,10 @@ void PresentPass::Execute(RenderPassContext& context)
         GL_TEXTURE_2D, 0, context.postProcessTexture);
     glBindTexture(GL_TEXTURE_2D, context.postProcessTexture);
     m_Shader.SetInt("renderedTexture", 0);
+    glActiveTexture(GL_TEXTURE1);
+    RenderSubmissionStats::Get().RecordTextureBind(
+        GL_TEXTURE_2D, 1, context.editorOverlayTexture);
+    glBindTexture(GL_TEXTURE_2D, context.editorOverlayTexture);
+    m_Shader.SetInt("editorOverlayTexture", 1);
     context.presentMesh.Draw();
 }

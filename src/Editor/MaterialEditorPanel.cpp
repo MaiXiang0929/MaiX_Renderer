@@ -83,6 +83,18 @@ void MaterialEditorPanel::Draw(Renderer& renderer)
         changed |= ImGui::ColorEdit3("Toon Shadow Color", &properties.toonShadowColor.x);
         changed |= ImGui::SliderFloat("Rim Light Strength", &properties.rimLightStrength, 0.0f, 4.0f);
         changed |= ImGui::ColorEdit3("Rim Light Color", &properties.rimLightColor.x);
+        changed |= ImGui::Checkbox("Outline", &properties.outlineEnabled);
+        if (properties.outlineEnabled)
+        {
+            changed |= ImGui::SliderFloat(
+                "Outline Thickness",
+                &properties.outlineThickness,
+                MinimumOutlineThickness,
+                MaximumOutlineThickness,
+                "%.3f");
+            changed |= ImGui::ColorEdit3(
+                "Outline Color", &properties.outlineColor.x);
+        }
     }
 
     int blendMode = snapshot.blendMode == BlendMode::AlphaBlend ? 1 : 0;

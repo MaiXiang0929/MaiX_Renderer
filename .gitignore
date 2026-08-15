@@ -500,3 +500,8 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+# Runtime editor shaders are source assets, not Visual Studio Debug output.
+!assets/shaders/debug/
+!assets/shaders/debug/*.vert
+!assets/shaders/debug/*.frag

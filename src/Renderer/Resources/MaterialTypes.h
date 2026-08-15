@@ -19,6 +19,18 @@ enum class ShadingModel
     Toon
 };
 
+constexpr float MinimumOutlineThickness = 0.0f;
+constexpr float MaximumOutlineThickness = 0.2f;
+
+constexpr float ClampOutlineThickness(float thickness)
+{
+    return thickness < MinimumOutlineThickness
+        ? MinimumOutlineThickness
+        : thickness > MaximumOutlineThickness
+            ? MaximumOutlineThickness
+            : thickness;
+}
+
 enum class MaterialTextureSlot : std::uint8_t
 {
     BaseColor,

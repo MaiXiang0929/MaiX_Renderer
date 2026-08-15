@@ -53,6 +53,21 @@ int main()
     Require(bloomMinimum.width == 1 && bloomMinimum.height == 1,
         "Bloom should preserve a valid one-pixel viewport.");
 
+    const RenderTargetExtent overlayHd =
+        CalculateEditorOverlayTargetExtent(1920, 1080);
+    Require(overlayHd.width == 1920 && overlayHd.height == 1080,
+        "Editor overlay should match the full display extent.");
+
+    const RenderTargetExtent overlayMinimum =
+        CalculateEditorOverlayTargetExtent(1, 1);
+    Require(overlayMinimum.width == 1 && overlayMinimum.height == 1,
+        "Editor overlay should preserve a valid one-pixel viewport.");
+
+    const RenderTargetExtent overlayMinimized =
+        CalculateEditorOverlayTargetExtent(1920, 0);
+    Require(overlayMinimized.width == 0 && overlayMinimized.height == 0,
+        "Editor overlay should reject a minimized viewport.");
+
     std::cout << "RenderTargetSizingTests passed." << std::endl;
     return EXIT_SUCCESS;
 }

@@ -34,3 +34,13 @@ constexpr RenderTargetExtent CalculateBloomTargetExtent(
         viewportHeight / 2 + viewportHeight % 2
     };
 }
+
+/// Editor overlays match the display target so pixel-sized gizmos stay stable.
+constexpr RenderTargetExtent CalculateEditorOverlayTargetExtent(
+    unsigned int viewportWidth,
+    unsigned int viewportHeight)
+{
+    if (viewportWidth == 0 || viewportHeight == 0)
+        return {};
+    return { viewportWidth, viewportHeight };
+}

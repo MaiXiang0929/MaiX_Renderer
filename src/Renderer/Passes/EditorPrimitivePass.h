@@ -4,24 +4,20 @@
 #include <glad/glad.h>
 
 #include "Renderer/Pipeline/RenderPass.h"
+#include "Renderer/Resources/Framebuffer.h"
 #include "Renderer/Resources/Shader.h"
-
-class ForwardPass;
 
 class EditorPrimitivePass final : public RenderPass
 {
 public:
-    explicit EditorPrimitivePass(ForwardPass& forwardPass)
-        : m_ForwardPass(forwardPass)
-    {
-    }
-
+    EditorPrimitivePass() = default;
     ~EditorPrimitivePass() override;
 
     EditorPrimitivePass(const EditorPrimitivePass&) = delete;
     EditorPrimitivePass& operator=(const EditorPrimitivePass&) = delete;
 
     bool Init();
+    bool Resize(unsigned int width, unsigned int height);
     bool ReloadShaders();
 
     RenderPassType GetType() const override
@@ -29,6 +25,13 @@ public:
         return RenderPassType::EditorPrimitive;
     }
     void Execute(RenderPassContext& context) override;
+
+    GLuint GetColorTexture() const
+    {
+        return m_OverlayTarget.GetColorTexture();
+    }
+    int GetTargetWidth() const { return m_OverlayTarget.GetWidth(); }
+    int GetTargetHeight() const { return m_OverlayTarget.GetHeight(); }
 
 private:
     void CreateBillboardMesh();
@@ -41,7 +44,7 @@ private:
         const RenderPassContext& context,
         const struct LightSceneProxy& light);
 
-    ForwardPass& m_ForwardPass;
+    Framebuffer m_OverlayTarget;
     Shader m_BillboardShader;
     Shader m_LineShader;
     GLuint m_BillboardVao = 0;

@@ -9,9 +9,9 @@
 
 namespace
 {
-constexpr std::array<const char*, 8> PassNames = {
-    "Shadow", "Reflection", "Forward", "Translucency", "Editor", "Bloom",
-    "PostProcess", "Present"
+constexpr std::array<const char*, RenderSubmissionSnapshot::PassCount> PassNames = {
+    "Shadow", "Reflection", "Forward", "Outline", "Translucency",
+    "Bloom", "PostProcess", "Editor", "Present"
 };
 }
 
