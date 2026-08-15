@@ -124,6 +124,17 @@ bool RenderScene::UpdatePrimitiveTransform(
     return true;
 }
 
+void RenderScene::UpdateMaterialBlendMode(
+    RenderResourceId materialId,
+    BlendMode blendMode)
+{
+    for (PrimitiveSceneProxy& proxy : m_Primitives)
+    {
+        if (proxy.materialId == materialId)
+            proxy.blendMode = blendMode;
+    }
+}
+
 LightId RenderScene::AddLight(LightSceneProxy light)
 {
     light.id = m_NextLightId++;

@@ -50,6 +50,7 @@ set(SOURCES
 
     # Editor
     src/Editor/RendererStatisticsPanel.cpp
+    src/Editor/MaterialEditorPanel.cpp
 
     # Renderer Core
     src/Renderer/Core/Renderer.cpp

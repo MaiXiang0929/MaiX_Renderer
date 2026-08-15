@@ -18,6 +18,7 @@
 struct GLFWwindow;
 class Renderer;
 class RendererStatisticsPanel;
+class MaterialEditorPanel;
 
 /// @brief 应用程序核心管理类
 /// @details 该类负责管理整个程序的生命周期，包括初始化、主循环更新、渲染及资源清理。
@@ -47,6 +48,7 @@ private:
 
     Renderer* m_Renderer        = nullptr;      ///< 渲染器对象的指针句柄
     std::unique_ptr<RendererStatisticsPanel> m_StatisticsPanel;
+    std::unique_ptr<MaterialEditorPanel> m_MaterialEditorPanel;
     bool m_ImGuiInitialized     = false;
 
 	Camera m_Camera;                            ///< 离屏渲染物体所使用的摄像机

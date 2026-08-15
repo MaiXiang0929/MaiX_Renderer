@@ -97,6 +97,59 @@ MaterialHandle Renderer::CreateMaterial(Material material)
     return handle;
 }
 
+bool Renderer::GetMaterialSnapshot(
+    MaterialHandle handle,
+    MaterialSnapshot& snapshot) const
+{
+    if (!handle.IsValid() || handle.id >= m_MaterialResources.size() ||
+        !m_MaterialResources[handle.id])
+        return false;
+
+    const Material& material = *m_MaterialResources[handle.id];
+    snapshot.handle = handle;
+    snapshot.properties = material.GetProperties();
+    snapshot.blendMode = material.GetBlendMode();
+    for (std::size_t index = 0; index < MaterialTextureSlotCount; ++index)
+    {
+        snapshot.hasTextures[index] = static_cast<bool>(material.GetTexture(
+            static_cast<MaterialTextureSlot>(index)));
+    }
+    return true;
+}
+
+MaterialHandle Renderer::GetMaterialHandle(std::size_t index) const
+{
+    if (index >= m_MaterialResources.size())
+        return {};
+    return MaterialHandle{ static_cast<RenderResourceId>(index) };
+}
+
+bool Renderer::UpdateMaterial(
+    MaterialHandle handle,
+    const MaterialProperties& properties,
+    BlendMode blendMode)
+{
+    if (!handle.IsValid() || handle.id >= m_MaterialResources.size() ||
+        !m_MaterialResources[handle.id])
+        return false;
+
+    MaterialProperties clamped = properties;
+    clamped.metallic = std::clamp(clamped.metallic, 0.0f, 1.0f);
+    clamped.roughness = std::clamp(clamped.roughness, 0.045f, 1.0f);
+    clamped.ambientOcclusion = std::clamp(clamped.ambientOcclusion, 0.0f, 1.0f);
+    clamped.normalScale = std::clamp(clamped.normalScale, 0.0f, 4.0f);
+    clamped.opacity = std::clamp(clamped.opacity, 0.0f, 1.0f);
+    clamped.baseColor.x = std::clamp(clamped.baseColor.x, 0.0f, 1.0f);
+    clamped.baseColor.y = std::clamp(clamped.baseColor.y, 0.0f, 1.0f);
+    clamped.baseColor.z = std::clamp(clamped.baseColor.z, 0.0f, 1.0f);
+
+    Material& material = *m_MaterialResources[handle.id];
+    material.GetProperties() = clamped;
+    material.SetBlendMode(blendMode);
+    m_RenderScene.UpdateMaterialBlendMode(handle.id, blendMode);
+    return true;
+}
+
 PrimitiveId Renderer::AddPrimitive(
     MeshHandle mesh,
     MaterialHandle material,

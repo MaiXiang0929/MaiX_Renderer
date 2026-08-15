@@ -16,6 +16,8 @@
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_opengl3.h>
 
+#include "Editor/MaterialEditorPanel.h"
+
 #include "cyTriMesh.h"
 
 #include <algorithm>
@@ -176,6 +178,7 @@ bool Application::Init() {
     }
     m_ImGuiInitialized = true;
     m_StatisticsPanel = std::make_unique<RendererStatisticsPanel>();
+    m_MaterialEditorPanel = std::make_unique<MaterialEditorPanel>();
 
     // 主颜色目标和显示平面都跟随窗口 framebuffer 的像素宽高比。
     const float framebufferAspect =
@@ -723,6 +726,7 @@ void Application::Render() {
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
     m_StatisticsPanel->Draw(*m_Renderer);
+    m_MaterialEditorPanel->Draw(*m_Renderer);
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
@@ -733,6 +737,7 @@ void Application::Shutdown() {
     if (!m_Initialized) return;
 
     m_StatisticsPanel.reset();
+    m_MaterialEditorPanel.reset();
     if (m_ImGuiInitialized) {
         ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplGlfw_Shutdown();

@@ -26,6 +26,14 @@
 class Renderer
 {
 public:
+    struct MaterialSnapshot
+    {
+        MaterialHandle handle;
+        MaterialProperties properties;
+        BlendMode blendMode = BlendMode::Opaque;
+        std::array<bool, MaterialTextureSlotCount> hasTextures{};
+    };
+
     struct StatisticsSnapshot
     {
         std::size_t sourcePrimitiveCount = 0;
@@ -51,6 +59,14 @@ public:
 
     MeshHandle CreateMesh(const std::vector<Vertex>& vertices);
     MaterialHandle CreateMaterial(Material material);
+    bool GetMaterialSnapshot(
+        MaterialHandle handle,
+        MaterialSnapshot& snapshot) const;
+    MaterialHandle GetMaterialHandle(std::size_t index) const;
+    bool UpdateMaterial(
+        MaterialHandle handle,
+        const MaterialProperties& properties,
+        BlendMode blendMode);
 
     PrimitiveId AddPrimitive(
         MeshHandle mesh,

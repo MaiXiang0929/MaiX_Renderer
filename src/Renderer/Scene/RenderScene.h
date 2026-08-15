@@ -16,6 +16,9 @@ public:
     bool UpdatePrimitiveTransform(
         PrimitiveId id,
         const cy::Matrix4f& localToWorld);
+    void UpdateMaterialBlendMode(
+        RenderResourceId materialId,
+        BlendMode blendMode);
 
     LightId AddLight(LightSceneProxy light);
     bool UpdateLight(LightId id, const LightSceneProxy& light);
