@@ -32,6 +32,12 @@ struct MaterialProperties
     float normalScale = 1.0f;
     // 透明 Pass 使用的整体不透明度；管线分类仍由 Primitive 单独决定。
     float opacity = 1.0f;
+    ShadingModel shadingModel = ShadingModel::PBR;
+    float toonThreshold = 0.5f;
+    float toonShadowStrength = 0.65f;
+    cy::Vec3f toonShadowColor{ 0.18f, 0.20f, 0.28f };
+    float rimLightStrength = 0.0f;
+    cy::Vec3f rimLightColor{ 1.0f, 1.0f, 1.0f };
 };
 
 class Material

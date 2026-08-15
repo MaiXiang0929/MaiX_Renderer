@@ -59,6 +59,15 @@ void Material::Bind(Shader& shader, unsigned int firstTextureUnit) const
     shader.SetFloat("material.ambientOcclusion", m_Properties.ambientOcclusion);
     shader.SetFloat("material.normalScale", m_Properties.normalScale);
     shader.SetFloat("material.opacity", m_Properties.opacity);
+    shader.SetInt("material.shadingModel",
+        m_Properties.shadingModel == ShadingModel::Toon ? 1 : 0);
+    shader.SetFloat("material.toonThreshold", m_Properties.toonThreshold);
+    shader.SetFloat("material.toonShadowStrength", m_Properties.toonShadowStrength);
+    shader.SetVec3("material.toonShadowColor", m_Properties.toonShadowColor.x,
+        m_Properties.toonShadowColor.y, m_Properties.toonShadowColor.z);
+    shader.SetFloat("material.rimLightStrength", m_Properties.rimLightStrength);
+    shader.SetVec3("material.rimLightColor", m_Properties.rimLightColor.x,
+        m_Properties.rimLightColor.y, m_Properties.rimLightColor.z);
 
     const unsigned int albedoUnit = firstTextureUnit +
         GetMaterialTextureUnitOffset(MaterialTextureSlot::BaseColor);

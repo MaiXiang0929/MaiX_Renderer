@@ -139,9 +139,18 @@ bool Renderer::UpdateMaterial(
     clamped.ambientOcclusion = std::clamp(clamped.ambientOcclusion, 0.0f, 1.0f);
     clamped.normalScale = std::clamp(clamped.normalScale, 0.0f, 4.0f);
     clamped.opacity = std::clamp(clamped.opacity, 0.0f, 1.0f);
+    clamped.toonThreshold = std::clamp(clamped.toonThreshold, 0.0f, 1.0f);
+    clamped.toonShadowStrength = std::clamp(clamped.toonShadowStrength, 0.0f, 1.0f);
+    clamped.rimLightStrength = std::clamp(clamped.rimLightStrength, 0.0f, 4.0f);
     clamped.baseColor.x = std::clamp(clamped.baseColor.x, 0.0f, 1.0f);
     clamped.baseColor.y = std::clamp(clamped.baseColor.y, 0.0f, 1.0f);
     clamped.baseColor.z = std::clamp(clamped.baseColor.z, 0.0f, 1.0f);
+    clamped.toonShadowColor.x = std::clamp(clamped.toonShadowColor.x, 0.0f, 1.0f);
+    clamped.toonShadowColor.y = std::clamp(clamped.toonShadowColor.y, 0.0f, 1.0f);
+    clamped.toonShadowColor.z = std::clamp(clamped.toonShadowColor.z, 0.0f, 1.0f);
+    clamped.rimLightColor.x = std::clamp(clamped.rimLightColor.x, 0.0f, 1.0f);
+    clamped.rimLightColor.y = std::clamp(clamped.rimLightColor.y, 0.0f, 1.0f);
+    clamped.rimLightColor.z = std::clamp(clamped.rimLightColor.z, 0.0f, 1.0f);
 
     Material& material = *m_MaterialResources[handle.id];
     material.GetProperties() = clamped;

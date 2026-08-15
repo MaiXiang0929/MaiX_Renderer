@@ -13,6 +13,12 @@ enum class BlendMode
     AlphaBlend
 };
 
+enum class ShadingModel
+{
+    PBR,
+    Toon
+};
+
 enum class MaterialTextureSlot : std::uint8_t
 {
     BaseColor,

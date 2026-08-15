@@ -10,9 +10,9 @@
 
 namespace
 {
-const char* BlendModeName(BlendMode mode)
+const char* ShadingModelName(ShadingModel model)
 {
-    return mode == BlendMode::AlphaBlend ? "Alpha Blend" : "Opaque";
+    return model == ShadingModel::Toon ? "Toon" : "PBR";
 }
 }
 
@@ -63,12 +63,27 @@ void MaterialEditorPanel::Draw(Renderer& renderer)
 
     MaterialProperties properties = snapshot.properties;
     bool changed = false;
+    int shadingModel = snapshot.properties.shadingModel == ShadingModel::Toon ? 1 : 0;
+    if (ImGui::Combo("Shading Model", &shadingModel, "PBR\0Toon\0"))
+    {
+        properties.shadingModel = shadingModel == 1 ? ShadingModel::Toon : ShadingModel::PBR;
+        changed = true;
+    }
     changed |= ImGui::ColorEdit3("Base Color", &properties.baseColor.x);
     changed |= ImGui::SliderFloat("Metallic", &properties.metallic, 0.0f, 1.0f);
     changed |= ImGui::SliderFloat("Roughness", &properties.roughness, 0.045f, 1.0f);
     changed |= ImGui::SliderFloat("Ambient Occlusion", &properties.ambientOcclusion, 0.0f, 1.0f);
     changed |= ImGui::SliderFloat("Normal Scale", &properties.normalScale, 0.0f, 4.0f);
     changed |= ImGui::SliderFloat("Opacity", &properties.opacity, 0.0f, 1.0f);
+
+    if (properties.shadingModel == ShadingModel::Toon)
+    {
+        changed |= ImGui::SliderFloat("Toon Threshold", &properties.toonThreshold, 0.0f, 1.0f);
+        changed |= ImGui::SliderFloat("Toon Shadow Strength", &properties.toonShadowStrength, 0.0f, 1.0f);
+        changed |= ImGui::ColorEdit3("Toon Shadow Color", &properties.toonShadowColor.x);
+        changed |= ImGui::SliderFloat("Rim Light Strength", &properties.rimLightStrength, 0.0f, 4.0f);
+        changed |= ImGui::ColorEdit3("Rim Light Color", &properties.rimLightColor.x);
+    }
 
     int blendMode = snapshot.blendMode == BlendMode::AlphaBlend ? 1 : 0;
     if (ImGui::Combo("Blend Mode", &blendMode, "Opaque\0Alpha Blend\0"))

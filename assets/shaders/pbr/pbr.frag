@@ -20,6 +20,12 @@ struct MaterialData
     float ambientOcclusion;
     float normalScale;
     float opacity;
+    int shadingModel;
+    float toonThreshold;
+    float toonShadowStrength;
+    vec3 toonShadowColor;
+    float rimLightStrength;
+    vec3 rimLightColor;
 
     sampler2D albedoMap;
     sampler2D ormMap;
@@ -167,6 +173,47 @@ void main()
     vec3 albedo = pow(max(material.baseColor, vec3(0.0)), vec3(2.2)) *
         albedoSample.rgb;
 
+    vec3 N = ResolveSurfaceNormal();
+    vec3 V = normalize(-fragPos);
+
+    if (material.shadingModel == 1)
+    {
+        vec3 toonLighting = vec3(0.03) * albedo;
+        for (int lightIndex = 0; lightIndex < lightCount; ++lightIndex)
+        {
+            LightData light = lights[lightIndex];
+            int lightType = int(light.positionAndType.w + 0.5);
+            vec3 L;
+            float attenuation = 1.0;
+            if (lightType == LIGHT_TYPE_DIRECTIONAL)
+                L = normalize(-light.directionAndRange.xyz);
+            else
+            {
+                vec3 toLight = light.positionAndType.xyz - fragPos;
+                float distanceToLight = length(toLight);
+                L = distanceToLight > 0.0001 ? toLight / distanceToLight : vec3(0.0, 1.0, 0.0);
+                attenuation = CalculateDistanceAttenuation(distanceToLight, light.directionAndRange.w);
+                if (lightType == LIGHT_TYPE_SPOT)
+                    attenuation *= CalculateSpotAttenuation(L, light.directionAndRange.xyz,
+                        light.spotAnglesAndShadow.x, light.spotAnglesAndShadow.y);
+            }
+            float nDotL = max(dot(N, L), 0.0) * attenuation;
+            float visibility = lightIndex == shadowLightIndex
+                ? CalculateShadowVisibility(fragLightSpacePos, N, L) : 1.0;
+            float lightBand = step(clamp(material.toonThreshold, 0.0, 1.0), nDotL);
+            vec3 shadowBand = mix(material.toonShadowColor, vec3(1.0),
+                1.0 - material.toonShadowStrength);
+            vec3 bandColor = mix(shadowBand, vec3(1.0), lightBand);
+            vec3 radiance = light.colorAndIntensity.rgb *
+                light.colorAndIntensity.w * attenuation;
+            toonLighting += albedo * bandColor * radiance * visibility;
+        }
+        float rim = pow(1.0 - max(dot(N, V), 0.0), 3.0) * material.rimLightStrength;
+        color = vec4(toonLighting + material.rimLightColor * rim,
+            clamp(material.opacity * albedoSample.a, 0.0, 1.0));
+        return;
+    }
+
     vec3 specularTint = clamp(material.specularColor, vec3(0.0), vec3(1.0));
     if (material.hasSpecularMap)
         specularTint *= texture(material.specularMap, fragTexCoord).rgb;
@@ -179,9 +226,6 @@ void main()
         material.roughness * ormSample.g, 0.045, 1.0);
     float ao = clamp(
         material.ambientOcclusion * ormSample.r, 0.0, 1.0);
-
-    vec3 N = ResolveSurfaceNormal();
-    vec3 V = normalize(-fragPos);
 
     vec3 f0 = mix(vec3(0.04) * specularTint, albedo, metallic);
     float nDotV = max(dot(N, V), 0.0);

@@ -23,6 +23,13 @@ void TestTextureSlotIndices()
         "Material texture slots should retain stable array indices.");
 }
 
+void TestShadingModels()
+{
+    Require(static_cast<int>(ShadingModel::PBR) == 0 &&
+        static_cast<int>(ShadingModel::Toon) == 1,
+        "Shading model values must match the GLSL material contract.");
+}
+
 void TestFixedTextureUnits()
 {
     Require(GetMaterialTextureUnitOffset(MaterialTextureSlot::BaseColor) == 0,
@@ -58,6 +65,7 @@ void TestTextureColorSpaces()
 int main()
 {
     TestTextureSlotIndices();
+    TestShadingModels();
     TestFixedTextureUnits();
     TestTextureColorSpaces();
     std::cout << "Material type tests passed." << std::endl;
