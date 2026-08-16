@@ -21,9 +21,10 @@ int main()
         static_cast<std::size_t>(RenderPassType::Forward) == 2 &&
         static_cast<std::size_t>(RenderPassType::Outline) == 3 &&
         static_cast<std::size_t>(RenderPassType::Translucency) == 4 &&
-        static_cast<std::size_t>(RenderPassType::Present) == 8,
+        static_cast<std::size_t>(RenderPassType::SSAO) == 5 &&
+        static_cast<std::size_t>(RenderPassType::Present) == 9,
         "Pass enum order must match pipeline diagnostics ordering.");
-    Require(static_cast<std::size_t>(RenderPassType::Count) == 9,
+    Require(static_cast<std::size_t>(RenderPassType::Count) == 10,
         "Pass diagnostics must reserve one slot per executable pass.");
 
     std::cout << "Render pass contract tests passed." << std::endl;

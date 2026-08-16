@@ -35,6 +35,7 @@ public:
         const cy::Matrix4f& view);
 
     GLuint GetColorTexture() const { return m_Framebuffer.GetColorTexture(); }
+    GLuint GetDepthTexture() const { return m_Framebuffer.GetDepthTexture(); }
     int GetTargetWidth() const { return m_Framebuffer.GetWidth(); }
     int GetTargetHeight() const { return m_Framebuffer.GetHeight(); }
     void BindColorTarget() const { m_Framebuffer.Bind(); }

@@ -11,12 +11,41 @@ struct TessellationSettings
 
 struct PostProcessSettings
 {
+    bool ssaoEnabled = false;
+    float ssaoRadius = 0.5f;
+    float ssaoIntensity = 1.0f;
+    float ssaoBias = 0.025f;
     bool bloomEnabled = true;
     float bloomThreshold = 1.0f;
     float bloomIntensity = 0.35f;
     bool toneMappingEnabled = true;
     float exposureCompensation = 0.0f;
 };
+
+constexpr float MinimumSsaoRadius = 0.05f;
+constexpr float MaximumSsaoRadius = 2.0f;
+constexpr float MinimumSsaoIntensity = 0.0f;
+constexpr float MaximumSsaoIntensity = 3.0f;
+constexpr float MinimumSsaoBias = 0.0f;
+constexpr float MaximumSsaoBias = 0.2f;
+
+constexpr float ClampSsaoRadius(float radius)
+{
+    return radius < MinimumSsaoRadius ? MinimumSsaoRadius
+        : radius > MaximumSsaoRadius ? MaximumSsaoRadius : radius;
+}
+
+constexpr float ClampSsaoIntensity(float intensity)
+{
+    return intensity < MinimumSsaoIntensity ? MinimumSsaoIntensity
+        : intensity > MaximumSsaoIntensity ? MaximumSsaoIntensity : intensity;
+}
+
+constexpr float ClampSsaoBias(float bias)
+{
+    return bias < MinimumSsaoBias ? MinimumSsaoBias
+        : bias > MaximumSsaoBias ? MaximumSsaoBias : bias;
+}
 
 constexpr float MinimumBloomThreshold = 0.0f;
 constexpr float MaximumBloomThreshold = 10.0f;

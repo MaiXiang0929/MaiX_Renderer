@@ -170,6 +170,14 @@ public:
     float GetBloomThreshold() const { return m_PostProcess.bloomThreshold; }
     void SetBloomIntensity(float intensity);
     float GetBloomIntensity() const { return m_PostProcess.bloomIntensity; }
+    void SetSsaoEnabled(bool enabled) { m_PostProcess.ssaoEnabled = enabled; }
+    bool IsSsaoEnabled() const { return m_PostProcess.ssaoEnabled; }
+    void SetSsaoRadius(float radius);
+    float GetSsaoRadius() const { return m_PostProcess.ssaoRadius; }
+    void SetSsaoIntensity(float intensity);
+    float GetSsaoIntensity() const { return m_PostProcess.ssaoIntensity; }
+    void SetSsaoBias(float bias);
+    float GetSsaoBias() const { return m_PostProcess.ssaoBias; }
 
 private:
     void LogMainViewStatsIfChanged(const RenderView& view);

@@ -76,6 +76,7 @@ set(SOURCES
     # Renderer Passes
     src/Renderer/Passes/ForwardPass.cpp
     src/Renderer/Passes/OutlinePass.cpp
+    src/Renderer/Passes/SSAOPass.cpp
     src/Renderer/Passes/TranslucencyPass.cpp
     src/Renderer/Passes/EditorPrimitivePass.cpp
     src/Renderer/Passes/ShadowPass.cpp

@@ -12,7 +12,8 @@
 enum class FramebufferColorFormat
 {
     RGBA8,
-    RGBA16F
+    RGBA16F,
+    R8
 };
 
 struct FramebufferSpecification
@@ -21,6 +22,7 @@ struct FramebufferSpecification
     int height = 0;
     FramebufferColorFormat colorFormat = FramebufferColorFormat::RGBA8;
     bool depthStencilEnabled = true;
+    bool sampleableDepth = false;
     bool mipmapsEnabled = true;
 };
 
@@ -61,16 +63,20 @@ public:
     int GetHeight() const { return m_Height; }
     FramebufferColorFormat GetColorFormat() const { return m_ColorFormat; }
     bool HasDepthStencil() const { return m_DepthStencilEnabled; }
+    bool HasDepthTexture() const { return m_DepthTexture != 0; }
+    GLuint GetDepthTexture() const { return m_DepthTexture; }
     bool HasMipmaps() const { return m_MipmapsEnabled; }
 
 private:
     GLuint m_FBO = 0;
     GLuint m_ColorTexture = 0;
+    GLuint m_DepthTexture = 0;
     GLuint m_RBO = 0; // 深度/模板 Renderbuffer
 
     int m_Width = 0;
     int m_Height = 0;
     FramebufferColorFormat m_ColorFormat = FramebufferColorFormat::RGBA8;
     bool m_DepthStencilEnabled = true;
+    bool m_SampleableDepth = false;
     bool m_MipmapsEnabled = true;
 };

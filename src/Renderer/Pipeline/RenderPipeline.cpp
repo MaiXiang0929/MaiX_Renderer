@@ -26,6 +26,7 @@ const char* GetPassDebugName(RenderPassType type)
     case RenderPassType::Forward: return "MaiX.ForwardPass";
     case RenderPassType::Outline: return "MaiX.OutlinePass";
     case RenderPassType::Translucency: return "MaiX.TranslucencyPass";
+    case RenderPassType::SSAO: return "MaiX.SSAOPass";
     case RenderPassType::EditorPrimitive: return "MaiX.EditorPrimitivePass";
     case RenderPassType::Bloom: return "MaiX.BloomPass";
     case RenderPassType::PostProcess: return "MaiX.PostProcessPass";
@@ -39,6 +40,7 @@ const char* GetPassDebugName(RenderPassType type)
 RenderPipeline::RenderPipeline()
     : m_OutlinePass(m_ForwardPass)
     , m_TranslucencyPass(m_ForwardPass)
+    , m_SSAOPass(m_ForwardPass)
     , m_ReflectionPass(m_ForwardPass, m_TranslucencyPass)
     , m_BloomPass(m_ForwardPass)
     , m_PostProcessPass(m_ForwardPass)
@@ -50,6 +52,7 @@ RenderPipeline::RenderPipeline()
         &m_ForwardPass,
         &m_OutlinePass,
         &m_TranslucencyPass,
+        &m_SSAOPass,
         &m_BloomPass,
         &m_PostProcessPass,
         &m_EditorPrimitivePass,
@@ -61,6 +64,7 @@ bool RenderPipeline::Init()
 {
     const bool forwardLoaded = m_ForwardPass.Init();
     const bool outlineLoaded = m_OutlinePass.Init();
+    const bool ssaoLoaded = m_SSAOPass.Init();
     const bool shadowLoaded = m_ShadowPass.Init(2048, 2048);
     const bool reflectionLoaded = m_ReflectionPass.Init();
     const bool editorPrimitivesLoaded = m_EditorPrimitivePass.Init();
@@ -75,7 +79,7 @@ bool RenderPipeline::Init()
             << "initialization failed."
             << std::endl;
     }
-    return forwardLoaded && outlineLoaded && shadowLoaded && reflectionLoaded &&
+    return forwardLoaded && outlineLoaded && ssaoLoaded && shadowLoaded && reflectionLoaded &&
         editorPrimitivesLoaded && bloomLoaded && postProcessLoaded &&
         presentLoaded;
 }
@@ -84,6 +88,7 @@ bool RenderPipeline::ReloadShaders()
 {
     return m_ForwardPass.ReloadShaders() &&
         m_OutlinePass.ReloadShaders() &&
+        m_SSAOPass.ReloadShaders() &&
         m_ShadowPass.ReloadShaders() &&
         m_ReflectionPass.ReloadShaders() &&
         m_EditorPrimitivePass.ReloadShaders() &&
@@ -163,6 +168,17 @@ bool RenderPipeline::EnsureRenderTargetExtents(
         return false;
     resized |= !postProcessMatches;
 
+    const RenderTargetExtent ssaoExtent =
+        CalculateSsaoTargetExtent(viewportWidth, viewportHeight);
+    const bool ssaoMatches =
+        m_SSAOPass.GetTargetWidth() == static_cast<int>(ssaoExtent.width) &&
+        m_SSAOPass.GetTargetHeight() == static_cast<int>(ssaoExtent.height) &&
+        m_SSAOPass.GetCompositeWidth() == static_cast<int>(viewportWidth) &&
+        m_SSAOPass.GetCompositeHeight() == static_cast<int>(viewportHeight);
+    if (!ssaoMatches && !m_SSAOPass.Resize(ssaoExtent.width, ssaoExtent.height))
+        return false;
+    resized |= !ssaoMatches;
+
     const RenderTargetExtent editorOverlayExtent =
         CalculateEditorOverlayTargetExtent(viewportWidth, viewportHeight);
     const bool editorOverlayMatches =
@@ -186,6 +202,8 @@ bool RenderPipeline::EnsureRenderTargetExtents(
             << bloomExtent.height
             << ", PostProcess=" << viewportWidth << "x"
             << viewportHeight
+            << ", SSAO=" << ssaoExtent.width << "x"
+            << ssaoExtent.height
             << ", EditorOverlay=" << editorOverlayExtent.width << "x"
             << editorOverlayExtent.height << std::endl;
     }

@@ -20,6 +20,7 @@ enum class RenderPassType
     Forward,
     Outline,
     Translucency,
+    SSAO,
     Bloom,
     PostProcess,
     EditorPrimitive,
@@ -74,6 +75,8 @@ struct RenderPassContext
     GLuint bloomTexture = 0;
     GLuint postProcessTexture = 0;
     GLuint editorOverlayTexture = 0;
+    GLuint sceneColorTexture = 0;
+    GLuint ssaoTexture = 0;
 };
 
 /// @brief 所有真实渲染阶段的统一接口。

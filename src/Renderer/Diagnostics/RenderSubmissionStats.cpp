@@ -19,6 +19,7 @@ const char* ToString(RenderPassType type)
     case RenderPassType::Forward: return "Forward";
     case RenderPassType::Outline: return "Outline";
     case RenderPassType::Translucency: return "Translucency";
+    case RenderPassType::SSAO: return "SSAO";
     case RenderPassType::EditorPrimitive: return "EditorPrimitive";
     case RenderPassType::Bloom: return "Bloom";
     case RenderPassType::PostProcess: return "PostProcess";

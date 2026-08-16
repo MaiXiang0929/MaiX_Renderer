@@ -35,6 +35,14 @@ constexpr RenderTargetExtent CalculateBloomTargetExtent(
     };
 }
 
+/// SSAO uses the same half-resolution working size as Bloom.
+constexpr RenderTargetExtent CalculateSsaoTargetExtent(
+    unsigned int viewportWidth,
+    unsigned int viewportHeight)
+{
+    return CalculateBloomTargetExtent(viewportWidth, viewportHeight);
+}
+
 /// Editor overlays match the display target so pixel-sized gizmos stay stable.
 constexpr RenderTargetExtent CalculateEditorOverlayTargetExtent(
     unsigned int viewportWidth,

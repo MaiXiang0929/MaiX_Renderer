@@ -11,6 +11,8 @@
 
 // 匿名命名空间中的名称只在当前 Framebuffer.cpp 文件内可见，其他 .cpp 文件无法访问
 namespace {
+    // GLAD headers generated for this project omit ARB_stencil_texturing.
+    constexpr GLenum DepthStencilTextureMode = 0x90EA;
     // GLAD 仅生成核心 API，因此在本文件中补充各向异性过滤扩展枚举值。
     constexpr GLenum TextureMaxAnisotropyExt = 0x84FE;          // 设置某张纹理的各向异性等级
     constexpr GLenum MaxTextureMaxAnisotropyExt = 0x84FF;       // 查询显卡支持的最大等级
@@ -56,6 +58,7 @@ bool Framebuffer::Init(const FramebufferSpecification& specification) {
         m_Height == specification.height &&
         m_ColorFormat == specification.colorFormat &&
         m_DepthStencilEnabled == specification.depthStencilEnabled &&
+        m_SampleableDepth == specification.sampleableDepth &&
         m_MipmapsEnabled == specification.mipmapsEnabled &&
         m_FBO != 0) return true;
 
@@ -65,6 +68,7 @@ bool Framebuffer::Init(const FramebufferSpecification& specification) {
     m_Height = specification.height;
     m_ColorFormat = specification.colorFormat;
     m_DepthStencilEnabled = specification.depthStencilEnabled;
+    m_SampleableDepth = specification.sampleableDepth;
     m_MipmapsEnabled = specification.mipmapsEnabled;
 
     // 1. 创建 FBO
@@ -75,9 +79,10 @@ bool Framebuffer::Init(const FramebufferSpecification& specification) {
     glGenTextures(1, &m_ColorTexture);
     glBindTexture(GL_TEXTURE_2D, m_ColorTexture);
     const GLint internalFormat =
-        m_ColorFormat == FramebufferColorFormat::RGBA16F
-        ? GL_RGBA16F
-        : GL_RGBA8;
+        m_ColorFormat == FramebufferColorFormat::RGBA16F ? GL_RGBA16F
+        : m_ColorFormat == FramebufferColorFormat::R8 ? GL_R8 : GL_RGBA8;
+    const GLenum pixelFormat =
+        m_ColorFormat == FramebufferColorFormat::R8 ? GL_RED : GL_RGBA;
     const GLenum dataType = m_ColorFormat == FramebufferColorFormat::RGBA16F
         ? GL_FLOAT
         : GL_UNSIGNED_BYTE;
@@ -88,7 +93,7 @@ bool Framebuffer::Init(const FramebufferSpecification& specification) {
         m_Width,
         m_Height,
         0,
-        GL_RGBA,
+        pixelFormat,
         dataType,
         nullptr);
 
@@ -110,7 +115,35 @@ bool Framebuffer::Init(const FramebufferSpecification& specification) {
     }
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_ColorTexture, 0);
 
-    if (m_DepthStencilEnabled) {
+    if (m_DepthStencilEnabled && m_SampleableDepth) {
+        glGenTextures(1, &m_DepthTexture);
+        glBindTexture(GL_TEXTURE_2D, m_DepthTexture);
+        glTexImage2D(
+            GL_TEXTURE_2D,
+            0,
+            GL_DEPTH24_STENCIL8,
+            m_Width,
+            m_Height,
+            0,
+            GL_DEPTH_STENCIL,
+            GL_UNSIGNED_INT_24_8,
+            nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(
+            GL_TEXTURE_2D,
+            DepthStencilTextureMode,
+            GL_DEPTH_COMPONENT);
+        glFramebufferTexture2D(
+            GL_FRAMEBUFFER,
+            GL_DEPTH_STENCIL_ATTACHMENT,
+            GL_TEXTURE_2D,
+            m_DepthTexture,
+            0);
+    }
+    else if (m_DepthStencilEnabled) {
         glGenRenderbuffers(1, &m_RBO);
         glBindRenderbuffer(GL_RENDERBUFFER, m_RBO);
         glRenderbufferStorage(
@@ -138,12 +171,14 @@ bool Framebuffer::Init(const FramebufferSpecification& specification) {
 
 void Framebuffer::Cleanup() {
     if (m_RBO != 0) { glDeleteRenderbuffers(1, &m_RBO); m_RBO = 0; }
+    if (m_DepthTexture != 0) { glDeleteTextures(1, &m_DepthTexture); m_DepthTexture = 0; }
     if (m_ColorTexture != 0) { glDeleteTextures(1, &m_ColorTexture); m_ColorTexture = 0; }
     if (m_FBO != 0) { glDeleteFramebuffers(1, &m_FBO); m_FBO = 0; }
     m_Width = 0;
     m_Height = 0;
     m_ColorFormat = FramebufferColorFormat::RGBA8;
     m_DepthStencilEnabled = true;
+    m_SampleableDepth = false;
     m_MipmapsEnabled = true;
 }
 

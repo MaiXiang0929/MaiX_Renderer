@@ -11,7 +11,7 @@ namespace
 {
 constexpr std::array<const char*, RenderSubmissionSnapshot::PassCount> PassNames = {
     "Shadow", "Reflection", "Forward", "Outline", "Translucency",
-    "Bloom", "PostProcess", "Editor", "Present"
+    "SSAO", "Bloom", "PostProcess", "Editor", "Present"
 };
 }
 
@@ -112,6 +112,26 @@ void RendererStatisticsPanel::Draw(Renderer& renderer)
                 "Bloom intensity", &intensity,
                 MinimumBloomIntensity, MaximumBloomIntensity, "%.2f"))
             renderer.SetBloomIntensity(intensity);
+    }
+    bool ssao = renderer.IsSsaoEnabled();
+    if (ImGui::Checkbox("SSAO", &ssao)) renderer.SetSsaoEnabled(ssao);
+    if (ssao)
+    {
+        float radius = renderer.GetSsaoRadius();
+        if (ImGui::SliderFloat(
+                "SSAO radius", &radius,
+                MinimumSsaoRadius, MaximumSsaoRadius, "%.2f"))
+            renderer.SetSsaoRadius(radius);
+        float intensity = renderer.GetSsaoIntensity();
+        if (ImGui::SliderFloat(
+                "SSAO intensity", &intensity,
+                MinimumSsaoIntensity, MaximumSsaoIntensity, "%.2f"))
+            renderer.SetSsaoIntensity(intensity);
+        float bias = renderer.GetSsaoBias();
+        if (ImGui::SliderFloat(
+                "SSAO bias", &bias,
+                MinimumSsaoBias, MaximumSsaoBias, "%.3f"))
+            renderer.SetSsaoBias(bias);
     }
     float exposure = renderer.GetExposureCompensation();
     if (ImGui::SliderFloat(

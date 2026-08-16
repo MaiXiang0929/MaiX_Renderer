@@ -47,10 +47,12 @@ bool ForwardPass::Init()
 
 bool ForwardPass::Resize(unsigned int width, unsigned int height)
 {
-    return m_Framebuffer.Init(
-        static_cast<int>(width),
-        static_cast<int>(height),
-        FramebufferColorFormat::RGBA16F);
+    FramebufferSpecification specification;
+    specification.width = static_cast<int>(width);
+    specification.height = static_cast<int>(height);
+    specification.colorFormat = FramebufferColorFormat::RGBA16F;
+    specification.sampleableDepth = true;
+    return m_Framebuffer.Init(specification);
 }
 
 bool ForwardPass::ReloadShaders()
@@ -165,6 +167,8 @@ void ForwardPass::Execute(RenderPassContext& context)
     context.groundMesh.Draw();
 
     RenderSurface(context, context.mainView);
+
+    context.sceneColorTexture = GetColorTexture();
 
     m_Framebuffer.Unbind();
 }

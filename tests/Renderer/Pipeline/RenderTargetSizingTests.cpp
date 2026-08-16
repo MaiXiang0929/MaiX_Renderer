@@ -53,6 +53,16 @@ int main()
     Require(bloomMinimum.width == 1 && bloomMinimum.height == 1,
         "Bloom should preserve a valid one-pixel viewport.");
 
+    const RenderTargetExtent ssaoHd =
+        CalculateSsaoTargetExtent(1920, 1080);
+    Require(ssaoHd.width == 960 && ssaoHd.height == 540,
+        "SSAO should use the half-resolution working target.");
+
+    const RenderTargetExtent ssaoOdd =
+        CalculateSsaoTargetExtent(1279, 719);
+    Require(ssaoOdd.width == 640 && ssaoOdd.height == 360,
+        "SSAO should round odd half-resolution extents up.");
+
     const RenderTargetExtent overlayHd =
         CalculateEditorOverlayTargetExtent(1920, 1080);
     Require(overlayHd.width == 1920 && overlayHd.height == 1080,

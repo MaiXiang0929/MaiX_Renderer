@@ -53,7 +53,10 @@ void BloomPass::Execute(RenderPassContext& context)
     m_Highlights.Bind();
     glClear(GL_COLOR_BUFFER_BIT);
     m_ExtractShader.Bind();
-    BindTexture(m_ForwardPass.GetColorTexture(), 0);
+    const GLuint sceneColorTexture = context.sceneColorTexture != 0
+        ? context.sceneColorTexture
+        : m_ForwardPass.GetColorTexture();
+    BindTexture(sceneColorTexture, 0);
     m_ExtractShader.SetInt("sceneTexture", 0);
     m_ExtractShader.SetFloat(
         "threshold", context.postProcess.bloomThreshold);

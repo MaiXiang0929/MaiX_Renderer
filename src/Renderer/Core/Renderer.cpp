@@ -368,3 +368,18 @@ void Renderer::SetBloomIntensity(float intensity)
 {
     m_PostProcess.bloomIntensity = ClampBloomIntensity(intensity);
 }
+
+void Renderer::SetSsaoRadius(float radius)
+{
+    m_PostProcess.ssaoRadius = ClampSsaoRadius(radius);
+}
+
+void Renderer::SetSsaoIntensity(float intensity)
+{
+    m_PostProcess.ssaoIntensity = ClampSsaoIntensity(intensity);
+}
+
+void Renderer::SetSsaoBias(float bias)
+{
+    m_PostProcess.ssaoBias = ClampSsaoBias(bias);
+}

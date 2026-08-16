@@ -38,9 +38,12 @@ void PostProcessPass::Execute(RenderPassContext& context)
     m_Shader.Bind();
 
     glActiveTexture(GL_TEXTURE0);
+    const GLuint sceneColorTexture = context.sceneColorTexture != 0
+        ? context.sceneColorTexture
+        : m_ForwardPass.GetColorTexture();
     RenderSubmissionStats::Get().RecordTextureBind(
-        GL_TEXTURE_2D, 0, m_ForwardPass.GetColorTexture());
-    glBindTexture(GL_TEXTURE_2D, m_ForwardPass.GetColorTexture());
+        GL_TEXTURE_2D, 0, sceneColorTexture);
+    glBindTexture(GL_TEXTURE_2D, sceneColorTexture);
     m_Shader.SetInt("sceneTexture", 0);
 
     const bool bloomEnabled = context.postProcess.bloomEnabled &&
