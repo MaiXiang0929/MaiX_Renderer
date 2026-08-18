@@ -29,9 +29,12 @@ public:
     struct MaterialSnapshot
     {
         MaterialHandle handle;
+        std::string name;
         MaterialProperties properties;
         BlendMode blendMode = BlendMode::Opaque;
         std::array<bool, MaterialTextureSlotCount> hasTextures{};
+        std::array<unsigned int, MaterialTextureSlotCount> textureIds{};
+        std::array<std::string, MaterialTextureSlotCount> textureSources{};
     };
 
     struct StatisticsSnapshot
@@ -58,15 +61,29 @@ public:
     bool Init();
 
     MeshHandle CreateMesh(const std::vector<Vertex>& vertices);
+    MeshHandle CreateMesh(
+        const std::vector<Vertex>& vertices,
+        const std::vector<std::uint32_t>& indices);
+    bool DestroyMesh(MeshHandle handle);
     MaterialHandle CreateMaterial(Material material);
+    bool DestroyMaterial(MaterialHandle handle);
     bool GetMaterialSnapshot(
         MaterialHandle handle,
         MaterialSnapshot& snapshot) const;
     MaterialHandle GetMaterialHandle(std::size_t index) const;
+    std::vector<MaterialHandle> GetMaterialHandles() const;
     bool UpdateMaterial(
         MaterialHandle handle,
         const MaterialProperties& properties,
         BlendMode blendMode);
+    bool UpdateMaterialTexture(
+        MaterialHandle handle,
+        MaterialTextureSlot slot,
+        std::shared_ptr<Texture2D> texture,
+        std::string sourceLabel);
+    bool ClearMaterialTexture(
+        MaterialHandle handle,
+        MaterialTextureSlot slot);
 
     PrimitiveId AddPrimitive(
         MeshHandle mesh,
@@ -85,6 +102,7 @@ public:
     bool UpdatePrimitiveTransform(
         PrimitiveId id,
         const cy::Matrix4f& localToWorld);
+    bool RemovePrimitive(PrimitiveId id);
 
     LightId AddLight(LightSceneProxy light);
     bool UpdateLight(LightId id, const LightSceneProxy& light);
@@ -106,14 +124,8 @@ public:
         return RenderSubmissionStats::Get().GetSnapshot();
     }
 
-    std::size_t GetMeshResourceCount() const
-    {
-        return m_MeshResources.size();
-    }
-    std::size_t GetMaterialResourceCount() const
-    {
-        return m_MaterialResources.size();
-    }
+    std::size_t GetMeshResourceCount() const;
+    std::size_t GetMaterialResourceCount() const;
 
     void SetShadowsEnabled(bool enabled) { m_ShadowsEnabled = enabled; }
     bool IsShadowsEnabled() const { return m_ShadowsEnabled; }

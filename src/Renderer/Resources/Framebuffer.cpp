@@ -11,8 +11,6 @@
 
 // 匿名命名空间中的名称只在当前 Framebuffer.cpp 文件内可见，其他 .cpp 文件无法访问
 namespace {
-    // GLAD headers generated for this project omit ARB_stencil_texturing.
-    constexpr GLenum DepthStencilTextureMode = 0x90EA;
     // GLAD 仅生成核心 API，因此在本文件中补充各向异性过滤扩展枚举值。
     constexpr GLenum TextureMaxAnisotropyExt = 0x84FE;          // 设置某张纹理的各向异性等级
     constexpr GLenum MaxTextureMaxAnisotropyExt = 0x84FF;       // 查询显卡支持的最大等级
@@ -132,10 +130,6 @@ bool Framebuffer::Init(const FramebufferSpecification& specification) {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTexParameteri(
-            GL_TEXTURE_2D,
-            DepthStencilTextureMode,
-            GL_DEPTH_COMPONENT);
         glFramebufferTexture2D(
             GL_FRAMEBUFFER,
             GL_DEPTH_STENCIL_ATTACHMENT,

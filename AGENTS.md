@@ -44,8 +44,10 @@ Renderer（渲染资源所有者与管线入口）
 
 ```text
 src/
+├─ Assets/               FBX 模型与图片导入
 ├─ Core/                 应用生命周期、窗口、输入、相机
 ├─ Editor/               灯光调试 Gizmo 等编辑器叠加层
+├─ Platform/             平台文件对话框等边界
 ├─ Renderer/
 │  ├─ Core/              Renderer 门面与 GPU 资源所有权
 │  ├─ Pipeline/          RenderPipeline、RenderPass 契约、RenderSettings
@@ -59,6 +61,8 @@ assets/shaders/
 ├─ pbr/                  标准 PBR 与曲面细分/位移 Shader
 ├─ shadow/               阴影深度 Shader
 ├─ environment/         Skybox Shader
+├─ npr/                  Outline 等 NPR Shader
+├─ postprocess/          SSAO、Bloom 与色调处理 Shader
 ├─ reflection/          反射地面 Shader
 ├─ present/              离屏结果显示 Shader
 └─ debug/                灯光 Gizmo 等调试 Shader
@@ -80,8 +84,9 @@ RenderView
     │
     ├─ ShadowPass：写入 shadow map
     ├─ ReflectionPass：生成反射纹理
-    ├─ ForwardPass：写入 HDR/离屏颜色目标
-    └─ PresentPass：将离屏结果绘制到窗口
+    ├─ Forward / Outline / Translucency：写入 HDR Scene Color
+    ├─ SSAO / Bloom / PostProcess：屏幕空间遮蔽与色调处理
+    └─ EditorPrimitive / Present：合成编辑器叠加层并显示到窗口
 ```
 
 CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负责顶点变换、三角形光栅化、深度测试、纹理采样、BRDF 光照和最终像素输出。当前每个 `RenderItem` 在 Pass 内独立计算 `model`、`MV`、`MVP` 与 `lightMVP`，为后续裁剪、排序和批处理保留扩展点。
@@ -92,7 +97,7 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 
 - [x] Renderer 目录按 Core / Pipeline / Passes / Resources / Scene / View 拆分
 - [x] Shader 目录按渲染用途拆分
-- [x] `RenderPipeline` 按固定顺序执行 Shadow、Reflection、Forward、Outline、Translucency、Bloom、PostProcess、EditorPrimitive、Present
+- [x] `RenderPipeline` 按固定顺序执行 Shadow、Reflection、Forward、Outline、Translucency、SSAO、Bloom、PostProcess、EditorPrimitive、Present
 - [x] `RenderScene`、`PrimitiveSceneProxy`、`LightSceneProxy` 已建立
 - [x] `RenderView`、`RenderItem` 已建立，支持 opaque/translucent 分类
 - [x] Renderer 持有 Primitive 的 Mesh 与 Material，Scene Proxy 使用非 owning 指针
@@ -125,27 +130,30 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 - [x] 独立 `OutlinePass` 已使用 Inverted Hull 写入 Forward HDR Scene Color；仅处理主视图不透明 Toon 材质，并复用 Forward 深度
 - [x] Material Editor 已支持材质选择、PBR/Toon 切换、Toon Outline 参数和 Renderer-owned Material 更新边界
 - [x] Outline Pass 已接入 CPU/GPU 提交统计、GPU Timer Query、Shader Reload 和独立 NPR Shader 资源
+- [x] SSAO 已使用 Forward 可采样深度重建观察空间位置与法线，完成半分辨率 R8 遮蔽/滤波与全分辨率 HDR 合成
+- [x] FBX 静态模型导入已接通多 Mesh、多材质分段、索引绘制、Base Color 纹理、异步 CPU 解析与事务式资源替换
+- [x] 编辑器视口已接入相机 Orbit/Pan/Dolly、模型/灯光互斥拾取、ImGuizmo Transform 与选中对象聚焦
 - [x] CMake 构建时清理并复制最新 assets
-- [x] CMake 配置、编译、链接与 9 项测试通过；Material Lab、默认/Instancing/Tessellation 路径及 Outline Shader 初始化检查完成
+- [x] CMake 配置、编译、链接与 13 项测试通过；Material Lab、默认/Instancing/Tessellation 路径及全部 Shader 初始化检查完成
 
 ### 部分完成
 
 - [ ] RenderPipeline 已具备 Pass 边界，但资源依赖仍主要通过共享 Frame Context 传递
-- [ ] HDR Scene Color、Bloom、曝光与色调映射已完成并拆分独立 PostProcess Pass；自动曝光与 SSAO 尚未实现
+- [ ] HDR Scene Color、Bloom、SSAO、手动曝光与色调映射已完成；自动曝光尚未实现
 - [ ] 视锥体裁剪已完成包围球粗裁剪，但遮挡裁剪、距离裁剪和更精确的包围体尚未实现
 
 ### 尚未开始
 
 - [ ] 共享 Mesh/Material、VAO 状态缓存与不透明 Instancing 已完成，但 Shader/Texture 缓存和跨材质批处理尚未实现
-- [ ] HDR Scene Color、Bloom、手动曝光与 Tone Mapping 已完成；自动曝光与 SSAO 尚未实现
+- [ ] HDR Scene Color、Bloom、SSAO、手动曝光与 Tone Mapping 已完成；自动曝光尚未实现
 - [ ] Cascaded Shadow Maps（CSM）
 - [ ] NPR Anime Shader：Toon、Rim Light、Outline 已完成；Face Shadow、Hair Highlight 尚未实现
-- [ ] ImGui 统计面板和最小 Material Editor 已完成；Scene Window、Inspector 尚未开始
+- [ ] ImGui 统计面板、Material Editor、Asset Import 和视口 Transform 已完成；Scene Window、Inspector 尚未开始
 - [ ] RenderDoc 性能采集和 GPU Pass 统计文档
 
 ## 5. 分阶段实施计划
 
-### 阶段一：材质与 PBR 基础（当前阶段，最高优先级）
+### 阶段一：材质与 PBR 基础（已完成）
 
 目标：完成可复用 Material 工作流和可信的 Cook-Torrance 光照。
 
@@ -157,7 +165,7 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 
 验收：材质参数改变会实时影响外观，法线/位移/曲面细分不回归。
 
-### 阶段二：RenderScene 与可见性
+### 阶段二：RenderScene 与可见性（已完成最小路径）
 
 目标：让渲染器从“固定单物体 Demo”进入多物体场景阶段。
 
@@ -169,7 +177,7 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 
 验收：不可见物体不提交 Draw Call，物体数量增加时管线仍可维护。
 
-### 阶段三：阴影与后处理
+### 阶段三：阴影与后处理（部分完成）
 
 目标：形成现代实时渲染中常见的 HDR 场景链路。
 
@@ -181,7 +189,7 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 
 验收：明暗范围稳定，Bloom/SSAO 可独立开关，RenderDoc 能看到清晰 Pass 边界。
 
-### 阶段四：透明与材质表现扩展
+### 阶段四：透明与材质表现扩展（当前阶段）
 
 目标：补齐透明渲染并为艺术表现提供可切换路径。
 
@@ -193,7 +201,7 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 
 验收：透明物体顺序正确，二次元材质参数可由工具实时修改。
 
-### 阶段五：编辑器与性能分析
+### 阶段五：编辑器与性能分析（部分完成）
 
 目标：形成技术美术可操作、可观察的工作流。
 
@@ -209,8 +217,8 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 
 下一次实现前仍遵循“先给方案、确认后执行”的协作流程。建议优先顺序为：
 
-1. 进入 SSAO 前先明确可采样深度与屏幕空间法线来源，补齐最终展示 40-50s 的屏幕空间环境遮蔽能力。
-2. 为 NPR Face Shadow 评估角色资产、面部朝向参数和阴影纹理契约，再决定最小可展示实现。
+1. 为已导入的角色定义 Face Shadow 线性纹理通道、面部局部朝向与左右镜像契约，实现只由主光驱动的最小 Toon Face Shadow。
+2. Face Shadow 达到可展示后，再补充最小 Scene Window / Inspector 的选择、Transform 与灯光参数工作流。
 3. 为透明材质补充 Masked/Additive 模式前，先明确 Alpha Cutout 阴影、排序和混合策略。
 
 ## 7. 当前技术债与约束
@@ -225,6 +233,7 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 - Resize 会在渲染线程立即重建 Forward/Reflection 颜色与深度附件；持续拖动窗口可能产生重复 GPU 分配，后续可结合 Render Graph 资源池或 resize debounce 优化。
 - Forward PBR 最多消费 16 盏灯；当前仍只有一张 2D shadow map，Point Light 阴影与多阴影灯尚未实现。
 - Outline 使用观察空间厚度，当前只覆盖主视图不透明 Toon 材质；Tessellation 开启时跳过，透明/反射描边、屏幕空间恒定像素宽度和 Outline Instancing 尚未处理。
+- SSAO 当前从深度重建观察空间法线，使用固定屏幕空间采样核，并在 HDR Scene Color 上统一合成；间接光分离、时域稳定和 GTAO/HBAO 不在当前边界。
 - 透明、HDR、后处理和多灯光会显著扩大 GPU 资源与调试范围，应逐步加入 RenderDoc 基线。
 
 
@@ -281,6 +290,6 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 
 ## 10. 执行后验证约定
 
-每轮方案执行完成后，助手只负责验证程序能够正常运行，包括构建、启动以及明显的初始化、Shader 编译或链接错误。
+每轮方案执行完成后更新本文档内的相关内容，助手只负责验证程序能够正常运行，包括构建、启动以及明显的初始化、Shader 编译或链接错误。
 
 视觉效果由用户验收。助手应提供启动参数、操作步骤和画面检查项，并明确标记视觉效果为“待用户验收”，不得声称未实际观察到的视觉结果已经通过。

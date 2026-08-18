@@ -215,6 +215,32 @@ void TestSharedResourceIdentitySurvivesViewBuild()
         "Shared mesh instances must retain independent material identities.");
 }
 
+void TestPrimitiveRemovalAffectsFutureViews()
+{
+    RenderScene scene;
+    const PrimitiveId removedId = scene.AddPrimitive(MakePrimitive(0, 0, 0));
+    const PrimitiveId retainedId = scene.AddPrimitive(MakePrimitive(0, 1, 1));
+
+    RenderView beforeRemoval;
+    beforeRemoval.frustumCullingEnabled = false;
+    scene.BuildRenderView(beforeRemoval);
+
+    Require(scene.RemovePrimitive(removedId),
+        "An existing primitive should be removable.");
+    Require(!scene.RemovePrimitive(removedId),
+        "Removing the same primitive twice should fail safely.");
+
+    RenderView afterRemoval;
+    afterRemoval.frustumCullingEnabled = false;
+    scene.BuildRenderView(afterRemoval);
+    Require(beforeRemoval.opaqueItems.size() == 2,
+        "Removing a primitive must not mutate an existing render view snapshot.");
+    Require(
+        afterRemoval.opaqueItems.size() == 1 &&
+        afterRemoval.opaqueItems.front().primitiveId == retainedId,
+        "Future render views should exclude a removed primitive.");
+}
+
 void TestLightViewIsAnIndependentSnapshot()
 {
     RenderScene scene;
@@ -256,6 +282,7 @@ int main()
     TestTranslucentBackToFrontStableSorting();
     TestReflectionTranslucentSortingUsesReflectionView();
     TestSharedResourceIdentitySurvivesViewBuild();
+    TestPrimitiveRemovalAffectsFutureViews();
     TestLightViewIsAnIndependentSnapshot();
     std::cout << "RenderScene tests passed." << std::endl;
     return EXIT_SUCCESS;

@@ -62,6 +62,17 @@ bool ParseApplicationOptions(
             options.materialLab = true;
             continue;
         }
+        if (argument == "--translucency-test")
+        {
+            if (options.translucencyTest)
+            {
+                errorMessage =
+                    "--translucency-test may only be specified once.";
+                return false;
+            }
+            options.translucencyTest = true;
+            continue;
+        }
         if (!argument.empty() && argument.front() == '-')
         {
             errorMessage = "Unknown option: " + argument;
@@ -92,9 +103,10 @@ const char* GetApplicationUsage()
 {
     return
         "Usage: OpenGL_Project [normal.png] [displacement.png] "
-        "[--instance-grid N] [--material-lab]\n"
+        "[--instance-grid N] [--material-lab] [--translucency-test]\n"
         "  --instance-grid N  Submit an N x N shared-resource benchmark grid "
         "(1-32).\n"
         "  --material-lab     Show four PBR reference materials using shared "
-        "geometry.";
+        "geometry.\n"
+        "  --translucency-test  Add the three-plane transparency test scene.";
 }

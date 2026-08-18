@@ -22,7 +22,8 @@ void main()
     vec3 dx = Position(fragTexCoord + vec2(depthTexelSize.x, 0.0), texture(depthTexture, fragTexCoord + vec2(depthTexelSize.x, 0.0)).r) - position;
     vec3 dy = Position(fragTexCoord + vec2(0.0, depthTexelSize.y), texture(depthTexture, fragTexCoord + vec2(0.0, depthTexelSize.y)).r) - position;
     vec3 normal = normalize(cross(dx, dy));
-    if (normal.z > 0.0) normal = -normal;
+    vec3 toCamera = normalize(-position);
+    if (dot(normal, toCamera) < 0.0) normal = -normal;
     vec2 offsets[8] = vec2[8](vec2(1,0),vec2(-1,0),vec2(0,1),vec2(0,-1),vec2(0.707,0.707),vec2(-0.707,0.707),vec2(0.707,-0.707),vec2(-0.707,-0.707));
     float occlusion = 0.0;
     for (int i = 0; i < 8; ++i)

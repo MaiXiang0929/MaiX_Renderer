@@ -28,7 +28,6 @@ void PresentPass::Execute(RenderPassContext& context)
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     m_Shader.Bind();
-    m_Shader.SetMatrix4("mvp", &context.frame.presentMvp.cell[0]);
     glActiveTexture(GL_TEXTURE0);
     RenderSubmissionStats::Get().RecordTextureBind(
         GL_TEXTURE_2D, 0, context.postProcessTexture);

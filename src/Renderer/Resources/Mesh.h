@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include <vector>
 #include <glad/glad.h>
 #include "cyMatrix.h"
@@ -37,6 +39,11 @@ public:
         const std::vector<Vertex>& vertices
     );
 
+    void Upload(
+        const std::vector<Vertex>& vertices,
+        const std::vector<std::uint32_t>& indices
+    );
+
     void Draw() const;
 
     void DrawInstanced(std::size_t instanceCount) const;
@@ -44,6 +51,8 @@ public:
     void DrawPatches() const;
 
     int GetVertexCount() const;
+
+    int GetIndexCount() const;
  
 
 private:
@@ -52,7 +61,11 @@ private:
 
     GLuint m_VBO = 0;
 
+    GLuint m_EBO = 0;
+
     int m_VertexCount = 0;
+
+    int m_IndexCount = 0;
 
 private:
 

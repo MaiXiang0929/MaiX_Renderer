@@ -22,6 +22,12 @@ const std::shared_ptr<Texture2D>& GetEmptyTexture()
     return empty;
 }
 
+const std::string& GetEmptyString()
+{
+    static const std::string empty;
+    return empty;
+}
+
 const char* GetSlotName(MaterialTextureSlot slot)
 {
     switch (slot)
@@ -35,6 +41,11 @@ const char* GetSlotName(MaterialTextureSlot slot)
     }
     return "Invalid";
 }
+}
+
+void Material::SetName(std::string name)
+{
+    m_Name = std::move(name);
 }
 
 void Material::Bind(Shader& shader, unsigned int firstTextureUnit) const
@@ -124,9 +135,11 @@ void Material::Bind(Shader& shader, unsigned int firstTextureUnit) const
 
 bool Material::SetTexture(
     MaterialTextureSlot slot,
-    std::shared_ptr<Texture2D> texture)
+    std::shared_ptr<Texture2D> texture,
+    std::string sourceLabel)
 {
-    if (ToIndex(slot) >= MaterialTextureSlotCount)
+    const std::size_t slotIndex = ToIndex(slot);
+    if (slotIndex >= MaterialTextureSlotCount)
         return false;
     if (texture && texture->GetColorSpace() !=
         GetRequiredMaterialTextureColorSpace(slot))
@@ -138,7 +151,11 @@ bool Material::SetTexture(
         return false;
     }
 
-    m_Textures[ToIndex(slot)] = std::move(texture);
+    if (!texture)
+        sourceLabel.clear();
+
+    m_Textures[slotIndex] = std::move(texture);
+    m_TextureSources[slotIndex] = std::move(sourceLabel);
     return true;
 }
 
@@ -148,6 +165,18 @@ const std::shared_ptr<Texture2D>& Material::GetTexture(
     if (ToIndex(slot) >= MaterialTextureSlotCount)
         return GetEmptyTexture();
     return m_Textures[ToIndex(slot)];
+}
+
+const std::string& Material::GetTextureSource(MaterialTextureSlot slot) const
+{
+    if (ToIndex(slot) >= MaterialTextureSlotCount)
+        return GetEmptyString();
+    return m_TextureSources[ToIndex(slot)];
+}
+
+bool Material::ClearTexture(MaterialTextureSlot slot)
+{
+    return SetTexture(slot, nullptr, {});
 }
 
 void Material::SetAlbedoMap(std::shared_ptr<Texture2D> texture)

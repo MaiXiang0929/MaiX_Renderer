@@ -11,14 +11,25 @@
 #include <limits>
 #include <memory>
 #include <string>
+#include <vector>
 #include "cyVector.h"
 
 #include "Camera.h"
+#include "Editor/EditableLight.h"
+#include "Editor/EditableModel.h"
+#include "Editor/EditorSelection.h"
+#include "Renderer/Resources/RenderResourceHandle.h"
 
 struct GLFWwindow;
 class Renderer;
 class RendererStatisticsPanel;
 class MaterialEditorPanel;
+class AssetImportPanel;
+class EditorViewportController;
+namespace AssetImport
+{
+struct ImportedModelData;
+}
 
 /// @brief 应用程序核心管理类
 /// @details 该类负责管理整个程序的生命周期，包括初始化、主循环更新、渲染及资源清理。
@@ -31,7 +42,8 @@ public:
         std::string normalMapPath,
         std::string displacementMapPath,
         std::uint32_t instanceGridSize = 0,
-        bool materialLab = false);
+        bool materialLab = false,
+        bool translucencyTest = false);
 
 	/// @brief 析构函数，自动调用 Shutdown 释放资源
     ~Application();
@@ -49,16 +61,18 @@ private:
     Renderer* m_Renderer        = nullptr;      ///< 渲染器对象的指针句柄
     std::unique_ptr<RendererStatisticsPanel> m_StatisticsPanel;
     std::unique_ptr<MaterialEditorPanel> m_MaterialEditorPanel;
+    std::unique_ptr<AssetImportPanel> m_AssetImportPanel;
+    std::unique_ptr<EditorViewportController> m_ViewportController;
     bool m_ImGuiInitialized     = false;
 
-	Camera m_Camera;                            ///< 离屏渲染物体所使用的摄像机
-	Camera m_PlaneCamera;                       ///< 最终显示纹理平面所使用的摄像机
+	Camera m_Camera;                            ///< 编辑器场景视口所使用的摄像机
 
 	std::string m_ObjPath = "assets/models/teapot.obj";
 	std::string m_NormalMapPath;
     std::string m_DisplacementMapPath;
     std::uint32_t m_InstanceGridSize = 0;
     bool m_MaterialLab = false;
+    bool m_TranslucencyTest = false;
     float m_SceneRadius = 1.0f;
 
     bool m_Initialized          = false;        ///< 应用程序是否已初始化
@@ -66,22 +80,21 @@ private:
     unsigned int m_Width        = 1920;         ///< 窗口宽度
     unsigned int m_Height       = 1080;         ///< 窗口高度
 
-    // --- Mouse state ---
-    double m_LastX              = 0.0;
-    double m_LastY              = 0.0;
-    bool m_LeftDown             = false;
-    bool m_RightDown            = false;
-
-    // --- 光源交互与调试图标 ---
-    bool m_CtrlDown             = false;       ///< Ctrl 是否按下，用于切换到光源旋转操作
-    float m_LightRotX           = 0.0f;        ///< 光源绕 X 轴的旋转角
-    float m_LightRotY           = 0.0f;        ///< 光源绕 Y 轴的旋转角
-
     cy::Vec3f m_ObjCenter;                     ///< 模型包围盒中心
     float m_GroundY         = 0.0f;            ///< 反射地面 Y 坐标（模型包围盒底部）
     float m_ModelDiameter   = 0.0f;            ///< 模型包围盒直径，用于缩放地面
-    std::uint32_t m_MainPrimitiveId = std::numeric_limits<std::uint32_t>::max();
     std::uint32_t m_MainLightId = std::numeric_limits<std::uint32_t>::max();
+
+    struct ModelResourceGroup
+    {
+        std::vector<std::uint32_t> primitives;
+        std::vector<MeshHandle> meshes;
+        std::vector<MaterialHandle> materials;
+    };
+    ModelResourceGroup m_ActiveModelResources;
+    EditorSelection m_EditorSelection;
+    EditableModel m_ActiveModel;
+    std::vector<EditableLight> m_EditableLights;
 
 private:
     /// @brief 初始化应用程序
@@ -90,6 +103,13 @@ private:
 
     /// @brief 创建用于验收透明排序、混合和深度遮挡的最小场景。
     void CreateTranslucencyTestScene();
+
+    bool CommitImportedModel(
+        AssetImport::ImportedModelData& model,
+        std::string& error);
+    void DestroyModelResources(ModelResourceGroup& resources);
+    EditableLight* FindEditableLight(std::uint32_t id);
+    const EditableLight* FindEditableLight(std::uint32_t id) const;
     
 	/// @brief 更新应用程序状态
     void Update();

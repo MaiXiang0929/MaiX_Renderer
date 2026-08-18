@@ -80,6 +80,36 @@ MeshHandle Renderer::CreateMesh(const std::vector<Vertex>& vertices)
     return handle;
 }
 
+MeshHandle Renderer::CreateMesh(
+    const std::vector<Vertex>& vertices,
+    const std::vector<std::uint32_t>& indices)
+{
+    if (m_MeshResources.size() >= InvalidRenderResourceId)
+    {
+        std::cerr << "[Renderer] Mesh resource handle space exhausted."
+                  << std::endl;
+        return {};
+    }
+
+    auto resource = std::make_unique<Mesh>();
+    resource->Upload(vertices, indices);
+    const MeshHandle handle{
+        static_cast<RenderResourceId>(m_MeshResources.size())
+    };
+    m_MeshResources.push_back(std::move(resource));
+    return handle;
+}
+
+bool Renderer::DestroyMesh(MeshHandle handle)
+{
+    if (!handle.IsValid() || handle.id >= m_MeshResources.size() ||
+        !m_MeshResources[handle.id])
+        return false;
+
+    m_MeshResources[handle.id].reset();
+    return true;
+}
+
 MaterialHandle Renderer::CreateMaterial(Material material)
 {
     if (m_MaterialResources.size() >= InvalidRenderResourceId)
@@ -92,9 +122,21 @@ MaterialHandle Renderer::CreateMaterial(Material material)
     const MaterialHandle handle{
         static_cast<RenderResourceId>(m_MaterialResources.size())
     };
+    if (material.GetName().empty())
+        material.SetName("Material " + std::to_string(handle.id));
     m_MaterialResources.push_back(
         std::make_unique<Material>(std::move(material)));
     return handle;
+}
+
+bool Renderer::DestroyMaterial(MaterialHandle handle)
+{
+    if (!handle.IsValid() || handle.id >= m_MaterialResources.size() ||
+        !m_MaterialResources[handle.id])
+        return false;
+
+    m_MaterialResources[handle.id].reset();
+    return true;
 }
 
 bool Renderer::GetMaterialSnapshot(
@@ -107,21 +149,42 @@ bool Renderer::GetMaterialSnapshot(
 
     const Material& material = *m_MaterialResources[handle.id];
     snapshot.handle = handle;
+    snapshot.name = material.GetName();
     snapshot.properties = material.GetProperties();
     snapshot.blendMode = material.GetBlendMode();
     for (std::size_t index = 0; index < MaterialTextureSlotCount; ++index)
     {
-        snapshot.hasTextures[index] = static_cast<bool>(material.GetTexture(
-            static_cast<MaterialTextureSlot>(index)));
+        const MaterialTextureSlot slot =
+            static_cast<MaterialTextureSlot>(index);
+        const std::shared_ptr<Texture2D>& texture = material.GetTexture(slot);
+        snapshot.hasTextures[index] = static_cast<bool>(texture);
+        snapshot.textureIds[index] = texture ? texture->GetID() : 0;
+        snapshot.textureSources[index] = material.GetTextureSource(slot);
     }
     return true;
 }
 
 MaterialHandle Renderer::GetMaterialHandle(std::size_t index) const
 {
-    if (index >= m_MaterialResources.size())
+    if (index >= m_MaterialResources.size() || !m_MaterialResources[index])
         return {};
     return MaterialHandle{ static_cast<RenderResourceId>(index) };
+}
+
+std::vector<MaterialHandle> Renderer::GetMaterialHandles() const
+{
+    std::vector<MaterialHandle> handles;
+    handles.reserve(GetMaterialResourceCount());
+    for (std::size_t index = 0; index < m_MaterialResources.size(); ++index)
+    {
+        if (m_MaterialResources[index])
+        {
+            handles.push_back(MaterialHandle{
+                static_cast<RenderResourceId>(index)
+            });
+        }
+    }
+    return handles;
 }
 
 bool Renderer::UpdateMaterial(
@@ -163,6 +226,35 @@ bool Renderer::UpdateMaterial(
     return true;
 }
 
+bool Renderer::UpdateMaterialTexture(
+    MaterialHandle handle,
+    MaterialTextureSlot slot,
+    std::shared_ptr<Texture2D> texture,
+    std::string sourceLabel)
+{
+    if (!handle.IsValid() || handle.id >= m_MaterialResources.size() ||
+        !m_MaterialResources[handle.id] || !texture || !texture->IsValid())
+    {
+        return false;
+    }
+
+    return m_MaterialResources[handle.id]->SetTexture(
+        slot, std::move(texture), std::move(sourceLabel));
+}
+
+bool Renderer::ClearMaterialTexture(
+    MaterialHandle handle,
+    MaterialTextureSlot slot)
+{
+    if (!handle.IsValid() || handle.id >= m_MaterialResources.size() ||
+        !m_MaterialResources[handle.id])
+    {
+        return false;
+    }
+
+    return m_MaterialResources[handle.id]->ClearTexture(slot);
+}
+
 PrimitiveId Renderer::AddPrimitive(
     MeshHandle mesh,
     MaterialHandle material,
@@ -172,7 +264,9 @@ PrimitiveId Renderer::AddPrimitive(
 {
     if (!mesh.IsValid() || !material.IsValid() ||
         mesh.id >= m_MeshResources.size() ||
-        material.id >= m_MaterialResources.size())
+        material.id >= m_MaterialResources.size() ||
+        !m_MeshResources[mesh.id] ||
+        !m_MaterialResources[material.id])
     {
         std::cerr << "[Renderer] AddPrimitive rejected invalid resource handle."
                   << std::endl;
@@ -215,6 +309,30 @@ bool Renderer::UpdatePrimitiveTransform(
     const cy::Matrix4f& localToWorld)
 {
     return m_RenderScene.UpdatePrimitiveTransform(id, localToWorld);
+}
+
+bool Renderer::RemovePrimitive(PrimitiveId id)
+{
+    return m_RenderScene.RemovePrimitive(id);
+}
+
+std::size_t Renderer::GetMeshResourceCount() const
+{
+    return static_cast<std::size_t>(std::count_if(
+        m_MeshResources.begin(),
+        m_MeshResources.end(),
+        [](const std::unique_ptr<Mesh>& resource) { return resource != nullptr; }));
+}
+
+std::size_t Renderer::GetMaterialResourceCount() const
+{
+    return static_cast<std::size_t>(std::count_if(
+        m_MaterialResources.begin(),
+        m_MaterialResources.end(),
+        [](const std::unique_ptr<Material>& resource)
+        {
+            return resource != nullptr;
+        }));
 }
 
 LightId Renderer::AddLight(LightSceneProxy light)
@@ -263,8 +381,8 @@ void Renderer::ExecutePipeline(RenderFrameData& frame)
         mainView.opaqueShaderGroupCount,
         mainView.opaqueMaterialGroupCount,
         mainView.opaqueMeshGroupCount,
-        m_MeshResources.size(),
-        m_MaterialResources.size()
+        GetMeshResourceCount(),
+        GetMaterialResourceCount()
     };
     LogMainViewStatsIfChanged(mainView);
 
@@ -313,8 +431,8 @@ void Renderer::LogMainViewStatsIfChanged(const RenderView& view)
         view.opaqueShaderGroupCount,
         view.opaqueMaterialGroupCount,
         view.opaqueMeshGroupCount,
-        m_MeshResources.size(),
-        m_MaterialResources.size()
+        GetMeshResourceCount(),
+        GetMaterialResourceCount()
     };
     if (m_HasMainViewStats && stats == m_LastMainViewStats)
         return;

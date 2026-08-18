@@ -40,7 +40,8 @@ int main(int argc, char** argv)
         options.normalMapPath,
         options.displacementMapPath,
         options.instanceGridSize,
-        options.materialLab);
+        options.materialLab,
+        options.translucencyTest);
     app.Run();
     return 0;
 }

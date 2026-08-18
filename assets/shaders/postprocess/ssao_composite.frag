@@ -7,6 +7,8 @@ uniform float intensity;
 void main()
 {
     vec4 scene = texture(sceneTexture, fragTexCoord);
-    float ao = texture(aoTexture, fragTexCoord).r;
-    color = vec4(scene.rgb * mix(1.0, ao, clamp(intensity, 0.0, 3.0)), scene.a);
+    float ao = clamp(texture(aoTexture, fragTexCoord).r, 0.0, 1.0);
+    float intensityScale = clamp(intensity, 0.0, 3.0);
+    float occlusion = clamp((1.0 - ao) * intensityScale, 0.0, 1.0);
+    color = vec4(scene.rgb * (1.0 - occlusion), scene.a);
 }

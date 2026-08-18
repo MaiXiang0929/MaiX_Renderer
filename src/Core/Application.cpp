@@ -15,7 +15,19 @@
 #include <imgui.h>
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_opengl3.h>
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h>
+#endif
 
+#include "Editor/AssetImportPanel.h"
+#include "Editor/EditorViewportController.h"
 #include "Editor/MaterialEditorPanel.h"
 
 #include "cyTriMesh.h"
@@ -23,8 +35,12 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <exception>
 #include <filesystem>
 #include <iostream>
+#include <memory>
+#include <optional>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -44,6 +60,16 @@ std::shared_ptr<Texture2D> CreateOrmCheckerTexture(
     return Texture2D::CreateRGBA8(
         2, 2, pixels, TextureColorSpace::Linear);
 }
+
+void* GetNativeWindowHandle(GLFWwindow* window)
+{
+#if defined(_WIN32)
+    return static_cast<void*>(glfwGetWin32Window(window));
+#else
+    (void)window;
+    return nullptr;
+#endif
+}
 }
 
 /// @brief 构造函数
@@ -51,20 +77,18 @@ Application::Application(
     std::string normalMapPath,
     std::string displacementMapPath,
     std::uint32_t instanceGridSize,
-    bool materialLab)
+    bool materialLab,
+    bool translucencyTest)
     :
     m_Camera(
         cy::Vec3f(0, 0, 0),
         50.0f
     ),
-    m_PlaneCamera(
-        cy::Vec3f(0, 0, 0),
-        3.5f
-    ),
     m_NormalMapPath(std::move(normalMapPath)),
     m_DisplacementMapPath(std::move(displacementMapPath)),
     m_InstanceGridSize(instanceGridSize),
-    m_MaterialLab(materialLab)
+    m_MaterialLab(materialLab),
+    m_TranslucencyTest(translucencyTest)
 {
     
 }
@@ -179,12 +203,13 @@ bool Application::Init() {
     m_ImGuiInitialized = true;
     m_StatisticsPanel = std::make_unique<RendererStatisticsPanel>();
     m_MaterialEditorPanel = std::make_unique<MaterialEditorPanel>();
+    m_AssetImportPanel = std::make_unique<AssetImportPanel>();
+    m_ViewportController = std::make_unique<EditorViewportController>();
 
     // 主颜色目标和显示平面都跟随窗口 framebuffer 的像素宽高比。
     const float framebufferAspect =
         static_cast<float>(m_Width) / static_cast<float>(m_Height);
     m_Camera.SetAspectRatio(framebufferAspect);
-    m_PlaneCamera.SetAspectRatio(framebufferAspect);
 
     std::cout << "[System] Engine Initialized Successfully! " << std::endl;
 
@@ -383,6 +408,8 @@ bool Application::Init() {
                   << std::endl;
         return false;
     }
+    m_ActiveModelResources.meshes.push_back(instanceMesh);
+    m_ActiveModel.name = m_MaterialLab ? "Material Lab" : "Teapot";
     MaterialHandle instanceMaterial;
 
     if (m_MaterialLab)
@@ -437,6 +464,7 @@ bool Application::Init() {
                 m_Renderer->CreateMaterial(std::move(material));
             if (!materialHandle.IsValid())
                 continue;
+            m_ActiveModelResources.materials.push_back(materialHandle);
 
             const cy::Matrix4f localToWorld =
                 cy::Matrix4f::Translation(instanceOffsets[index]) *
@@ -446,8 +474,12 @@ bool Application::Init() {
                 materialHandle,
                 localToWorld,
                 bounds);
-            if (m_MainPrimitiveId == InvalidPrimitiveId)
-                m_MainPrimitiveId = primitiveId;
+            if (primitiveId != InvalidPrimitiveId)
+            {
+                m_ActiveModelResources.primitives.push_back(primitiveId);
+                m_ActiveModel.sections.push_back({
+                    primitiveId, localToWorld, bounds });
+            }
         }
 
         std::cout
@@ -464,6 +496,7 @@ bool Application::Init() {
                       << std::endl;
             return false;
         }
+        m_ActiveModelResources.materials.push_back(instanceMaterial);
 
         for (const cy::Vec3f& offset : instanceOffsets)
         {
@@ -475,11 +508,15 @@ bool Application::Init() {
                 instanceMaterial,
                 localToWorld,
                 bounds);
-            if (m_MainPrimitiveId == InvalidPrimitiveId)
-                m_MainPrimitiveId = primitiveId;
+            if (primitiveId != InvalidPrimitiveId)
+            {
+                m_ActiveModelResources.primitives.push_back(primitiveId);
+                m_ActiveModel.sections.push_back({
+                    primitiveId, localToWorld, bounds });
+            }
         }
     }
-    if (m_MainPrimitiveId == InvalidPrimitiveId)
+    if (m_ActiveModelResources.primitives.empty())
     {
         std::cerr << "[Error] Failed to submit the opaque instance scene."
                   << std::endl;
@@ -497,18 +534,34 @@ bool Application::Init() {
             << std::endl;
     }
 
-    CreateTranslucencyTestScene();
+    if (m_TranslucencyTest)
+        CreateTranslucencyTestScene();
 
+    const PrimitiveBounds sceneBounds = m_ActiveModel.GetWorldBounds();
+    const cy::Vec3f sceneCenter = sceneBounds.radius > 0.0f
+        ? sceneBounds.center
+        : cy::Vec3f(0.0f);
+    const float lightDistance = std::max(
+        std::sqrt(500.0f), std::max(sceneBounds.radius, 1.0f) * 2.5f);
     LightSceneProxy mainLight;
     mainLight.type = LightType::Spot;
-    mainLight.position = cy::Vec3f(0.0f, 10.0f, 20.0f);
-    mainLight.direction = cy::Vec3f(0.0f, 0.0f, 0.0f) - mainLight.position;
+    mainLight.position = sceneCenter + cy::Vec3f(
+        0.0f,
+        lightDistance / std::sqrt(5.0f),
+        lightDistance * 2.0f / std::sqrt(5.0f));
+    mainLight.direction = sceneCenter - mainLight.position;
     mainLight.direction.Normalize();
     mainLight.color = cy::Vec3f(1.0f, 0.95f, 0.85f);
     mainLight.intensity = 5.0f;
     mainLight.range = 30.0f;
     mainLight.outerConeAngle = 30.0f * 3.14159265358979323846f / 180.0f;
     m_MainLightId = m_Renderer->AddLight(mainLight);
+    mainLight.id = m_MainLightId;
+    EditableLight editableMainLight;
+    editableMainLight.name = "Main Spot Light";
+    editableMainLight.transform.position = mainLight.position;
+    editableMainLight.proxy = mainLight;
+    m_EditableLights.push_back(editableMainLight);
 
     LightSceneProxy directionalFill;
     directionalFill.type = LightType::Directional;
@@ -526,9 +579,12 @@ bool Application::Init() {
     pointFill.intensity = 0.9f;
     pointFill.range = 18.0f;
     pointFill.castsShadow = false;
-    m_Renderer->AddLight(pointFill);
-
-    glfwGetCursorPos(m_Window, &m_LastX, &m_LastY);
+    pointFill.id = m_Renderer->AddLight(pointFill);
+    EditableLight editablePointFill;
+    editablePointFill.name = "Point Fill Light";
+    editablePointFill.transform.position = pointFill.position;
+    editablePointFill.proxy = pointFill;
+    m_EditableLights.push_back(editablePointFill);
 
     return true;
 }
@@ -610,8 +666,234 @@ void Application::CreateTranslucencyTestScene()
 }
 
 /// @brief 更新应用程序状态
-void Application::Update() {
+bool Application::CommitImportedModel(
+    AssetImport::ImportedModelData& model,
+    std::string& error)
+{
+    error.clear();
+    if (m_Renderer == nullptr)
+    {
+        error = "Renderer is unavailable.";
+        return false;
+    }
+    if (model.meshes.empty() || model.materials.empty())
+    {
+        error = "The imported model has no renderable sections or materials.";
+        return false;
+    }
 
+    ModelResourceGroup pendingResources;
+    EditableModel pendingModel;
+    pendingModel.name = model.name;
+    pendingResources.meshes.reserve(model.meshes.size());
+    pendingResources.materials.reserve(model.materials.size());
+    pendingResources.primitives.reserve(model.meshes.size());
+
+    const auto fail = [this, &pendingResources, &error](std::string message)
+    {
+        error = std::move(message);
+        DestroyModelResources(pendingResources);
+        return false;
+    };
+
+    try
+    {
+        std::vector<std::shared_ptr<Texture2D>> textures(
+            model.textures.size());
+        for (std::size_t index = 0; index < model.textures.size(); ++index)
+        {
+            const AssetImport::ImportedTextureData& importedTexture =
+                model.textures[index];
+            if (!importedTexture.image.IsValid())
+            {
+                return fail(
+                    "Imported texture data is invalid: " +
+                    importedTexture.name);
+            }
+
+            textures[index] = Texture2D::CreateRGBA8(
+                importedTexture.image.width,
+                importedTexture.image.height,
+                importedTexture.image.pixels,
+                TextureColorSpace::SRGB);
+            if (!textures[index])
+            {
+                return fail(
+                    "GPU texture creation failed: " +
+                    importedTexture.name);
+            }
+        }
+
+        for (const AssetImport::ImportedMaterialData& importedMaterial :
+            model.materials)
+        {
+            Material material;
+            material.SetName(importedMaterial.name);
+            MaterialProperties& properties = material.GetProperties();
+            properties.baseColor = importedMaterial.baseColor;
+            properties.metallic = importedMaterial.metallic;
+            properties.roughness = importedMaterial.roughness;
+            properties.opacity = importedMaterial.opacity;
+            if (importedMaterial.opacity < 0.999f)
+                material.SetBlendMode(BlendMode::AlphaBlend);
+
+            if (importedMaterial.baseColorTexture !=
+                AssetImport::InvalidImportedTextureIndex)
+            {
+                if (importedMaterial.baseColorTexture >= textures.size())
+                {
+                    return fail(
+                        "Imported material references an invalid texture: " +
+                        importedMaterial.name);
+                }
+
+                const AssetImport::ImportedTextureData& importedTexture =
+                    model.textures[importedMaterial.baseColorTexture];
+                const std::string sourceLabel = importedTexture.embedded
+                    ? "Embedded: " + importedTexture.name
+                    : importedTexture.sourcePath.u8string();
+                if (!material.SetTexture(
+                        MaterialTextureSlot::BaseColor,
+                        textures[importedMaterial.baseColorTexture],
+                        sourceLabel))
+                {
+                    return fail(
+                        "Unable to bind the base color texture for material: " +
+                        importedMaterial.name);
+                }
+            }
+
+            const MaterialHandle materialHandle =
+                m_Renderer->CreateMaterial(std::move(material));
+            if (!materialHandle.IsValid())
+            {
+                return fail(
+                    "Renderer material creation failed: " +
+                    importedMaterial.name);
+            }
+            pendingResources.materials.push_back(materialHandle);
+        }
+
+        for (const AssetImport::ImportedMeshData& importedMesh : model.meshes)
+        {
+            if (importedMesh.materialIndex >=
+                pendingResources.materials.size())
+            {
+                return fail(
+                    "Imported mesh references an invalid material: " +
+                    importedMesh.name);
+            }
+
+            const MeshHandle meshHandle = m_Renderer->CreateMesh(
+                importedMesh.vertices,
+                importedMesh.indices);
+            if (!meshHandle.IsValid())
+            {
+                return fail(
+                    "Renderer mesh creation failed: " + importedMesh.name);
+            }
+            pendingResources.meshes.push_back(meshHandle);
+
+            PrimitiveBounds bounds;
+            bounds.center = importedMesh.boundsCenter;
+            bounds.radius = importedMesh.boundsRadius;
+            const PrimitiveId primitiveId = m_Renderer->AddPrimitive(
+                meshHandle,
+                pendingResources.materials[importedMesh.materialIndex],
+                importedMesh.localToWorld,
+                bounds);
+            if (primitiveId == InvalidPrimitiveId)
+            {
+                return fail(
+                    "Renderer primitive submission failed: " +
+                    importedMesh.name);
+            }
+            pendingResources.primitives.push_back(primitiveId);
+            pendingModel.sections.push_back({
+                primitiveId, importedMesh.localToWorld, bounds });
+        }
+    }
+    catch (const std::exception& exception)
+    {
+        return fail(
+            std::string("Imported resource creation failed: ") +
+            exception.what());
+    }
+
+    ModelResourceGroup previousResources =
+        std::move(m_ActiveModelResources);
+    m_ActiveModelResources = std::move(pendingResources);
+    m_ActiveModel = std::move(pendingModel);
+    DestroyModelResources(previousResources);
+
+    // Imported vertices already contain their evaluated FBX node transform.
+    // Preserve the existing camera fit so distant helper objects do not make
+    // the character tiny in the viewport.
+    m_ObjCenter = cy::Vec3f(0.0f, 0.0f, 0.0f);
+
+    std::cout
+        << "[AssetImport] model='" << model.name
+        << "' sections=" << model.meshes.size()
+        << " materials=" << model.materials.size()
+        << " textures=" << model.textures.size()
+        << std::endl;
+    return true;
+}
+
+void Application::DestroyModelResources(ModelResourceGroup& resources)
+{
+    if (m_Renderer == nullptr)
+    {
+        resources = {};
+        return;
+    }
+
+    for (const std::uint32_t primitiveId : resources.primitives)
+        m_Renderer->RemovePrimitive(primitiveId);
+    for (const MeshHandle mesh : resources.meshes)
+        m_Renderer->DestroyMesh(mesh);
+    for (const MaterialHandle material : resources.materials)
+        m_Renderer->DestroyMaterial(material);
+    resources = {};
+}
+
+EditableLight* Application::FindEditableLight(std::uint32_t id)
+{
+    const auto iterator = std::find_if(
+        m_EditableLights.begin(), m_EditableLights.end(),
+        [id](const EditableLight& light) { return light.proxy.id == id; });
+    return iterator == m_EditableLights.end() ? nullptr : &*iterator;
+}
+
+const EditableLight* Application::FindEditableLight(std::uint32_t id) const
+{
+    const auto iterator = std::find_if(
+        m_EditableLights.begin(), m_EditableLights.end(),
+        [id](const EditableLight& light) { return light.proxy.id == id; });
+    return iterator == m_EditableLights.end() ? nullptr : &*iterator;
+}
+
+void Application::Update() {
+    if (!m_AssetImportPanel)
+        return;
+
+    m_AssetImportPanel->Update();
+    std::optional<AssetImport::ModelImportResult> completedImport =
+        m_AssetImportPanel->TakeCompletedImport();
+    if (!completedImport)
+        return;
+
+    std::string error;
+    if (CommitImportedModel(completedImport->model, error))
+    {
+        m_AssetImportPanel->ReportCommitSuccess(
+            completedImport->model,
+            m_ActiveModelResources.primitives.size());
+    }
+    else
+    {
+        m_AssetImportPanel->ReportCommitFailure(std::move(error));
+    }
 }
 
 /// @brief 渲染应用程序
@@ -619,39 +901,41 @@ void Application::Render() {
     // 共用矩阵
     cy::Matrix4f projMatrix = m_Camera.GetProjectionMatrix();
     cy::Matrix4f viewMatrix = m_Camera.GetViewMatrix();
-    cy::Matrix4f modelMatrix = cy::Matrix4f::Translation(-m_ObjCenter);
 
-    // 光源世界位置
-    const float lightDistance = std::max(
-        std::sqrt(500.0f), m_SceneRadius * 2.5f);
-    const cy::Vec3f lightBasePos(
-        0.0f,
-        lightDistance / std::sqrt(5.0f),
-        lightDistance * 2.0f / std::sqrt(5.0f));
-    const cy::Matrix4f lightRotation =
-        cy::Matrix4f::RotationX(m_LightRotX) *
-        cy::Matrix4f::RotationY(m_LightRotY);
-    const cy::Vec4f lightPosWorld = lightRotation *
-        cy::Vec4f(lightBasePos.x, lightBasePos.y, lightBasePos.z, 1.0f);
+    const PrimitiveBounds activeBounds = m_ActiveModel.GetWorldBounds();
+    const cy::Vec3f sceneCenter = activeBounds.radius > 0.0f
+        ? activeBounds.center
+        : cy::Vec3f(0.0f, 0.0f, 0.0f);
+    const float sceneRadius = std::max(
+        std::max(m_SceneRadius, activeBounds.radius), 1.0f);
 
-    const cy::Vec3f lightWorldPosition(
-        lightPosWorld.x, lightPosWorld.y, lightPosWorld.z);
+    EditableLight* editableMainLight = FindEditableLight(m_MainLightId);
+    const cy::Vec3f lightWorldPosition = editableMainLight
+        ? editableMainLight->transform.position
+        : sceneCenter + cy::Vec3f(0.0f, 10.0f, 20.0f);
+    const cy::Vec3f lightOffsetWorld = lightWorldPosition - sceneCenter;
+    const float rawLightDistance = lightOffsetWorld.Length();
+    const float lightDistance = std::max(rawLightDistance, 0.001f);
+    const cy::Vec3f lightViewTarget = rawLightDistance > 1.0e-4f
+        ? sceneCenter
+        : lightWorldPosition + (editableMainLight
+            ? editableMainLight->proxy.direction
+            : cy::Vec3f(0.0f, -1.0f, 0.0f));
 
     // 聚光灯始终朝向模型中心；位置仍由 Ctrl + 左键独立于相机旋转。
     // 当光线方向接近竖直方向时切换 up 向量，避免 View 矩阵基向量退化。
+    const cy::Vec3f lightViewDirection = lightViewTarget - lightWorldPosition;
     const bool nearVertical =
-        std::abs(lightWorldPosition.x) + std::abs(lightWorldPosition.z) < 0.001f;
+        std::abs(lightViewDirection.x) + std::abs(lightViewDirection.z) < 0.001f;
     const cy::Vec3f lightUp = nearVertical
         ? cy::Vec3f(0.0f, 0.0f, 1.0f)
         : cy::Vec3f(0.0f, 1.0f, 0.0f);
     const cy::Matrix4f lightView = cy::Matrix4f::View(
-        lightWorldPosition, cy::Vec3f(0.0f, 0.0f, 0.0f), lightUp);
+        lightWorldPosition, lightViewTarget, lightUp);
 
     // 根据模型包围球自动拟合聚光灯锥体，兼容不同尺寸的命令行 OBJ。
     constexpr float Pi = 3.14159265358979323846f;
-    const float sceneRadius = std::max(m_SceneRadius, 1.0f);
-    const float shadowLightDistance =
-        std::max(lightWorldPosition.Length(), 0.001f);
+    const float shadowLightDistance = lightDistance;
     const float angularRadius = std::asin(
         std::min(sceneRadius / shadowLightDistance, 0.95f));
     const float lightFov = std::clamp(
@@ -672,12 +956,7 @@ void Application::Render() {
     const cy::Matrix4f reflectView = viewMatrix * reflectMatrix;
 
     // 相机世界位置（用于地面着色器视线方向计算）
-    const float dist = m_Camera.GetPosition().z;
-    const cy::Vec3f cameraWorldPos(
-        viewMatrix.cell[2] * dist,
-        viewMatrix.cell[6] * dist,
-        viewMatrix.cell[10] * dist
-    );
+    const cy::Vec3f cameraWorldPos = m_Camera.GetPosition();
 
     const float groundSize = std::max(
         m_ModelDiameter * 2.0f, m_SceneRadius * 2.0f);
@@ -685,19 +964,13 @@ void Application::Render() {
         cy::Matrix4f::Translation(cy::Vec3f(
             -m_ObjCenter.x, m_GroundY, -m_ObjCenter.z)) *
         cy::Matrix4f::Scale(groundSize, 1.0f, groundSize);
-    if (m_InstanceGridSize == 0)
-        m_Renderer->UpdatePrimitiveTransform(m_MainPrimitiveId, modelMatrix);
-
-    LightSceneProxy mainLight;
-    mainLight.type = LightType::Spot;
-    mainLight.position = lightWorldPosition;
-    mainLight.direction = cy::Vec3f(0.0f, 0.0f, 0.0f) - lightWorldPosition;
-    mainLight.direction.Normalize();
-    mainLight.color = cy::Vec3f(1.0f, 0.95f, 0.85f);
-    mainLight.intensity = 5.0f;
-    mainLight.range = 30.0f;
-    mainLight.outerConeAngle = 30.0f * 3.14159265358979323846f / 180.0f;
-    m_Renderer->UpdateLight(m_MainLightId, mainLight);
+    if (editableMainLight)
+    {
+        editableMainLight->proxy.direction = sceneCenter - lightWorldPosition;
+        if (editableMainLight->proxy.direction.Length() > 1.0e-6f)
+            editableMainLight->proxy.direction.Normalize();
+        ApplyEditableLightTransform(*editableMainLight, *m_Renderer);
+    }
 
     // Application 只提交强类型帧数据，不再创建任何 Pass callback。
     RenderFrameData frame;
@@ -712,21 +985,30 @@ void Application::Render() {
     frame.groundMvp = projMatrix * viewMatrix * groundModel;
     frame.reflectionVP = projMatrix * reflectView;
     frame.cameraWorldPosition = cameraWorldPos;
-    const float framebufferAspect = m_Height > 0
-        ? static_cast<float>(m_Width) / static_cast<float>(m_Height)
-        : 1.0f;
-    frame.presentMvp =
-        m_PlaneCamera.GetProjectionMatrix() *
-        m_PlaneCamera.GetViewMatrix() *
-        cy::Matrix4f::Scale(framebufferAspect, 1.0f, 1.0f);
     m_Renderer->ExecutePipeline(frame);
 
     // PresentPass 完成后在默认帧缓冲绘制编辑器 UI，避免污染场景颜色目标。
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
+    ImGuizmo::BeginFrame();
+    void* nativeWindowHandle = GetNativeWindowHandle(m_Window);
+    m_AssetImportPanel->Draw(nativeWindowHandle);
     m_StatisticsPanel->Draw(*m_Renderer);
-    m_MaterialEditorPanel->Draw(*m_Renderer);
+    m_MaterialEditorPanel->Draw(*m_Renderer, nativeWindowHandle);
+    int windowWidth = 0;
+    int windowHeight = 0;
+    glfwGetWindowSize(m_Window, &windowWidth, &windowHeight);
+    m_ViewportController->Draw(
+        m_Camera,
+        m_EditorSelection,
+        m_ActiveModel,
+        m_EditableLights,
+        *m_Renderer,
+        m_Width,
+        m_Height,
+        windowWidth,
+        windowHeight);
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
@@ -738,6 +1020,8 @@ void Application::Shutdown() {
 
     m_StatisticsPanel.reset();
     m_MaterialEditorPanel.reset();
+    m_AssetImportPanel.reset();
+    m_ViewportController.reset();
     if (m_ImGuiInitialized) {
         ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplGlfw_Shutdown();
@@ -747,6 +1031,7 @@ void Application::Shutdown() {
 
 	// 释放渲染器资源
 	if (m_Renderer) {
+        DestroyModelResources(m_ActiveModelResources);
 		delete m_Renderer;
 		m_Renderer = nullptr;
 	}
@@ -778,73 +1063,102 @@ void Application::FramebufferSizeCallback(GLFWwindow* window, int width, int hei
             const float aspect =
                 static_cast<float>(width) / static_cast<float>(height);
             app->m_Camera.SetAspectRatio(aspect);
-            app->m_PlaneCamera.SetAspectRatio(aspect);
         }
 
         glViewport(0, 0, width, height);
     }
 }
 
-void Application::MouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
+void Application::MouseButtonCallback(
+    GLFWwindow* window,
+    int button,
+    int action,
+    int mods)
+{
     if (ImGui::GetCurrentContext())
         ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
     Application* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
-    if (!app)
+    if (!app || !app->m_ViewportController)
         return;
-    if (ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureMouse) {
-        app->m_LeftDown = false;
-        app->m_RightDown = false;
+    if (ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureMouse)
+    {
+        app->m_ViewportController->CancelPointerInput();
         return;
     }
-    if (button == GLFW_MOUSE_BUTTON_LEFT) {
-        if (action == GLFW_PRESS) app->m_LeftDown = true;
-        else if (action == GLFW_RELEASE) app->m_LeftDown = false;
-    }
-    if (button == GLFW_MOUSE_BUTTON_RIGHT) {
-        if (action == GLFW_PRESS) app->m_RightDown = true;
-        else if (action == GLFW_RELEASE) app->m_RightDown = false;
-    }
+
+    EditorPointerButton pointerButton;
+    if (button == GLFW_MOUSE_BUTTON_LEFT)
+        pointerButton = EditorPointerButton::Left;
+    else if (button == GLFW_MOUSE_BUTTON_MIDDLE)
+        pointerButton = EditorPointerButton::Middle;
+    else if (button == GLFW_MOUSE_BUTTON_RIGHT)
+        pointerButton = EditorPointerButton::Right;
+    else
+        return;
+
+    double x = 0.0;
+    double y = 0.0;
+    glfwGetCursorPos(window, &x, &y);
+    const bool altDown =
+        (mods & GLFW_MOD_ALT) != 0 ||
+        glfwGetKey(window, GLFW_KEY_LEFT_ALT) == GLFW_PRESS ||
+        glfwGetKey(window, GLFW_KEY_RIGHT_ALT) == GLFW_PRESS;
+    app->m_ViewportController->SetButtonState(
+        pointerButton, action != GLFW_RELEASE, altDown, x, y);
 }
 
-void Application::CursorPositionCallback(GLFWwindow* window, double xpos, double ypos) {
+void Application::CursorPositionCallback(
+    GLFWwindow* window,
+    double xpos,
+    double ypos)
+{
     if (ImGui::GetCurrentContext())
         ImGui_ImplGlfw_CursorPosCallback(window, xpos, ypos);
     Application* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
-    if (!app)
-        return;
-    double dx = xpos - app->m_LastX;
-    double dy = ypos - app->m_LastY;
-    app->m_LastX = xpos;
-    app->m_LastY = ypos;
-
-    // 即使 UI 捕获鼠标也更新上一帧位置，离开面板后相机不会发生跳变。
-    if (ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureMouse)
+    if (!app || !app->m_ViewportController)
         return;
 
     const bool altDown =
         glfwGetKey(window, GLFW_KEY_LEFT_ALT) == GLFW_PRESS ||
         glfwGetKey(window, GLFW_KEY_RIGHT_ALT) == GLFW_PRESS;
-    app->m_CtrlDown =
+    const bool ctrlDown =
         glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
         glfwGetKey(window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS;
+    const bool mouseCaptured =
+        ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureMouse;
+    if (mouseCaptured)
+        app->m_ViewportController->CancelPointerInput();
+    float deltaX = 0.0f;
+    float deltaY = 0.0f;
+    app->m_ViewportController->ProcessPointerMove(
+        xpos,
+        ypos,
+        altDown && !mouseCaptured,
+        static_cast<float>(app->m_Height),
+        app->m_Camera,
+        &deltaX,
+        &deltaY);
 
-    // Alt 的优先级最高：按住 Alt 时始终操作纹理平面相机。
-    Camera& activeCamera = altDown ? app->m_PlaneCamera : app->m_Camera;
-
-    // 左键默认旋转相机；未按 Alt 而按住 Ctrl 时恢复原有的光源旋转操作。
-    if (app->m_LeftDown) {
-        if (!altDown && app->m_CtrlDown) {
-            app->m_LightRotX += static_cast<float>(dx) * 0.01f;
-            app->m_LightRotY += static_cast<float>(dy) * 0.01f;
+    if (mouseCaptured)
+        return;
+    if (!altDown && ctrlDown && app->m_ViewportController->IsLeftDown())
+    {
+        EditableLight* mainLight = app->FindEditableLight(app->m_MainLightId);
+        if (mainLight)
+        {
+            const PrimitiveBounds bounds = app->m_ActiveModel.GetWorldBounds();
+            const cy::Vec3f center = bounds.radius > 0.0f
+                ? bounds.center
+                : cy::Vec3f(0.0f);
+            const cy::Vec3f offset = mainLight->transform.position - center;
+            const cy::Matrix4f rotation =
+                cy::Matrix4f::RotationX(deltaY * 0.01f) *
+                cy::Matrix4f::RotationY(deltaX * 0.01f);
+            const cy::Vec4f rotated = rotation *
+                cy::Vec4f(offset.x, offset.y, offset.z, 0.0f);
+            mainLight->transform.position = center +
+                cy::Vec3f(rotated.x, rotated.y, rotated.z);
         }
-        else {
-            activeCamera.ProcessMouseOrbit(static_cast<float>(dx), static_cast<float>(dy));
-        }
-    }
-
-    // 右键缩放
-    if (app->m_RightDown) {
-        activeCamera.ProcessMouseZoom(static_cast<float>(dy));
     }
 }
 
@@ -855,6 +1169,13 @@ void Application::ScrollCallback(
 {
     if (ImGui::GetCurrentContext())
         ImGui_ImplGlfw_ScrollCallback(window, xoffset, yoffset);
+    Application* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
+    if (!app || !app->m_ViewportController)
+        return;
+    if (ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureMouse)
+        return;
+    app->m_ViewportController->ProcessScroll(
+        static_cast<float>(yoffset), app->m_Camera);
 }
 
 void Application::CharCallback(GLFWwindow* window, unsigned int codepoint)
@@ -875,6 +1196,23 @@ void Application::KeyCallback(GLFWwindow* window, int key, int scancode, int act
     }
     if (ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureKeyboard)
         return;
+    if (action == GLFW_PRESS && app->m_ViewportController)
+    {
+        if (key == GLFW_KEY_W)
+            app->m_ViewportController->SetOperation(ImGuizmo::TRANSLATE);
+        else if (key == GLFW_KEY_E)
+            app->m_ViewportController->SetOperation(ImGuizmo::ROTATE);
+        else if (key == GLFW_KEY_R)
+            app->m_ViewportController->SetOperation(ImGuizmo::SCALE);
+        else if (key == GLFW_KEY_Q)
+            app->m_ViewportController->ToggleSpace();
+        else if (key == GLFW_KEY_F)
+            app->m_ViewportController->FocusSelection(
+                app->m_Camera,
+                app->m_EditorSelection,
+                app->m_ActiveModel,
+                app->m_EditableLights);
+    }
     // 着色器重载（F6）
     if (key == GLFW_KEY_F6 && action == GLFW_PRESS) {
 		app->m_Renderer->ReloadShaders();

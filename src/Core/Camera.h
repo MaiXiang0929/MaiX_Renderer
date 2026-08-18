@@ -24,6 +24,7 @@ public:
 
 	// Input
 	void ProcessMouseOrbit(float deltaX, float deltaY);
+	void ProcessMousePan(float deltaX, float deltaY, float viewportHeight);
 	void ProcessMouseZoom(float deltaY);
 
 
@@ -33,6 +34,7 @@ public:
 	void SetTarget(const cy::Vec3f& target);
 	void SetDistance(float distance);
 	void SetClipPlanes(float nearPlane, float farPlane);
+	void FocusBounds(const cy::Vec3f& center, float radius);
 
 
 	// Output
@@ -40,6 +42,8 @@ public:
 	cy::Matrix4f GetProjectionMatrix() const;
 
 	cy::Vec3f GetPosition() const;
+	cy::Vec3f GetTarget() const { return m_Target; }
+	float GetDistance() const { return m_Distance; }
 	bool IsPerspective() const;
 
 

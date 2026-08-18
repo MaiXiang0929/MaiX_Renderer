@@ -47,10 +47,24 @@ set(SOURCES
     src/Core/ApplicationOptions.cpp
     src/Core/Camera.cpp
     src/Core/InstanceGrid.cpp
+    src/Core/Transform.cpp
 
     # Editor
     src/Editor/RendererStatisticsPanel.cpp
     src/Editor/MaterialEditorPanel.cpp
+    src/Editor/AssetImportPanel.cpp
+    src/Editor/EditableLight.cpp
+    src/Editor/EditableModel.cpp
+    src/Editor/EditableModelRenderer.cpp
+    src/Editor/EditorViewportController.cpp
+    src/Editor/ViewportPicking.cpp
+
+    # Platform
+    src/Platform/Windows/FileDialog.cpp
+
+    # Asset Import
+    src/Assets/Import/ImageLoader.cpp
+    src/Assets/Import/FbxModelImporter.cpp
 
     # Renderer Core
     src/Renderer/Core/Renderer.cpp
@@ -101,6 +115,9 @@ set(SOURCES
     # LodePNG
     ThirdParty/lodepng/lodepng.cpp
 
+    # ufbx
+    ThirdParty/ufbx/ufbx.c
+
     # Dear ImGui core and GLFW/OpenGL backend
     ThirdParty/imgui/imgui.cpp
     ThirdParty/imgui/imgui_draw.cpp
@@ -108,6 +125,9 @@ set(SOURCES
     ThirdParty/imgui/imgui_widgets.cpp
     ThirdParty/imgui/backends/imgui_impl_glfw.cpp
     ThirdParty/imgui/backends/imgui_impl_opengl3.cpp
+
+    # ImGuizmo (pinned to 18cef5e031d8c6973d80284c67f60549fafd78c1)
+    ThirdParty/ImGuizmo/ImGuizmo.cpp
 )
 
 # ============================
@@ -117,6 +137,10 @@ add_executable(
     ${PROJECT_NAME}
     ${SOURCES}
  )
+
+target_compile_options(${PROJECT_NAME} PRIVATE
+    "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>"
+)
 
 # ============================
 # Include Path
@@ -149,6 +173,15 @@ target_include_directories(
 
     # Dear ImGui
     ${THIRD_PARTY_DIR}/imgui
+
+    # ImGuizmo
+    ${THIRD_PARTY_DIR}/ImGuizmo
+
+    # stb_image
+    ${THIRD_PARTY_DIR}/stb
+
+    # ufbx
+    ${THIRD_PARTY_DIR}/ufbx
 )
 
 # ============================
@@ -170,6 +203,10 @@ target_link_libraries(
     glfw3.lib
 
     opengl32.lib
+
+    ole32.lib
+
+    shell32.lib
 )
 
 # Debug 配置下排除 Release CRT，解决与预编译 glfw3.lib 的 MSVCRT/MSVCRTD 混用冲突
@@ -340,4 +377,81 @@ if(BUILD_TESTING)
     )
 
     add_test(NAME RenderPassContractTests COMMAND RenderPassContractTests)
+
+    add_executable(
+        ImageLoaderTests
+        tests/Assets/Import/ImageLoaderTests.cpp
+        src/Assets/Import/ImageLoader.cpp
+    )
+
+    target_include_directories(
+        ImageLoaderTests
+        PRIVATE
+        ${SRC_DIR}
+        ${THIRD_PARTY_DIR}/stb
+    )
+
+    target_compile_options(ImageLoaderTests PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>"
+    )
+
+    add_test(NAME ImageLoaderTests COMMAND ImageLoaderTests)
+
+    add_executable(
+        FbxModelImporterTests
+        tests/Assets/Import/FbxModelImporterTests.cpp
+        src/Assets/Import/FbxModelImporter.cpp
+        src/Assets/Import/ImageLoader.cpp
+        ThirdParty/ufbx/ufbx.c
+    )
+
+    target_include_directories(
+        FbxModelImporterTests
+        PRIVATE
+        ${SRC_DIR}
+        ${THIRD_PARTY_DIR}/cyCodeBase
+        ${THIRD_PARTY_DIR}/glad/include
+        ${THIRD_PARTY_DIR}/stb
+        ${THIRD_PARTY_DIR}/ufbx
+    )
+
+    target_compile_options(FbxModelImporterTests PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>"
+    )
+
+    add_test(NAME FbxModelImporterTests COMMAND FbxModelImporterTests)
+
+    add_executable(
+        CameraTests
+        tests/Core/CameraTests.cpp
+        src/Core/Camera.cpp
+    )
+
+    target_include_directories(
+        CameraTests
+        PRIVATE
+        ${SRC_DIR}
+        ${THIRD_PARTY_DIR}/cyCodeBase
+    )
+
+    add_test(NAME CameraTests COMMAND CameraTests)
+
+    add_executable(
+        EditorInteractionTests
+        tests/Editor/EditorInteractionTests.cpp
+        src/Core/Camera.cpp
+        src/Core/Transform.cpp
+        src/Editor/EditableModel.cpp
+        src/Editor/ViewportPicking.cpp
+        src/Renderer/Scene/PrimitiveSceneProxy.cpp
+    )
+
+    target_include_directories(
+        EditorInteractionTests
+        PRIVATE
+        ${SRC_DIR}
+        ${THIRD_PARTY_DIR}/cyCodeBase
+    )
+
+    add_test(NAME EditorInteractionTests COMMAND EditorInteractionTests)
 endif()

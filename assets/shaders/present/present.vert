@@ -4,13 +4,11 @@
 layout (location = 0) in vec3 pos;
 layout (location = 2) in vec2 texCoord;
 
-uniform mat4 mvp;
-
 out vec2 fragTexCoord;
 
 void main()
 {
-    // 平面使用独立相机，因此可以在按住 Alt 时单独旋转和缩放。
-    gl_Position = mvp * vec4(pos, 1.0);
+    // Present quad already uses clip-space positions; scene navigation belongs to the view camera.
+    gl_Position = vec4(pos.xy, 0.0, 1.0);
     fragTexCoord = texCoord;
 }

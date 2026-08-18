@@ -8,7 +8,17 @@
 
 #include "Camera.h"
 
+#include <algorithm>
 #include <cmath>
+
+namespace
+{
+constexpr float Pi = 3.14159265358979323846f;
+constexpr float OrbitSensitivity = 0.01f;
+constexpr float DollySensitivity = 0.01f;
+constexpr float MinimumDistance = 0.01f;
+constexpr float MaximumPitch = 89.0f * Pi / 180.0f;
+}
 
 Camera::Camera(
 	cy::Vec3f target,
@@ -24,18 +34,39 @@ void Camera::ProcessMouseOrbit(
 	float deltaY
 )
 {
-	m_Yaw += deltaX * 0.01f;
-	m_Pitch += deltaY * 0.01f;
+	m_Yaw += deltaX * OrbitSensitivity;
+	m_Pitch = std::clamp(
+		m_Pitch + deltaY * OrbitSensitivity,
+		-MaximumPitch,
+		MaximumPitch);
 }
 
+void Camera::ProcessMousePan(
+	float deltaX,
+	float deltaY,
+	float viewportHeight)
+{
+	if (viewportHeight <= 0.0f)
+		return;
+
+	cy::Vec3f forward = m_Target - GetPosition();
+	forward.Normalize();
+	cy::Vec3f right = forward.Cross(cy::Vec3f(0.0f, 1.0f, 0.0f));
+	right.Normalize();
+	const cy::Vec3f up = right.Cross(forward);
+	const float worldUnitsPerPixel =
+		2.0f * m_Distance * std::tan(m_FovY * 0.5f) / viewportHeight;
+	m_Target += right * (-deltaX * worldUnitsPerPixel) +
+		up * (deltaY * worldUnitsPerPixel);
+}
 
 void Camera::ProcessMouseZoom(
 	float deltaY
 )
 {
-	m_Distance += deltaY * 0.1f;
-
-	if (m_Distance < 0.1f) m_Distance = 0.1f;
+	m_Distance = std::max(
+		MinimumDistance,
+		m_Distance * std::exp(deltaY * DollySensitivity));
 }
 
 
@@ -65,7 +96,7 @@ void Camera::SetDistance(
 	float distance
 )
 {
-	m_Distance = distance;
+	m_Distance = std::max(distance, MinimumDistance);
 }
 
 void Camera::SetClipPlanes(float nearPlane, float farPlane)
@@ -77,19 +108,26 @@ void Camera::SetClipPlanes(float nearPlane, float farPlane)
 	m_FarPlane = farPlane;
 }
 
+void Camera::FocusBounds(const cy::Vec3f& center, float radius)
+{
+	m_Target = center;
+	if (radius <= 0.0f)
+		return;
+
+	const float halfVerticalFov = m_FovY * 0.5f;
+	const float halfHorizontalFov = std::atan(
+		std::tan(halfVerticalFov) * m_AspectRatio);
+	const float limitingHalfFov = std::min(
+		halfVerticalFov, halfHorizontalFov);
+	m_Distance = std::max(
+		MinimumDistance,
+		radius * 1.15f / std::sin(limitingHalfFov));
+}
 
 cy::Matrix4f Camera::GetViewMatrix() const
 {
-	cy::Matrix4f rotation =
-		cy::Matrix4f::RotationX(m_Pitch) *
-		cy::Matrix4f::RotationY(m_Yaw);
-
-	cy::Matrix4f translation =
-		cy::Matrix4f::Translation(
-			cy::Vec3f(0, 0, -m_Distance)
-		);
-
-	return translation * rotation;
+	return cy::Matrix4f::View(
+		GetPosition(), m_Target, cy::Vec3f(0.0f, 1.0f, 0.0f));
 }
 
 
@@ -123,11 +161,12 @@ cy::Matrix4f Camera::GetProjectionMatrix() const
 
 cy::Vec3f Camera::GetPosition() const
 {
-	return cy::Vec3f(
-		0,
-		0,
-		m_Distance
-	);
+	const float cosPitch = std::cos(m_Pitch);
+	const cy::Vec3f offset(
+		std::sin(m_Yaw) * cosPitch,
+		std::sin(m_Pitch),
+		std::cos(m_Yaw) * cosPitch);
+	return m_Target + offset * m_Distance;
 }
 
 

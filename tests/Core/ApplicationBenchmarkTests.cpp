@@ -34,8 +34,24 @@ void TestDefaultOptions()
         "The benchmark must be disabled by default.");
     Require(!options.materialLab,
         "The material lab must be disabled by default.");
+    Require(!options.translucencyTest,
+        "The translucency test must be disabled by default.");
     Require(options.normalMapPath.empty() && options.displacementMapPath.empty(),
         "Default map paths should be resolved by the application entry point.");
+}
+
+void TestTranslucencyTestOption()
+{
+    ApplicationOptions options;
+    std::string error;
+    Require(ParseApplicationOptions(
+        {"--translucency-test"}, options, error),
+        "The translucency test option should be accepted.");
+    Require(options.translucencyTest,
+        "The translucency test option was not parsed correctly.");
+    Require(!ParseApplicationOptions(
+        {"--translucency-test", "--translucency-test"}, options, error),
+        "Duplicate translucency test options must be rejected.");
 }
 
 void TestMaterialLabOptions()
@@ -132,6 +148,7 @@ int main()
     TestDefaultOptions();
     TestGridAndMaterialMapOptions();
     TestMaterialLabOptions();
+    TestTranslucencyTestOption();
     TestInvalidOptions();
     TestCenteredGridLayout();
     TestSceneRadius();
