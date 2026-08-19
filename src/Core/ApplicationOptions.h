@@ -11,6 +11,9 @@ struct ApplicationOptions
 {
     std::string normalMapPath;
     std::string displacementMapPath;
+    std::string faceShadowDemoModelPath;
+    std::string faceShadowDemoTexturePath;
+    std::string faceShadowDemoMaterialName;
     std::uint32_t instanceGridSize = 0;
     bool materialLab = false;
     bool translucencyTest = false;

@@ -45,7 +45,10 @@ public:
         std::string displacementMapPath,
         std::uint32_t instanceGridSize = 0,
         bool materialLab = false,
-        bool translucencyTest = false);
+        bool translucencyTest = false,
+        std::string faceShadowDemoModelPath = {},
+        std::string faceShadowDemoTexturePath = {},
+        std::string faceShadowDemoMaterialName = {});
 
 	/// @brief 析构函数，自动调用 Shutdown 释放资源
     ~Application();
@@ -77,6 +80,9 @@ private:
     std::uint32_t m_InstanceGridSize = 0;
     bool m_MaterialLab = false;
     bool m_TranslucencyTest = false;
+    std::string m_FaceShadowDemoModelPath;
+    std::string m_FaceShadowDemoTexturePath;
+    std::string m_FaceShadowDemoMaterialName;
     float m_SceneRadius = 1.0f;
 
     bool m_Initialized          = false;        ///< 应用程序是否已初始化
@@ -111,6 +117,7 @@ private:
     bool CommitImportedModel(
         AssetImport::ImportedModelData& model,
         std::string& error);
+    bool LoadStartupFaceShadowDemo();
     void DestroyModelResources(ModelResourceGroup& resources);
     EditableLight* FindEditableLight(std::uint32_t id);
     const EditableLight* FindEditableLight(std::uint32_t id) const;

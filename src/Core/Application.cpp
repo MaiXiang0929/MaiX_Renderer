@@ -27,6 +27,8 @@
 #endif
 
 #include "Editor/AssetImportPanel.h"
+#include "Assets/Import/FbxModelImporter.h"
+#include "Assets/Import/ImageLoader.h"
 #include "Editor/EditorViewportController.h"
 #include "Editor/InspectorPanel.h"
 #include "Editor/MaterialEditorPanel.h"
@@ -80,7 +82,10 @@ Application::Application(
     std::string displacementMapPath,
     std::uint32_t instanceGridSize,
     bool materialLab,
-    bool translucencyTest)
+    bool translucencyTest,
+    std::string faceShadowDemoModelPath,
+    std::string faceShadowDemoTexturePath,
+    std::string faceShadowDemoMaterialName)
     :
     m_Camera(
         cy::Vec3f(0, 0, 0),
@@ -90,7 +95,10 @@ Application::Application(
     m_DisplacementMapPath(std::move(displacementMapPath)),
     m_InstanceGridSize(instanceGridSize),
     m_MaterialLab(materialLab),
-    m_TranslucencyTest(translucencyTest)
+    m_TranslucencyTest(translucencyTest),
+    m_FaceShadowDemoModelPath(std::move(faceShadowDemoModelPath)),
+    m_FaceShadowDemoTexturePath(std::move(faceShadowDemoTexturePath)),
+    m_FaceShadowDemoMaterialName(std::move(faceShadowDemoMaterialName))
 {
     
 }
@@ -594,6 +602,9 @@ bool Application::Init() {
     editablePointFill.proxy = pointFill;
     m_EditableLights.push_back(editablePointFill);
 
+    if (!LoadStartupFaceShadowDemo())
+        return false;
+
     return true;
 }
 
@@ -844,6 +855,206 @@ bool Application::CommitImportedModel(
         << "' sections=" << model.meshes.size()
         << " materials=" << model.materials.size()
         << " textures=" << model.textures.size()
+        << std::endl;
+    return true;
+}
+
+bool Application::LoadStartupFaceShadowDemo()
+{
+    if (m_FaceShadowDemoModelPath.empty())
+        return true;
+
+    const std::filesystem::path modelPath(m_FaceShadowDemoModelPath);
+    const std::filesystem::path faceShadowPath(m_FaceShadowDemoTexturePath);
+
+    AssetImport::ImageData faceShadowImage;
+    std::string imageError;
+    if (!AssetImport::ImageLoader::LoadFromFile(
+            faceShadowPath, faceShadowImage, imageError))
+    {
+        std::cerr
+            << "[FaceShadowDemo] Unable to load the Face Shadow texture: "
+            << imageError << std::endl;
+        return false;
+    }
+
+    AssetImport::ModelImportResult importResult =
+        AssetImport::FbxModelImporter::Import(modelPath);
+    if (!importResult)
+    {
+        std::cerr
+            << "[FaceShadowDemo] Unable to import the startup FBX: "
+            << importResult.error << std::endl;
+        return false;
+    }
+
+    const auto materialIterator = std::find_if(
+        importResult.model.materials.begin(),
+        importResult.model.materials.end(),
+        [this](const AssetImport::ImportedMaterialData& material)
+        {
+            return material.name == m_FaceShadowDemoMaterialName;
+        });
+    if (materialIterator == importResult.model.materials.end())
+    {
+        std::cerr
+            << "[FaceShadowDemo] Material '"
+            << m_FaceShadowDemoMaterialName
+            << "' was not found in the startup FBX." << std::endl;
+        return false;
+    }
+    const std::size_t materialIndex = static_cast<std::size_t>(
+        std::distance(importResult.model.materials.begin(), materialIterator));
+
+    std::string commitError;
+    if (!CommitImportedModel(importResult.model, commitError))
+    {
+        std::cerr
+            << "[FaceShadowDemo] Unable to upload the startup model: "
+            << commitError << std::endl;
+        return false;
+    }
+    if (materialIndex >= m_ActiveModelResources.materials.size())
+    {
+        std::cerr
+            << "[FaceShadowDemo] Imported material mapping is invalid."
+            << std::endl;
+        return false;
+    }
+
+    // This asset contains four weapon helper sections far from the character.
+    // Keep their primitives renderable, but prevent them from moving the
+    // lighting/framing target away from the face-shadow subject.
+    if (importResult.model.meshes.size() == m_ActiveModel.sections.size() &&
+        importResult.model.meshes.size() >= 4)
+    {
+        auto median = [](std::vector<float> values)
+        {
+            const std::size_t middle = values.size() / 2;
+            std::nth_element(
+                values.begin(), values.begin() + middle, values.end());
+            return values[middle];
+        };
+        std::vector<float> centerX;
+        std::vector<float> centerY;
+        std::vector<float> centerZ;
+        centerX.reserve(importResult.model.meshes.size());
+        centerY.reserve(importResult.model.meshes.size());
+        centerZ.reserve(importResult.model.meshes.size());
+        for (const AssetImport::ImportedMeshData& mesh :
+             importResult.model.meshes)
+        {
+            centerX.push_back(mesh.boundsCenter.x);
+            centerY.push_back(mesh.boundsCenter.y);
+            centerZ.push_back(mesh.boundsCenter.z);
+        }
+        const cy::Vec3f medianCenter(
+            median(std::move(centerX)),
+            median(std::move(centerY)),
+            median(std::move(centerZ)));
+        std::vector<float> distances;
+        distances.reserve(importResult.model.meshes.size());
+        for (const AssetImport::ImportedMeshData& mesh :
+             importResult.model.meshes)
+        {
+            distances.push_back((mesh.boundsCenter - medianCenter).Length());
+        }
+        const float warningDistance = std::max(
+            10.0f, median(distances) * 10.0f);
+        std::size_t ignoredDistantSections = 0;
+        for (std::size_t index = 0; index < distances.size(); ++index)
+        {
+            if (distances[index] <= warningDistance)
+                continue;
+            m_ActiveModel.sections[index].localBounds.radius = 0.0f;
+            ++ignoredDistantSections;
+        }
+        if (ignoredDistantSections > 0)
+        {
+            std::cout
+                << "[FaceShadowDemo] ignored " << ignoredDistantSections
+                << " distant sections for lighting/framing bounds"
+                << std::endl;
+        }
+    }
+
+    const PrimitiveBounds demoBounds = m_ActiveModel.GetWorldBounds();
+    if (demoBounds.radius > 0.0f)
+    {
+        m_ObjCenter = demoBounds.center;
+        m_ModelDiameter = demoBounds.radius * 2.0f;
+        m_SceneRadius = demoBounds.radius;
+        m_GroundY = demoBounds.center.y - demoBounds.radius;
+        m_Camera.FocusBounds(demoBounds.center, demoBounds.radius);
+        m_Camera.SetClipPlanes(
+            std::max(0.1f, demoBounds.radius * 0.01f),
+            std::max(1000.0f, demoBounds.radius * 8.0f));
+
+        EditableLight* mainLight = FindEditableLight(m_MainLightId);
+        if (mainLight != nullptr)
+        {
+            cy::Vec3f lightOffset = mainLight->transform.position -
+                demoBounds.center;
+            if (lightOffset.Length() <= 1.0e-4f)
+                lightOffset = cy::Vec3f(0.0f, 1.0f, 2.0f);
+            lightOffset.Normalize();
+            mainLight->transform.position = demoBounds.center +
+                lightOffset * std::max(demoBounds.radius * 2.5f, 1.0f);
+            mainLight->proxy.range = std::max(
+                mainLight->proxy.range, demoBounds.radius * 6.0f);
+            ApplyEditableLightTransform(*mainLight, *m_Renderer);
+        }
+    }
+
+    const std::shared_ptr<Texture2D> faceShadowTexture =
+        Texture2D::CreateRGBA8(
+            faceShadowImage.width,
+            faceShadowImage.height,
+            faceShadowImage.pixels,
+            TextureColorSpace::Linear);
+    if (!faceShadowTexture)
+    {
+        std::cerr
+            << "[FaceShadowDemo] GPU texture creation failed."
+            << std::endl;
+        return false;
+    }
+
+    const MaterialHandle materialHandle =
+        m_ActiveModelResources.materials[materialIndex];
+    Renderer::MaterialSnapshot snapshot;
+    if (!m_Renderer->GetMaterialSnapshot(materialHandle, snapshot))
+    {
+        std::cerr
+            << "[FaceShadowDemo] Unable to read the imported face material."
+            << std::endl;
+        return false;
+    }
+
+    MaterialProperties properties = snapshot.properties;
+    properties.shadingModel = ShadingModel::Toon;
+    properties.faceShadowEnabled = true;
+    if (!m_Renderer->UpdateMaterial(
+            materialHandle, properties, snapshot.blendMode) ||
+        !m_Renderer->UpdateMaterialTexture(
+            materialHandle,
+            MaterialTextureSlot::FaceShadow,
+            faceShadowTexture,
+            faceShadowPath.u8string()))
+    {
+        std::cerr
+            << "[FaceShadowDemo] Unable to configure the face material."
+            << std::endl;
+        return false;
+    }
+
+    for (const std::string& warning : importResult.model.warnings)
+        std::cout << "[FaceShadowDemo] warning: " << warning << std::endl;
+    std::cout
+        << "[FaceShadowDemo] model='" << modelPath.u8string()
+        << "' material='" << m_FaceShadowDemoMaterialName
+        << "' texture='" << faceShadowPath.u8string()
+        << "' colorSpace=Linear faceForward=(0,0,1) faceRight=(1,0,0)"
         << std::endl;
     return true;
 }

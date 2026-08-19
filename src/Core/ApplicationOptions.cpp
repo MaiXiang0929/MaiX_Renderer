@@ -73,6 +73,34 @@ bool ParseApplicationOptions(
             options.translucencyTest = true;
             continue;
         }
+        if (argument == "--face-shadow-demo")
+        {
+            if (!options.faceShadowDemoModelPath.empty())
+            {
+                errorMessage =
+                    "--face-shadow-demo may only be specified once.";
+                return false;
+            }
+            if (index + 3 >= arguments.size())
+            {
+                errorMessage =
+                    "--face-shadow-demo requires an FBX path, a face "
+                    "shadow texture path, and a material name.";
+                return false;
+            }
+            options.faceShadowDemoModelPath = arguments[++index];
+            options.faceShadowDemoTexturePath = arguments[++index];
+            options.faceShadowDemoMaterialName = arguments[++index];
+            if (options.faceShadowDemoModelPath.empty() ||
+                options.faceShadowDemoTexturePath.empty() ||
+                options.faceShadowDemoMaterialName.empty())
+            {
+                errorMessage =
+                    "--face-shadow-demo arguments must not be empty.";
+                return false;
+            }
+            continue;
+        }
         if (!argument.empty() && argument.front() == '-')
         {
             errorMessage = "Unknown option: " + argument;
@@ -92,6 +120,15 @@ bool ParseApplicationOptions(
             "--material-lab and --instance-grid cannot be used together.";
         return false;
     }
+    if (!options.faceShadowDemoModelPath.empty() &&
+        (options.materialLab || options.instanceGridSize != 0 ||
+         options.translucencyTest))
+    {
+        errorMessage =
+            "--face-shadow-demo cannot be combined with --material-lab, "
+            "--instance-grid, or --translucency-test.";
+        return false;
+    }
     if (!positionalArguments.empty())
         options.normalMapPath = positionalArguments[0];
     if (positionalArguments.size() == 2)
@@ -103,10 +140,13 @@ const char* GetApplicationUsage()
 {
     return
         "Usage: OpenGL_Project [normal.png] [displacement.png] "
-        "[--instance-grid N] [--material-lab] [--translucency-test]\n"
+        "[--instance-grid N] [--material-lab] [--translucency-test] "
+        "[--face-shadow-demo model.fbx face-map.png material]\n"
         "  --instance-grid N  Submit an N x N shared-resource benchmark grid "
         "(1-32).\n"
         "  --material-lab     Show four PBR reference materials using shared "
         "geometry.\n"
-        "  --translucency-test  Add the three-plane transparency test scene.";
+        "  --translucency-test  Add the three-plane transparency test scene.\n"
+        "  --face-shadow-demo   Import an FBX at startup and bind a linear "
+        "Face Shadow map to the named material.";
 }

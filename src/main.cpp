@@ -41,7 +41,10 @@ int main(int argc, char** argv)
         options.displacementMapPath,
         options.instanceGridSize,
         options.materialLab,
-        options.translucencyTest);
+        options.translucencyTest,
+        options.faceShadowDemoModelPath,
+        options.faceShadowDemoTexturePath,
+        options.faceShadowDemoMaterialName);
     app.Run();
     return 0;
 }

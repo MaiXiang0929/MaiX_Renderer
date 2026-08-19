@@ -129,7 +129,7 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 - [x] Toon Shading Model 已接入 Forward PBR Shader，支持分段漫反射、阴影色和 Rim Light，并由 Material Editor 实时调节
 - [x] 独立 `OutlinePass` 已使用 Inverted Hull 写入 Forward HDR Scene Color；仅处理主视图不透明 Toon 材质，并复用 Forward 深度
 - [x] Material Editor 已支持材质选择、PBR/Toon 切换、Toon Outline 参数和 Renderer-owned Material 更新边界
-- [x] 最小 Toon Face Shadow 已接入线性 SDF 纹理、角色局部 Face Forward/Right、左右自动镜像与独立 Key Light；Standard/Instanced/Tessellation 共用 Forward 路径，视觉效果待用户验收
+- [x] 最小 Toon Face Shadow 已接入线性 SDF 纹理、角色局部 Face Forward/Right、左右自动镜像与独立 Key Light；`--face-shadow-demo` 已成功导入目标 Lumine FBX，并将连续 FaceLightmap 以 Linear 数据绑定到 `Lumine Face`；Standard/Instanced/Tessellation 共用 Forward 路径，视觉效果待用户验收
 - [x] Outline Pass 已接入 CPU/GPU 提交统计、GPU Timer Query、Shader Reload 和独立 NPR Shader 资源
 - [x] SSAO 已使用 Forward 可采样深度重建观察空间位置与法线，完成半分辨率 R8 遮蔽/滤波与全分辨率 HDR 合成
 - [x] FBX 静态模型导入已接通多 Mesh、多材质分段、索引绘制、Base Color 纹理、异步 CPU 解析与事务式资源替换
@@ -219,7 +219,7 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 
 下一次实现前仍遵循“先给方案、确认后执行”的协作流程。建议优先顺序为：
 
-1. 为已实现的 Face Shadow 绑定目标角色贴图并执行视觉验收；只修复阻塞展示的贴图契约、轴向或镜像问题，不扩展通用 NPR 系统。
+1. 对已通过 `--face-shadow-demo` 绑定目标角色贴图的 Face Shadow 执行用户视觉验收；只修复阻塞展示的轴向、镜像或阈值方向问题，不扩展通用 NPR 系统。
 2. 对已完成的 Scene Window / Inspector 执行 50-60s Editor 展示验收，只修复阻塞工作流的布局、选择同步或参数约束问题。
 3. 为透明材质补充 Masked/Additive 模式前，先明确 Alpha Cutout 阴影、排序和混合策略。
 

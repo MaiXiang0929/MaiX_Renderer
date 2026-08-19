@@ -36,8 +36,44 @@ void TestDefaultOptions()
         "The material lab must be disabled by default.");
     Require(!options.translucencyTest,
         "The translucency test must be disabled by default.");
+    Require(options.faceShadowDemoModelPath.empty() &&
+        options.faceShadowDemoTexturePath.empty() &&
+        options.faceShadowDemoMaterialName.empty(),
+        "The Face Shadow demo must be disabled by default.");
     Require(options.normalMapPath.empty() && options.displacementMapPath.empty(),
         "Default map paths should be resolved by the application entry point.");
+}
+
+void TestFaceShadowDemoOptions()
+{
+    ApplicationOptions options;
+    std::string error;
+    Require(ParseApplicationOptions(
+        {"--face-shadow-demo", "character.fbx", "face.png", "Face"},
+        options,
+        error),
+        "The Face Shadow demo option should be accepted.");
+    Require(options.faceShadowDemoModelPath == "character.fbx" &&
+        options.faceShadowDemoTexturePath == "face.png" &&
+        options.faceShadowDemoMaterialName == "Face",
+        "The Face Shadow demo arguments were not parsed correctly.");
+    Require(!ParseApplicationOptions(
+        {"--face-shadow-demo", "character.fbx", "face.png"},
+        options,
+        error),
+        "A Face Shadow demo with missing arguments must be rejected.");
+    Require(!ParseApplicationOptions(
+        {"--face-shadow-demo", "a.fbx", "a.png", "Face",
+         "--face-shadow-demo", "b.fbx", "b.png", "Face"},
+        options,
+        error),
+        "Duplicate Face Shadow demo options must be rejected.");
+    Require(!ParseApplicationOptions(
+        {"--face-shadow-demo", "character.fbx", "face.png", "Face",
+         "--material-lab"},
+        options,
+        error),
+        "The Face Shadow demo and material lab must be mutually exclusive.");
 }
 
 void TestTranslucencyTestOption()
@@ -149,6 +185,7 @@ int main()
     TestGridAndMaterialMapOptions();
     TestMaterialLabOptions();
     TestTranslucencyTestOption();
+    TestFaceShadowDemoOptions();
     TestInvalidOptions();
     TestCenteredGridLayout();
     TestSceneRadius();

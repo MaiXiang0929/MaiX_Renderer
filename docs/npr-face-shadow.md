@@ -62,6 +62,49 @@ existing `N dot L` Toon band.
 5. Move the main light horizontally. Use `Mirror Face Shadow X` if the left and
    right response is reversed, then tune `Face Shadow Softness`.
 
+## Target Character Demo
+
+The Lumine target asset is loaded from its external source folder rather than
+copied into this repository. Keep the attribution in the asset's `README.txt`
+when recording or distributing the demo.
+
+Run from the directory containing `OpenGL_Project.exe`:
+
+```powershell
+.\OpenGL_Project.exe --face-shadow-demo `
+  "D:\Desktop\Unity URP shader\重逢-荧\Lumine FBX.fbx" `
+  "D:\Desktop\Unity URP shader\重逢-荧\textures\Avatar_Girl_Tex_FaceLightmap.png" `
+  "Lumine Face"
+```
+
+The startup path synchronously imports the FBX after OpenGL initialization,
+matches the material by its exact name, enables Toon and Face Shadow, and
+uploads the supplied map as linear RGBA8 data. It does not add a render pass or
+change the existing interactive FBX import path.
+
+For this demo option only, sections beyond the importer median-distance
+threshold remain renderable but are removed from the presentation bounds. The
+filtered character bounds drive camera focus, ground placement, spot-light
+distance, and shadow projection so distant weapon helper geometry cannot move
+the Face Shadow subject out of the key-light cone.
+
+`Avatar_Girl_Tex_FaceLightmap.png` is the correct input for the current angle
+threshold contract because its red channel contains a continuous face-space
+gradient. `Avatar_Tex_Face_Shadow.png` is a near-binary face mask and is not
+used as the threshold map.
+
+Runtime verification on 2026-08-19 imported 51 render sections, created 34
+runtime materials and loaded 11 FBX-referenced textures. All shaders initialized
+without compile or link errors. The importer reported two known limitations:
+
+- The source pose is baked as static geometry; runtime skinning is not retained.
+- Four weapon bullet sections are distant from the character. The demo keeps
+  their primitives renderable, but excludes their bounds from lighting/framing
+  and the current main-view frustum.
+
+Visual correctness of the Face Forward/Right axes, automatic U mirroring, and
+the authored threshold response remains pending user acceptance.
+
 ## Performance And Limits
 
 Only Face Shadow-enabled Toon materials with a bound texture perform the extra
