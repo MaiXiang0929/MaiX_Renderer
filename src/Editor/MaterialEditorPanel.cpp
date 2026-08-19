@@ -110,6 +110,24 @@ void MaterialEditorPanel::Draw(Renderer& renderer, void* nativeWindowHandle)
         changed |= ImGui::ColorEdit3("Toon Shadow Color", &properties.toonShadowColor.x);
         changed |= ImGui::SliderFloat("Rim Light Strength", &properties.rimLightStrength, 0.0f, 4.0f);
         changed |= ImGui::ColorEdit3("Rim Light Color", &properties.rimLightColor.x);
+        changed |= ImGui::Checkbox(
+            "Face Shadow", &properties.faceShadowEnabled);
+        if (properties.faceShadowEnabled)
+        {
+            changed |= ImGui::InputFloat3(
+                "Face Forward", &properties.faceForwardLocal.x, "%.3f");
+            changed |= ImGui::InputFloat3(
+                "Face Right", &properties.faceRightLocal.x, "%.3f");
+            changed |= ImGui::SliderFloat(
+                "Face Shadow Softness",
+                &properties.faceShadowSoftness,
+                MinimumFaceShadowSoftness,
+                MaximumFaceShadowSoftness,
+                "%.3f");
+            changed |= ImGui::Checkbox(
+                "Mirror Face Shadow X",
+                &properties.faceShadowMirrorX);
+        }
         changed |= ImGui::Checkbox("Outline", &properties.outlineEnabled);
         if (properties.outlineEnabled)
         {
@@ -138,7 +156,12 @@ void MaterialEditorPanel::Draw(Renderer& renderer, void* nativeWindowHandle)
 
     ImGui::SeparatorText("Texture Slots");
     const std::array<const char*, MaterialTextureSlotCount> names = {
-        "Base Color", "Normal", "ORM", "Displacement", "Legacy Specular"};
+        "Base Color",
+        "Normal",
+        "ORM",
+        "Displacement",
+        "Legacy Specular",
+        "Face Shadow"};
     if (ImGui::BeginTable(
             "MaterialTextures",
             4,

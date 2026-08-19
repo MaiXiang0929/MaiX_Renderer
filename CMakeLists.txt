@@ -57,6 +57,8 @@ set(SOURCES
     src/Editor/EditableModel.cpp
     src/Editor/EditableModelRenderer.cpp
     src/Editor/EditorViewportController.cpp
+    src/Editor/SceneHierarchyPanel.cpp
+    src/Editor/InspectorPanel.cpp
     src/Editor/ViewportPicking.cpp
 
     # Platform

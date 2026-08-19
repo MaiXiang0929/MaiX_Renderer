@@ -6,6 +6,8 @@ in vec3 fragTangent;
 in float fragTangentSign;
 in vec2 fragTexCoord;
 in vec4 fragLightSpacePos;
+in vec3 fragFaceForward;
+in vec3 fragFaceRight;
 
 layout(location = 0) out vec4 color;
 
@@ -26,17 +28,22 @@ struct MaterialData
     vec3 toonShadowColor;
     float rimLightStrength;
     vec3 rimLightColor;
+    bool faceShadowEnabled;
+    float faceShadowSoftness;
+    bool faceShadowMirrorX;
 
     sampler2D albedoMap;
     sampler2D ormMap;
     sampler2D specularMap;
     sampler2D normalMap;
     sampler2D displacementMap;
+    sampler2D faceShadowMap;
     bool hasAlbedoMap;
     bool hasOrmMap;
     bool hasSpecularMap;
     bool hasNormalMap;
     bool hasDisplacementMap;
+    bool hasFaceShadowMap;
 };
 
 uniform MaterialData material;
@@ -61,6 +68,7 @@ layout(std140) uniform ForwardLights
 
 uniform int lightCount;
 uniform int shadowLightIndex;
+uniform int keyLightIndex;
 uniform samplerCube cubemap;
 uniform mat3 viewToWorld;
 uniform sampler2DShadow shadowMap;
@@ -160,6 +168,35 @@ vec3 ResolveSurfaceNormal()
     return normalize(mat3(T, B, N) * tangentNormal);
 }
 
+float CalculateFaceLightBand(vec3 lightDirection)
+{
+    vec3 faceForward = normalize(fragFaceForward);
+    vec3 faceRight = normalize(
+        fragFaceRight - faceForward * dot(fragFaceRight, faceForward));
+    vec2 faceLight = vec2(
+        dot(lightDirection, faceRight),
+        dot(lightDirection, faceForward));
+    float projectedLength = length(faceLight);
+    if (projectedLength <= 0.0001)
+        return -1.0;
+
+    faceLight /= projectedLength;
+    bool mirrorU = faceLight.x < 0.0;
+    if (material.faceShadowMirrorX)
+        mirrorU = !mirrorU;
+    vec2 faceUv = fragTexCoord;
+    if (mirrorU)
+        faceUv.x = 1.0 - faceUv.x;
+
+    float lightAngle = abs(atan(faceLight.x, faceLight.y)) / PI;
+    float sdfThreshold = texture(material.faceShadowMap, faceUv).r;
+    float softness = max(material.faceShadowSoftness, 0.0001);
+    return smoothstep(
+        lightAngle - softness,
+        lightAngle + softness,
+        sdfThreshold);
+}
+
 void main()
 {
     if (wireframePass) {
@@ -201,6 +238,14 @@ void main()
             float visibility = lightIndex == shadowLightIndex
                 ? CalculateShadowVisibility(fragLightSpacePos, N, L) : 1.0;
             float lightBand = step(clamp(material.toonThreshold, 0.0, 1.0), nDotL);
+            if (lightIndex == keyLightIndex &&
+                material.faceShadowEnabled &&
+                material.hasFaceShadowMap)
+            {
+                float faceLightBand = CalculateFaceLightBand(L);
+                if (faceLightBand >= 0.0)
+                    lightBand = faceLightBand;
+            }
             vec3 shadowBand = mix(material.toonShadowColor, vec3(1.0),
                 1.0 - material.toonShadowStrength);
             vec3 bandColor = mix(shadowBand, vec3(1.0), lightBand);

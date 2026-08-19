@@ -8,6 +8,7 @@
 #include "Editor/EditableLight.h"
 #include "Editor/EditableModel.h"
 #include "Editor/EditorSelection.h"
+#include "Editor/EditorValueConstraints.h"
 #include "Editor/ViewportPicking.h"
 
 namespace
@@ -165,6 +166,36 @@ void TestModelAndLightSelectionAreDistinct()
         pick.type == EditorSelectionType::None,
         "Clicking empty space should clear both model and light selection.");
 }
+
+void TestEditorValueConstraints()
+{
+    cy::Vec3f scale(-2.0f, 0.0f, 2000.0f);
+    EditorValueConstraints::SanitizeScale(scale);
+    Require(NearlyEqual(scale.x, 2.0f) &&
+            NearlyEqual(scale.y, EditorValueConstraints::MinimumScale) &&
+            NearlyEqual(scale.z, EditorValueConstraints::MaximumScale),
+        "Inspector scale constraints should prevent mirrored or degenerate transforms.");
+
+    cy::Vec3f direction(0.0f);
+    EditorValueConstraints::SanitizeDirection(direction);
+    Require(NearlyEqual(direction.x, 0.0f) &&
+            NearlyEqual(direction.y, -1.0f) &&
+            NearlyEqual(direction.z, 0.0f),
+        "A zero light direction should fall back to world down.");
+
+    float intensity = -2.0f;
+    float range = 0.0f;
+    EditorValueConstraints::SanitizeLightScalars(intensity, range);
+    Require(NearlyEqual(intensity, 0.0f) &&
+            NearlyEqual(range, EditorValueConstraints::MinimumLightRange),
+        "Light scalar constraints should reject negative intensity and zero range.");
+
+    float innerCone = 75.0f;
+    float outerCone = 30.0f;
+    EditorValueConstraints::SanitizeSpotConeDegrees(innerCone, outerCone);
+    Require(NearlyEqual(innerCone, 30.0f) && NearlyEqual(outerCone, 30.0f),
+        "Spot cone constraints should keep the inner cone inside the outer cone.");
+}
 }
 
 int main()
@@ -174,6 +205,7 @@ int main()
     TestMergedWorldBounds();
     TestEditorSelectionTransitions();
     TestModelAndLightSelectionAreDistinct();
+    TestEditorValueConstraints();
     std::cout << "Editor interaction tests passed." << std::endl;
     return EXIT_SUCCESS;
 }

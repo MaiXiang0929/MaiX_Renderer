@@ -38,6 +38,7 @@ enum class MaterialTextureSlot : std::uint8_t
     OcclusionRoughnessMetallic,
     Displacement,
     LegacySpecular,
+    FaceShadow,
     Count
 };
 
@@ -59,10 +60,14 @@ constexpr unsigned int GetMaterialTextureUnitOffset(
     case MaterialTextureSlot::LegacySpecular: return 1;
     case MaterialTextureSlot::Normal: return 2;
     case MaterialTextureSlot::Displacement: return 3;
+    case MaterialTextureSlot::FaceShadow: return 6;
     case MaterialTextureSlot::Count: break;
     }
     return 0;
 }
+
+constexpr float MinimumFaceShadowSoftness = 0.0f;
+constexpr float MaximumFaceShadowSoftness = 0.25f;
 
 constexpr TextureColorSpace GetRequiredMaterialTextureColorSpace(
     MaterialTextureSlot slot)

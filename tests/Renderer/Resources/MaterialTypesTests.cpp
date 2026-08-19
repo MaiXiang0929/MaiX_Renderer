@@ -16,10 +16,11 @@ void Require(bool condition, const char* message)
 
 void TestTextureSlotIndices()
 {
-    Require(MaterialTextureSlotCount == 5,
-        "The PBR material contract should expose five semantic slots.");
+    Require(MaterialTextureSlotCount == 6,
+        "The material contract should expose six semantic slots.");
     Require(ToIndex(MaterialTextureSlot::BaseColor) == 0 &&
-        ToIndex(MaterialTextureSlot::LegacySpecular) == 4,
+        ToIndex(MaterialTextureSlot::LegacySpecular) == 4 &&
+        ToIndex(MaterialTextureSlot::FaceShadow) == 5,
         "Material texture slots should retain stable array indices.");
 }
 
@@ -54,6 +55,8 @@ void TestFixedTextureUnits()
         "Normal should use the third material texture unit.");
     Require(GetMaterialTextureUnitOffset(MaterialTextureSlot::Displacement) == 3,
         "Displacement should use the fourth material texture unit.");
+    Require(GetMaterialTextureUnitOffset(MaterialTextureSlot::FaceShadow) == 6,
+        "Face Shadow should avoid the cubemap and shadow map units.");
 }
 
 void TestTextureColorSpaces()
@@ -67,8 +70,10 @@ void TestTextureColorSpaces()
             MaterialTextureSlot::OcclusionRoughnessMetallic) ==
             TextureColorSpace::Linear &&
         GetRequiredMaterialTextureColorSpace(
-            MaterialTextureSlot::Displacement) == TextureColorSpace::Linear,
-        "Normal, ORM, and displacement textures must remain linear data.");
+            MaterialTextureSlot::Displacement) == TextureColorSpace::Linear &&
+        GetRequiredMaterialTextureColorSpace(
+            MaterialTextureSlot::FaceShadow) == TextureColorSpace::Linear,
+        "Normal, ORM, displacement, and Face Shadow must remain linear data.");
 }
 }
 

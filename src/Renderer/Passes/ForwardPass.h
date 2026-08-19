@@ -52,7 +52,8 @@ private:
     bool BindForwardLightsBlock(const Shader& shader) const;
     LightUploadData UploadLights(
         const RenderView& view,
-        LightId shadowLightId);
+        LightId shadowLightId,
+        LightId keyLightId);
     void RenderItems(
         RenderPassContext& context,
         RenderView& renderView,

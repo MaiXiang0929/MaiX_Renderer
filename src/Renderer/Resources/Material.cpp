@@ -37,6 +37,7 @@ const char* GetSlotName(MaterialTextureSlot slot)
     case MaterialTextureSlot::OcclusionRoughnessMetallic: return "ORM";
     case MaterialTextureSlot::Displacement: return "Displacement";
     case MaterialTextureSlot::LegacySpecular: return "LegacySpecular";
+    case MaterialTextureSlot::FaceShadow: return "FaceShadow";
     case MaterialTextureSlot::Count: break;
     }
     return "Invalid";
@@ -79,6 +80,25 @@ void Material::Bind(Shader& shader, unsigned int firstTextureUnit) const
     shader.SetFloat("material.rimLightStrength", m_Properties.rimLightStrength);
     shader.SetVec3("material.rimLightColor", m_Properties.rimLightColor.x,
         m_Properties.rimLightColor.y, m_Properties.rimLightColor.z);
+    shader.SetInt(
+        "material.faceShadowEnabled",
+        m_Properties.faceShadowEnabled ? 1 : 0);
+    shader.SetFloat(
+        "material.faceShadowSoftness",
+        m_Properties.faceShadowSoftness);
+    shader.SetInt(
+        "material.faceShadowMirrorX",
+        m_Properties.faceShadowMirrorX ? 1 : 0);
+    shader.SetVec3(
+        "faceForwardLocal",
+        m_Properties.faceForwardLocal.x,
+        m_Properties.faceForwardLocal.y,
+        m_Properties.faceForwardLocal.z);
+    shader.SetVec3(
+        "faceRightLocal",
+        m_Properties.faceRightLocal.x,
+        m_Properties.faceRightLocal.y,
+        m_Properties.faceRightLocal.z);
 
     const unsigned int albedoUnit = firstTextureUnit +
         GetMaterialTextureUnitOffset(MaterialTextureSlot::BaseColor);
@@ -100,6 +120,8 @@ void Material::Bind(Shader& shader, unsigned int firstTextureUnit) const
         m_Textures[ToIndex(MaterialTextureSlot::Displacement)];
     const auto& specularMap =
         m_Textures[ToIndex(MaterialTextureSlot::LegacySpecular)];
+    const auto& faceShadowMap =
+        m_Textures[ToIndex(MaterialTextureSlot::FaceShadow)];
 
     shader.SetInt("material.hasAlbedoMap", albedoMap ? 1 : 0);
     if (albedoMap)
@@ -128,6 +150,17 @@ void Material::Bind(Shader& shader, unsigned int firstTextureUnit) const
     {
         normalMap->Bind(normalUnit);
         shader.SetInt("material.normalMap", static_cast<int>(normalUnit));
+    }
+
+    const unsigned int faceShadowUnit = firstTextureUnit +
+        GetMaterialTextureUnitOffset(MaterialTextureSlot::FaceShadow);
+    shader.SetInt("material.hasFaceShadowMap", faceShadowMap ? 1 : 0);
+    if (faceShadowMap)
+    {
+        faceShadowMap->Bind(faceShadowUnit);
+        shader.SetInt(
+            "material.faceShadowMap",
+            static_cast<int>(faceShadowUnit));
     }
 
     BindDisplacement(shader, displacementUnit);

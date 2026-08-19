@@ -40,7 +40,8 @@ float ClampAngle(float angle)
 LightUploadData BuildLightUploadData(
     const std::vector<LightSceneProxy>& lights,
     const cy::Matrix4f& view,
-    LightId shadowLightId)
+    LightId shadowLightId,
+    LightId keyLightId)
 {
     LightUploadData upload;
 
@@ -94,6 +95,8 @@ LightUploadData BuildLightUploadData(
         {
             upload.shadowLightIndex = static_cast<int>(upload.lightCount);
         }
+        if (keyLightId != InvalidLightId && light.id == keyLightId)
+            upload.keyLightIndex = static_cast<int>(upload.lightCount);
         ++upload.lightCount;
     }
 

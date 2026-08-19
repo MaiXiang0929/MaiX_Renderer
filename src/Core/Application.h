@@ -26,6 +26,8 @@ class RendererStatisticsPanel;
 class MaterialEditorPanel;
 class AssetImportPanel;
 class EditorViewportController;
+class SceneHierarchyPanel;
+class InspectorPanel;
 namespace AssetImport
 {
 struct ImportedModelData;
@@ -63,6 +65,8 @@ private:
     std::unique_ptr<MaterialEditorPanel> m_MaterialEditorPanel;
     std::unique_ptr<AssetImportPanel> m_AssetImportPanel;
     std::unique_ptr<EditorViewportController> m_ViewportController;
+    std::unique_ptr<SceneHierarchyPanel> m_SceneHierarchyPanel;
+    std::unique_ptr<InspectorPanel> m_InspectorPanel;
     bool m_ImGuiInitialized     = false;
 
 	Camera m_Camera;                            ///< 编辑器场景视口所使用的摄像机

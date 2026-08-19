@@ -28,7 +28,9 @@
 
 #include "Editor/AssetImportPanel.h"
 #include "Editor/EditorViewportController.h"
+#include "Editor/InspectorPanel.h"
 #include "Editor/MaterialEditorPanel.h"
+#include "Editor/SceneHierarchyPanel.h"
 
 #include "cyTriMesh.h"
 
@@ -205,6 +207,8 @@ bool Application::Init() {
     m_MaterialEditorPanel = std::make_unique<MaterialEditorPanel>();
     m_AssetImportPanel = std::make_unique<AssetImportPanel>();
     m_ViewportController = std::make_unique<EditorViewportController>();
+    m_SceneHierarchyPanel = std::make_unique<SceneHierarchyPanel>();
+    m_InspectorPanel = std::make_unique<InspectorPanel>();
 
     // 主颜色目标和显示平面都跟随窗口 framebuffer 的像素宽高比。
     const float framebufferAspect =
@@ -570,7 +574,11 @@ bool Application::Init() {
     directionalFill.color = cy::Vec3f(0.35f, 0.5f, 1.0f);
     directionalFill.intensity = 0.35f;
     directionalFill.castsShadow = false;
-    m_Renderer->AddLight(directionalFill);
+    directionalFill.id = m_Renderer->AddLight(directionalFill);
+    EditableLight editableDirectionalFill;
+    editableDirectionalFill.name = "Directional Fill Light";
+    editableDirectionalFill.proxy = directionalFill;
+    m_EditableLights.push_back(editableDirectionalFill);
 
     LightSceneProxy pointFill;
     pointFill.type = LightType::Point;
@@ -980,6 +988,7 @@ void Application::Render() {
     frame.view = viewMatrix;
     frame.lightVP = lightVP;
     frame.shadowLightId = m_MainLightId;
+    frame.keyLightId = m_MainLightId;
     frame.reflectionView = reflectView;
     frame.groundModel = groundModel;
     frame.groundMvp = projMatrix * viewMatrix * groundModel;
@@ -996,6 +1005,10 @@ void Application::Render() {
     m_AssetImportPanel->Draw(nativeWindowHandle);
     m_StatisticsPanel->Draw(*m_Renderer);
     m_MaterialEditorPanel->Draw(*m_Renderer, nativeWindowHandle);
+    m_SceneHierarchyPanel->Draw(
+        m_EditorSelection, m_ActiveModel, m_EditableLights);
+    m_InspectorPanel->Draw(
+        m_EditorSelection, m_ActiveModel, m_EditableLights, *m_Renderer);
     int windowWidth = 0;
     int windowHeight = 0;
     glfwGetWindowSize(m_Window, &windowWidth, &windowHeight);
@@ -1022,6 +1035,8 @@ void Application::Shutdown() {
     m_MaterialEditorPanel.reset();
     m_AssetImportPanel.reset();
     m_ViewportController.reset();
+    m_SceneHierarchyPanel.reset();
+    m_InspectorPanel.reset();
     if (m_ImGuiInitialized) {
         ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplGlfw_Shutdown();

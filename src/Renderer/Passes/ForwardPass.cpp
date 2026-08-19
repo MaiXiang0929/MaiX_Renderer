@@ -104,10 +104,11 @@ bool ForwardPass::BindForwardLightsBlock(const Shader& shader) const
 
 LightUploadData ForwardPass::UploadLights(
     const RenderView& view,
-    LightId shadowLightId)
+    LightId shadowLightId,
+    LightId keyLightId)
 {
     const LightUploadData upload = BuildLightUploadData(
-        view.lights, view.view, shadowLightId);
+        view.lights, view.view, shadowLightId, keyLightId);
 
     glBindBuffer(GL_UNIFORM_BUFFER, m_LightBuffer);
     glBufferSubData(
@@ -394,9 +395,12 @@ void ForwardPass::PrepareSurfaceShader(
     const cy::Matrix4f& view = renderView.view;
     shader.Bind();
     const LightUploadData lightUpload = UploadLights(
-        renderView, context.frame.shadowLightId);
+        renderView,
+        context.frame.shadowLightId,
+        context.frame.keyLightId);
     shader.SetInt("lightCount", static_cast<int>(lightUpload.lightCount));
     shader.SetInt("shadowLightIndex", lightUpload.shadowLightIndex);
+    shader.SetInt("keyLightIndex", lightUpload.keyLightIndex);
 
     const float viewToWorld[9] = {
         view.cell[0], view.cell[4], view.cell[8],

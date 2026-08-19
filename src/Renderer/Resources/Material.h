@@ -39,6 +39,11 @@ struct MaterialProperties
     cy::Vec3f toonShadowColor{ 0.18f, 0.20f, 0.28f };
     float rimLightStrength = 0.0f;
     cy::Vec3f rimLightColor{ 1.0f, 1.0f, 1.0f };
+    bool faceShadowEnabled = false;
+    cy::Vec3f faceForwardLocal{ 0.0f, 0.0f, 1.0f };
+    cy::Vec3f faceRightLocal{ 1.0f, 0.0f, 0.0f };
+    float faceShadowSoftness = 0.02f;
+    bool faceShadowMirrorX = false;
     bool outlineEnabled = false;
     float outlineThickness = 0.025f;
     cy::Vec3f outlineColor{ 0.02f, 0.02f, 0.02f };

@@ -31,10 +31,12 @@ struct LightUploadData
     std::size_t sourceLightCount = 0;
     std::size_t lightCount = 0;
     int shadowLightIndex = -1;
+    int keyLightIndex = -1;
     bool truncated = false;
 };
 
 LightUploadData BuildLightUploadData(
     const std::vector<LightSceneProxy>& lights,
     const cy::Matrix4f& view,
-    LightId shadowLightId);
+    LightId shadowLightId,
+    LightId keyLightId);

@@ -9,10 +9,38 @@
 #include "Renderer.h"
 
 #include <algorithm>
+#include <cmath>
 #include <iostream>
 #include <utility>
 
 #include "Renderer/View/RenderView.h"
+
+namespace
+{
+constexpr float MinimumFaceAxisLength = 1.0e-5f;
+
+void NormalizeFaceFrame(MaterialProperties& properties)
+{
+    cy::Vec3f forward = properties.faceForwardLocal;
+    if (forward.Length() <= MinimumFaceAxisLength)
+        forward = cy::Vec3f(0.0f, 0.0f, 1.0f);
+    forward.Normalize();
+
+    cy::Vec3f right = properties.faceRightLocal;
+    right = right - forward * right.Dot(forward);
+    if (right.Length() <= MinimumFaceAxisLength)
+    {
+        right = std::abs(forward.x) < 0.9f
+            ? cy::Vec3f(1.0f, 0.0f, 0.0f)
+            : cy::Vec3f(0.0f, 1.0f, 0.0f);
+        right = right - forward * right.Dot(forward);
+    }
+    right.Normalize();
+
+    properties.faceForwardLocal = forward;
+    properties.faceRightLocal = right;
+}
+}
 
 Renderer::Renderer() = default;
 Renderer::~Renderer() = default;
@@ -205,6 +233,11 @@ bool Renderer::UpdateMaterial(
     clamped.toonThreshold = std::clamp(clamped.toonThreshold, 0.0f, 1.0f);
     clamped.toonShadowStrength = std::clamp(clamped.toonShadowStrength, 0.0f, 1.0f);
     clamped.rimLightStrength = std::clamp(clamped.rimLightStrength, 0.0f, 4.0f);
+    clamped.faceShadowSoftness = std::clamp(
+        clamped.faceShadowSoftness,
+        MinimumFaceShadowSoftness,
+        MaximumFaceShadowSoftness);
+    NormalizeFaceFrame(clamped);
     clamped.outlineThickness = ClampOutlineThickness(clamped.outlineThickness);
     clamped.baseColor.x = std::clamp(clamped.baseColor.x, 0.0f, 1.0f);
     clamped.baseColor.y = std::clamp(clamped.baseColor.y, 0.0f, 1.0f);

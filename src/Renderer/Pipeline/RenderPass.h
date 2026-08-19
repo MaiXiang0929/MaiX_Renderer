@@ -39,6 +39,7 @@ struct RenderFrameData
     cy::Matrix4f view;
     cy::Matrix4f lightVP;
     LightId shadowLightId = InvalidLightId;
+    LightId keyLightId = InvalidLightId;
 
     cy::Matrix4f reflectionView;
 

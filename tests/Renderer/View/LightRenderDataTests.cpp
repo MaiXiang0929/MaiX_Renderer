@@ -37,13 +37,15 @@ void TestViewSpacePacking()
     const cy::Matrix4f view = cy::Matrix4f::Translation(
         cy::Vec3f(-1.0f, -2.0f, -3.0f));
     const LightUploadData upload = BuildLightUploadData(
-        lights, view, InvalidLightId);
+        lights, view, InvalidLightId, InvalidLightId);
     const GpuLightData& gpu = upload.lights[0];
 
     Require(upload.sourceLightCount == 1 && upload.lightCount == 1,
         "One valid light should be uploaded.");
     Require(upload.shadowLightIndex == -1,
         "A non-shadow light must not be selected for the shadow map.");
+    Require(upload.keyLightIndex == -1,
+        "No key light should be selected without an explicit id.");
     Require(NearlyEqual(gpu.positionAndType[0], 3.0f) &&
         NearlyEqual(gpu.positionAndType[1], 3.0f) &&
         NearlyEqual(gpu.positionAndType[2], 3.0f),
@@ -64,6 +66,7 @@ void TestSpotAnglesAndShadowSelection()
 {
     constexpr float Pi = 3.14159265358979323846f;
     LightSceneProxy fill;
+    fill.id = 5;
     fill.castsShadow = false;
 
     LightSceneProxy spot;
@@ -79,12 +82,14 @@ void TestSpotAnglesAndShadowSelection()
 
     const std::vector<LightSceneProxy> lights{ fill, spot, secondShadow };
     const LightUploadData upload = BuildLightUploadData(
-        lights, cy::Matrix4f::Identity(), spot.id);
+        lights, cy::Matrix4f::Identity(), spot.id, fill.id);
 
     Require(upload.sourceLightCount == 3 && upload.lightCount == 3,
         "All light snapshots should be uploaded.");
     Require(upload.shadowLightIndex == 1,
         "The light matching shadowLightId should own the shadow map.");
+    Require(upload.keyLightIndex == 0,
+        "Key light selection must not require shadow casting.");
     Require(NearlyEqual(
         upload.lights[1].spotAnglesAndShadow[0],
         std::cos(20.0f * Pi / 180.0f)),
@@ -111,7 +116,7 @@ void TestDirectionalPacking()
     const cy::Matrix4f view = cy::Matrix4f::RotationZ(
         3.14159265358979323846f * 0.5f);
     const LightUploadData upload = BuildLightUploadData(
-        lights, view, directional.id);
+        lights, view, directional.id, directional.id);
 
     Require(NearlyEqual(upload.lights[0].positionAndType[3], 0.0f),
         "Directional light type should be packed as 0.");
@@ -120,6 +125,8 @@ void TestDirectionalPacking()
         "Directional light direction should be transformed into view space.");
     Require(upload.shadowLightIndex == 0,
         "Directional lights may reference a compatible 2D shadow map.");
+    Require(upload.keyLightIndex == 0,
+        "One light may be both the key light and shadow caster.");
 }
 
 void TestDeterministicTruncation()
@@ -127,12 +134,16 @@ void TestDeterministicTruncation()
     std::vector<LightSceneProxy> lights(MaxForwardLights + 3);
     for (std::size_t index = 0; index < lights.size(); ++index)
     {
+        lights[index].id = static_cast<LightId>(index + 1);
         lights[index].position.x = static_cast<float>(index);
         lights[index].castsShadow = index == MaxForwardLights + 1;
     }
 
     const LightUploadData upload = BuildLightUploadData(
-        lights, cy::Matrix4f::Identity(), lights[MaxForwardLights + 1].id);
+        lights,
+        cy::Matrix4f::Identity(),
+        lights[MaxForwardLights + 1].id,
+        lights[MaxForwardLights + 1].id);
 
     Require(upload.sourceLightCount == MaxForwardLights + 3,
         "Source count should include lights beyond the GPU limit.");
@@ -140,6 +151,8 @@ void TestDeterministicTruncation()
         "GPU light data should truncate at MaxForwardLights.");
     Require(upload.shadowLightIndex == -1,
         "A truncated shadow caster cannot own the uploaded shadow map.");
+    Require(upload.keyLightIndex == -1,
+        "A truncated key light cannot drive Face Shadow.");
     Require(NearlyEqual(
         upload.lights[MaxForwardLights - 1].positionAndType[0],
         static_cast<float>(MaxForwardLights - 1)),
