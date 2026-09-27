@@ -57,6 +57,7 @@ set(SOURCES
     src/Editor/EditableModel.cpp
     src/Editor/EditableModelRenderer.cpp
     src/Editor/EditorViewportController.cpp
+    src/Editor/EditorWorkspace.cpp
     src/Editor/SceneHierarchyPanel.cpp
     src/Editor/InspectorPanel.cpp
     src/Editor/ViewportPicking.cpp
@@ -120,7 +121,7 @@ set(SOURCES
     # ufbx
     ThirdParty/ufbx/ufbx.c
 
-    # Dear ImGui core and GLFW/OpenGL backend
+    # Dear ImGui v1.91.9b-docking（含 GLFW/OpenGL 后端，支持编辑器停靠布局）
     ThirdParty/imgui/imgui.cpp
     ThirdParty/imgui/imgui_draw.cpp
     ThirdParty/imgui/imgui_tables.cpp

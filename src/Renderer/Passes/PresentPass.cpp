@@ -9,6 +9,17 @@ bool PresentPass::Init()
     return ReloadShaders();
 }
 
+bool PresentPass::Resize(unsigned int width, unsigned int height)
+{
+    FramebufferSpecification specification;
+    specification.width = static_cast<int>(width);
+    specification.height = static_cast<int>(height);
+    specification.colorFormat = FramebufferColorFormat::RGBA8;
+    specification.depthStencilEnabled = false;
+    specification.mipmapsEnabled = false;
+    return m_Framebuffer.Init(specification);
+}
+
 bool PresentPass::ReloadShaders()
 {
     return m_Shader.Load(
@@ -18,12 +29,8 @@ bool PresentPass::ReloadShaders()
 
 void PresentPass::Execute(RenderPassContext& context)
 {
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(
-        0,
-        0,
-        static_cast<GLsizei>(context.frame.viewportWidth),
-        static_cast<GLsizei>(context.frame.viewportHeight));
+    // 最终颜色由 PresentPass 持有；ImGui 仅在同一帧读取纹理，不管理其生命周期。
+    m_Framebuffer.Bind();
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -39,4 +46,5 @@ void PresentPass::Execute(RenderPassContext& context)
     glBindTexture(GL_TEXTURE_2D, context.editorOverlayTexture);
     m_Shader.SetInt("editorOverlayTexture", 1);
     context.presentMesh.Draw();
+    m_Framebuffer.Unbind();
 }

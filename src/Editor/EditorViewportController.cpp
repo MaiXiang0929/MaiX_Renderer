@@ -10,6 +10,7 @@
 #include "Editor/EditableLight.h"
 #include "Editor/EditableModel.h"
 #include "Editor/ViewportPicking.h"
+#include "Editor/EditorWorkspace.h"
 #include "Renderer/Core/Renderer.h"
 
 void EditorViewportController::SetButtonState(
@@ -129,10 +130,7 @@ void EditorViewportController::Draw(
     EditableModel& model,
     std::vector<EditableLight>& lights,
     Renderer& renderer,
-    unsigned int framebufferWidth,
-    unsigned int framebufferHeight,
-    int windowWidth,
-    int windowHeight)
+    const EditorViewportRegion& viewport)
 {
     bool transformChanged = false;
     EditableLight* selectedLight = selection.type == EditorSelectionType::Light
@@ -145,12 +143,12 @@ void EditorViewportController::Draw(
     const bool modelSelected = selection.IsModelSelected();
 
     ImGuizmo::SetOrthographic(!camera.IsPerspective());
-    ImGuizmo::SetDrawlist(ImGui::GetBackgroundDrawList());
+    ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
     ImGuizmo::SetRect(
-        0.0f,
-        0.0f,
-        static_cast<float>(windowWidth),
-        static_cast<float>(windowHeight));
+        viewport.min.x,
+        viewport.min.y,
+        viewport.size.x,
+        viewport.size.y);
 
     const bool lightHasPosition = selectedLight &&
         selectedLight->proxy.type != LightType::Directional;
@@ -192,17 +190,21 @@ void EditorViewportController::Draw(
     if (m_PendingSelection)
     {
         if (!ImGuizmo::IsOver() && !ImGuizmo::IsUsing() &&
-            !ImGui::GetIO().WantCaptureMouse && windowWidth > 0 && windowHeight > 0)
+            viewport.Contains(m_SelectionX, m_SelectionY) &&
+            viewport.pixelWidth > 0 && viewport.pixelHeight > 0)
         {
+            // GLFW 鼠标坐标属于窗口；先减去视口图像左上角，再换算到 GPU 像素。
             const float framebufferX = static_cast<float>(
-                m_SelectionX * framebufferWidth / windowWidth);
+                (m_SelectionX - viewport.min.x) *
+                viewport.pixelWidth / viewport.size.x);
             const float framebufferY = static_cast<float>(
-                m_SelectionY * framebufferHeight / windowHeight);
+                (m_SelectionY - viewport.min.y) *
+                viewport.pixelHeight / viewport.size.y);
             const EditorPickResult pick = PickEditorObject(
                 framebufferX,
                 framebufferY,
-                static_cast<float>(framebufferWidth),
-                static_cast<float>(framebufferHeight),
+                static_cast<float>(viewport.pixelWidth),
+                static_cast<float>(viewport.pixelHeight),
                 camera.GetProjectionMatrix(),
                 camera.GetViewMatrix(),
                 model,

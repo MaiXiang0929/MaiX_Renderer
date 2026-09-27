@@ -486,13 +486,15 @@ void Renderer::LogMainViewStatsIfChanged(const RenderView& view)
         << std::endl;
 }
 
-void Renderer::ReloadShaders()
+bool Renderer::ReloadShaders()
 {
-    if (m_RenderPipeline.ReloadShaders())
+    const bool loaded = m_RenderPipeline.ReloadShaders();
+    if (loaded)
         std::cout << "[Renderer] Shaders reloaded successfully!" << std::endl;
     else
         std::cerr << "[Renderer] One or more shaders failed to reload."
                   << std::endl;
+    return loaded;
 }
 
 void Renderer::SetTessellationLevel(float level)

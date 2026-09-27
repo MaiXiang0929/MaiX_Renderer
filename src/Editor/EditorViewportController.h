@@ -12,6 +12,7 @@ class Camera;
 struct EditableLight;
 struct EditableModel;
 class Renderer;
+struct EditorViewportRegion;
 
 enum class EditorPointerButton
 {
@@ -48,6 +49,7 @@ public:
         const std::vector<EditableLight>& lights) const;
 
     bool IsLeftDown() const { return m_LeftDown; }
+    bool HasPointerButtonDown() const { return m_LeftDown || m_MiddleDown || m_RightDown; }
     ImGuizmo::OPERATION GetOperation() const { return m_Operation; }
     ImGuizmo::MODE GetMode() const { return m_Mode; }
 
@@ -57,10 +59,7 @@ public:
         EditableModel& model,
         std::vector<EditableLight>& lights,
         Renderer& renderer,
-        unsigned int framebufferWidth,
-        unsigned int framebufferHeight,
-        int windowWidth,
-        int windowHeight);
+        const EditorViewportRegion& viewport);
 
 private:
     bool m_LeftDown = false;

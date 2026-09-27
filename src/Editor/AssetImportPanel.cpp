@@ -75,21 +75,6 @@ void AssetImportPanel::Update()
 
 void AssetImportPanel::Draw(void* nativeWindowHandle)
 {
-    if (ImGui::BeginMainMenuBar())
-    {
-        if (ImGui::BeginMenu("File"))
-        {
-            const bool canImport = m_Status != Status::Parsing &&
-                m_Status != Status::AwaitingCommit;
-            if (ImGui::MenuItem("Import FBX...", nullptr, false, canImport))
-                SelectModel(nativeWindowHandle);
-            if (ImGui::MenuItem("Asset Import", nullptr, m_ShowWindow))
-                m_ShowWindow = true;
-            ImGui::EndMenu();
-        }
-        ImGui::EndMainMenuBar();
-    }
-
     if (!m_ShowWindow)
         return;
 
@@ -135,6 +120,24 @@ void AssetImportPanel::Draw(void* nativeWindowHandle)
     }
 
     ImGui::End();
+}
+
+void AssetImportPanel::DrawFileMenuItems(void* nativeWindowHandle)
+{
+    const bool canImport = m_Status != Status::Parsing &&
+        m_Status != Status::AwaitingCommit;
+    if (ImGui::MenuItem("Import FBX...", nullptr, false, canImport))
+        OpenImportDialog(nativeWindowHandle);
+    if (ImGui::MenuItem("Asset Import"))
+        m_ShowWindow = true;
+}
+
+void AssetImportPanel::OpenImportDialog(void* nativeWindowHandle)
+{
+    if (m_Status == Status::Parsing || m_Status == Status::AwaitingCommit)
+        return;
+    m_ShowWindow = true;
+    SelectModel(nativeWindowHandle);
 }
 
 std::optional<AssetImport::ModelImportResult>
