@@ -15,7 +15,7 @@
 
 ## 操作与验收
 
-1. 启动 `out/build/windows-ninja-debug/OpenGL_Project.exe`。默认应出现左侧上方 Viewport、左下方共用标签区的 Console 和 Content Browser，以及右侧并排且占满高度的 Scene 和 Inspector。
+1. 启动 `out/build/windows-ninja-debug/OpenGL_Project.exe`，确认主窗口标题为 `MaiX Engine`。默认应出现左侧上方 Viewport、左下方共用标签区的 Console 和 Content Browser，以及右侧并排且占满高度的 Scene 和 Inspector。
 2. 在 `View` 菜单中打开 Material Editor 或 Renderer Statistics；拖动面板后重启，检查布局恢复。选择 `Reset Layout` 检查默认布局恢复。
 3. 在视口内按 `Alt + 左键/中键/右键` 导航，点击模型或灯光并用 `W/E/R` 与 Gizmo 调整；在其他面板拖动时，场景相机不应移动。
 4. 改变窗口和停靠面板尺寸，检查图像比例、拾取位置与 Gizmo 重合；检查 Bloom、Tone Mapping 和灯光 Gizmo 的显示。
