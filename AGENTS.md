@@ -136,6 +136,7 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 - [x] 编辑器视口已接入相机 Orbit/Pan/Dolly、模型/灯光互斥拾取、ImGuizmo Transform 与选中对象聚焦
 - [x] 最小 Scene Window / Inspector 已接入共享选择状态、模型 Transform 与类型相关灯光参数
 - [x] CMake 构建时清理并复制最新 assets
+- [x] 默认场景 `teapot.obj` 与当前 VS2022 构建所需 `glfw3.lib` 已纳入 Git 跟踪，避免新克隆缺少运行或链接输入
 - [x] CMake 配置、编译、链接与 13 项测试通过；Material Lab、默认/Instancing/Tessellation 路径及全部 Shader 初始化检查完成
 - [x] 根目录 README 已按项目简介、核心能力、渲染架构、快速开始、编辑器操作与延伸文档重组，运行示例使用可替换的外部资产路径
 
