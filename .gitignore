@@ -505,3 +505,7 @@ Testing/
 !assets/shaders/debug/
 !assets/shaders/debug/*.vert
 !assets/shaders/debug/*.frag
+
+# 默认场景模型和当前 CMake 链接使用的 GLFW 库属于项目输入文件。
+!/assets/models/teapot.obj
+!/ThirdParty/glfw/lib-vc2022/glfw3.lib
