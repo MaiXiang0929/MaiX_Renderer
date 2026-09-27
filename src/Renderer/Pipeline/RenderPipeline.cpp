@@ -168,6 +168,13 @@ bool RenderPipeline::EnsureRenderTargetExtents(
         return false;
     resized |= !postProcessMatches;
 
+    const bool presentMatches =
+        m_PresentPass.GetTargetWidth() == static_cast<int>(viewportWidth) &&
+        m_PresentPass.GetTargetHeight() == static_cast<int>(viewportHeight);
+    if (!presentMatches && !m_PresentPass.Resize(viewportWidth, viewportHeight))
+        return false;
+    resized |= !presentMatches;
+
     const RenderTargetExtent ssaoExtent =
         CalculateSsaoTargetExtent(viewportWidth, viewportHeight);
     const bool ssaoMatches =

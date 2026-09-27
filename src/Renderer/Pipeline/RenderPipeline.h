@@ -32,6 +32,7 @@ public:
     bool Init();
     bool ReloadShaders();
     void Execute(RenderPassContext& context);
+    GLuint GetFinalColorTexture() const { return m_PresentPass.GetColorTexture(); }
 
     const std::vector<RenderPass*>& GetPasses() const
     {

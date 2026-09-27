@@ -21,6 +21,8 @@ public:
     // Polls CPU parsing without blocking. This does not call ImGui or OpenGL.
     void Update();
     void Draw(void* nativeWindowHandle = nullptr);
+    void DrawFileMenuItems(void* nativeWindowHandle);
+    void OpenImportDialog(void* nativeWindowHandle);
 
     std::optional<AssetImport::ModelImportResult> TakeCompletedImport();
     void ReportCommitSuccess(
@@ -43,7 +45,7 @@ private:
     const char* GetStatusLabel() const;
 
     Status m_Status = Status::Idle;
-    bool m_ShowWindow = true;
+    bool m_ShowWindow = false;
     std::filesystem::path m_SourcePath;
     std::future<AssetImport::ModelImportResult> m_ImportFuture;
     std::optional<AssetImport::ModelImportResult> m_CompletedImport;

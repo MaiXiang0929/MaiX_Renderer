@@ -91,7 +91,7 @@ RenderView
 
 CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负责顶点变换、三角形光栅化、深度测试、纹理采样、BRDF 光照和最终像素输出。当前每个 `RenderItem` 在 Pass 内独立计算 `model`、`MV`、`MVP` 与 `lightMVP`，为后续裁剪、排序和批处理保留扩展点。
 
-## 4. 当前进度（2026-08）
+## 4. 当前进度（2026-09）
 
 ### 已完成
 
@@ -141,6 +141,7 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 
 ### 部分完成
 
+- [ ] 编辑器已接入 ImGui Docking 默认布局，左下 Console 与 Content Browser 共用标签区，右侧 Scene 与 Inspector 并排；最终画面改为 Viewport 内的 Present 纹理，拾取与 Gizmo 改用视口矩形；构建与启动检查已完成，布局、输入和画面效果待用户视觉验收，见 `docs/editor-docking-layout.md`
 - [ ] RenderPipeline 已具备 Pass 边界，但资源依赖仍主要通过共享 Frame Context 传递
 - [ ] HDR Scene Color、Bloom、SSAO、手动曝光与色调映射已完成；自动曝光尚未实现
 - [ ] 视锥体裁剪已完成包围球粗裁剪，但遮挡裁剪、距离裁剪和更精确的包围体尚未实现
@@ -221,7 +222,7 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 下一次实现前仍遵循“先给方案、确认后执行”的协作流程。建议优先顺序为：
 
 1. 对已通过 `--face-shadow-demo` 绑定目标角色贴图的 Face Shadow 执行用户视觉验收；只修复阻塞展示的轴向、镜像或阈值方向问题，不扩展通用 NPR 系统。
-2. 对已完成的 Scene Window / Inspector 执行 50-60s Editor 展示验收，只修复阻塞工作流的布局、选择同步或参数约束问题。
+2. 对 Docking 工作区、Scene Window / Inspector 执行 50-60s Editor 展示验收，只修复阻塞展示的布局、视口输入、选择同步或参数约束问题。
 3. 为透明材质补充 Masked/Additive 模式前，先明确 Alpha Cutout 阴影、排序和混合策略。
 
 ## 7. 当前技术债与约束

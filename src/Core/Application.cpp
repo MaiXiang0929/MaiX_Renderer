@@ -33,12 +33,14 @@
 #include "Editor/InspectorPanel.h"
 #include "Editor/MaterialEditorPanel.h"
 #include "Editor/SceneHierarchyPanel.h"
+#include "Editor/EditorWorkspace.h"
 
 #include "cyTriMesh.h"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdlib>
 #include <exception>
 #include <filesystem>
 #include <iostream>
@@ -198,6 +200,33 @@ bool Application::Init() {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
+    ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    // 将布局保存在用户目录，避免 Visual Studio 的工作目录改变时丢失停靠状态。
+#if defined(_WIN32)
+    char* localAppData = nullptr;
+    std::size_t localAppDataLength = 0;
+    const bool hasLocalAppData =
+        _dupenv_s(&localAppData, &localAppDataLength, "LOCALAPPDATA") == 0 &&
+        localAppData != nullptr;
+#else
+    const char* localAppData = std::getenv("LOCALAPPDATA");
+    const bool hasLocalAppData = localAppData != nullptr;
+#endif
+    if (hasLocalAppData)
+    {
+        const std::filesystem::path settingsDirectory =
+            std::filesystem::path(localAppData) / "MaiX_Renderer";
+        std::error_code error;
+        std::filesystem::create_directories(settingsDirectory, error);
+        if (!error)
+        {
+            m_ImGuiIniPath = (settingsDirectory / "imgui.ini").string();
+            ImGui::GetIO().IniFilename = m_ImGuiIniPath.c_str();
+        }
+    }
+#if defined(_WIN32)
+    std::free(localAppData);
+#endif
     const bool imguiPlatformInitialized =
         ImGui_ImplGlfw_InitForOpenGL(m_Window, false);
     const bool imguiRendererInitialized =
@@ -217,6 +246,8 @@ bool Application::Init() {
     m_ViewportController = std::make_unique<EditorViewportController>();
     m_SceneHierarchyPanel = std::make_unique<SceneHierarchyPanel>();
     m_InspectorPanel = std::make_unique<InspectorPanel>();
+    m_Workspace = std::make_unique<EditorWorkspace>();
+    m_Workspace->AddLog("MaiX Renderer initialized.");
 
     // 主颜色目标和显示平面都跟随窗口 framebuffer 的像素宽高比。
     const float framebufferAspect =
@@ -1108,15 +1139,32 @@ void Application::Update() {
         m_AssetImportPanel->ReportCommitSuccess(
             completedImport->model,
             m_ActiveModelResources.primitives.size());
+        if (m_Workspace)
+            m_Workspace->AddLog("FBX imported: " +
+                completedImport->model.sourcePath.filename().string());
     }
     else
     {
+        if (m_Workspace)
+            m_Workspace->AddLog("FBX import failed: " + error);
         m_AssetImportPanel->ReportCommitFailure(std::move(error));
     }
 }
 
 /// @brief 渲染应用程序
 void Application::Render() {
+    // 先建立 ImGui 布局，取得中央视口的实际像素尺寸，再提交渲染帧。
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+    ImGuizmo::BeginFrame();
+    void* nativeWindowHandle = GetNativeWindowHandle(m_Window);
+    m_Workspace->BeginFrame(*m_AssetImportPanel, nativeWindowHandle);
+    const EditorViewportRegion viewport = m_Workspace->BeginViewport();
+    if (viewport.visible && viewport.pixelHeight > 0)
+        m_Camera.SetAspectRatio(static_cast<float>(viewport.pixelWidth) /
+            static_cast<float>(viewport.pixelHeight));
+
     // 共用矩阵
     cy::Matrix4f projMatrix = m_Camera.GetProjectionMatrix();
     cy::Matrix4f viewMatrix = m_Camera.GetViewMatrix();
@@ -1193,8 +1241,8 @@ void Application::Render() {
 
     // Application 只提交强类型帧数据，不再创建任何 Pass callback。
     RenderFrameData frame;
-    frame.viewportWidth = m_Width;
-    frame.viewportHeight = m_Height;
+    frame.viewportWidth = viewport.pixelWidth;
+    frame.viewportHeight = viewport.pixelHeight;
     frame.projection = projMatrix;
     frame.view = viewMatrix;
     frame.lightVP = lightVP;
@@ -1205,35 +1253,32 @@ void Application::Render() {
     frame.groundMvp = projMatrix * viewMatrix * groundModel;
     frame.reflectionVP = projMatrix * reflectView;
     frame.cameraWorldPosition = cameraWorldPos;
-    m_Renderer->ExecutePipeline(frame);
+    if (viewport.visible && m_Width > 0 && m_Height > 0)
+        m_Renderer->ExecutePipeline(frame);
 
-    // PresentPass 完成后在默认帧缓冲绘制编辑器 UI，避免污染场景颜色目标。
-    ImGui_ImplOpenGL3_NewFrame();
-    ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();
-    ImGuizmo::BeginFrame();
-    void* nativeWindowHandle = GetNativeWindowHandle(m_Window);
+    // GPU 最终纹理由 Renderer 持有；编辑器在同一帧将其显示到中央面板。
+    m_Workspace->DrawViewportImage(m_Renderer->GetFinalColorTexture());
+    if (viewport.visible)
+        m_ViewportController->Draw(
+            m_Camera, m_EditorSelection, m_ActiveModel,
+            m_EditableLights, *m_Renderer, viewport);
+    m_Workspace->EndViewport();
+
     m_AssetImportPanel->Draw(nativeWindowHandle);
-    m_StatisticsPanel->Draw(*m_Renderer);
-    m_MaterialEditorPanel->Draw(*m_Renderer, nativeWindowHandle);
+    if (m_Workspace->ShowStatistics())
+        m_StatisticsPanel->Draw(*m_Renderer);
+    if (m_Workspace->ShowMaterialEditor())
+        m_MaterialEditorPanel->Draw(*m_Renderer, nativeWindowHandle);
     m_SceneHierarchyPanel->Draw(
         m_EditorSelection, m_ActiveModel, m_EditableLights);
     m_InspectorPanel->Draw(
         m_EditorSelection, m_ActiveModel, m_EditableLights, *m_Renderer);
-    int windowWidth = 0;
-    int windowHeight = 0;
-    glfwGetWindowSize(m_Window, &windowWidth, &windowHeight);
-    m_ViewportController->Draw(
-        m_Camera,
-        m_EditorSelection,
-        m_ActiveModel,
-        m_EditableLights,
-        *m_Renderer,
-        m_Width,
-        m_Height,
-        windowWidth,
-        windowHeight);
+    m_Workspace->DrawBottomPanels(*m_AssetImportPanel, nativeWindowHandle);
     ImGui::Render();
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, static_cast<GLsizei>(m_Width), static_cast<GLsizei>(m_Height));
+    glClearColor(0.09f, 0.09f, 0.09f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
 }
@@ -1243,6 +1288,7 @@ void Application::Shutdown() {
     if (!m_Initialized) return;
 
     m_StatisticsPanel.reset();
+    m_Workspace.reset();
     m_MaterialEditorPanel.reset();
     m_AssetImportPanel.reset();
     m_ViewportController.reset();
@@ -1285,12 +1331,7 @@ void Application::FramebufferSizeCallback(GLFWwindow* window, int width, int hei
         app->m_Width = width;
         app->m_Height = height;
 
-        if (width > 0 && height > 0) {
-            const float aspect =
-                static_cast<float>(width) / static_cast<float>(height);
-            app->m_Camera.SetAspectRatio(aspect);
-        }
-
+        // 相机投影宽高比由中央 Viewport 决定，而不是整个 GLFW 窗口。
         glViewport(0, 0, width, height);
     }
 }
@@ -1304,14 +1345,8 @@ void Application::MouseButtonCallback(
     if (ImGui::GetCurrentContext())
         ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
     Application* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
-    if (!app || !app->m_ViewportController)
+    if (!app || !app->m_ViewportController || !app->m_Workspace)
         return;
-    if (ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureMouse)
-    {
-        app->m_ViewportController->CancelPointerInput();
-        return;
-    }
-
     EditorPointerButton pointerButton;
     if (button == GLFW_MOUSE_BUTTON_LEFT)
         pointerButton = EditorPointerButton::Left;
@@ -1325,6 +1360,11 @@ void Application::MouseButtonCallback(
     double x = 0.0;
     double y = 0.0;
     glfwGetCursorPos(window, &x, &y);
+    const EditorViewportRegion& viewport = app->m_Workspace->GetViewportRegion();
+    // ImGui 会捕获 Viewport 内的鼠标；按图像矩形和窗口悬停状态区分场景输入。
+    if (action == GLFW_PRESS &&
+        (!viewport.hovered || !viewport.Contains(x, y) || ImGuizmo::IsUsing()))
+        return;
     const bool altDown =
         (mods & GLFW_MOD_ALT) != 0 ||
         glfwGetKey(window, GLFW_KEY_LEFT_ALT) == GLFW_PRESS ||
@@ -1341,7 +1381,7 @@ void Application::CursorPositionCallback(
     if (ImGui::GetCurrentContext())
         ImGui_ImplGlfw_CursorPosCallback(window, xpos, ypos);
     Application* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
-    if (!app || !app->m_ViewportController)
+    if (!app || !app->m_ViewportController || !app->m_Workspace)
         return;
 
     const bool altDown =
@@ -1350,22 +1390,21 @@ void Application::CursorPositionCallback(
     const bool ctrlDown =
         glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
         glfwGetKey(window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS;
-    const bool mouseCaptured =
-        ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureMouse;
-    if (mouseCaptured)
-        app->m_ViewportController->CancelPointerInput();
+    const EditorViewportRegion& viewport = app->m_Workspace->GetViewportRegion();
+    const bool scenePointerActive = app->m_ViewportController->HasPointerButtonDown();
+    const bool inViewport = viewport.hovered && viewport.Contains(xpos, ypos);
     float deltaX = 0.0f;
     float deltaY = 0.0f;
     app->m_ViewportController->ProcessPointerMove(
         xpos,
         ypos,
-        altDown && !mouseCaptured,
-        static_cast<float>(app->m_Height),
+        altDown && (inViewport || scenePointerActive),
+        viewport.size.y,
         app->m_Camera,
         &deltaX,
         &deltaY);
 
-    if (mouseCaptured)
+    if (!inViewport && !scenePointerActive)
         return;
     if (!altDown && ctrlDown && app->m_ViewportController->IsLeftDown())
     {
@@ -1396,9 +1435,13 @@ void Application::ScrollCallback(
     if (ImGui::GetCurrentContext())
         ImGui_ImplGlfw_ScrollCallback(window, xoffset, yoffset);
     Application* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
-    if (!app || !app->m_ViewportController)
+    if (!app || !app->m_ViewportController || !app->m_Workspace)
         return;
-    if (ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureMouse)
+    double x = 0.0;
+    double y = 0.0;
+    glfwGetCursorPos(window, &x, &y);
+    const EditorViewportRegion& viewport = app->m_Workspace->GetViewportRegion();
+    if (!viewport.hovered || !viewport.Contains(x, y))
         return;
     app->m_ViewportController->ProcessScroll(
         static_cast<float>(yoffset), app->m_Camera);
@@ -1420,7 +1463,11 @@ void Application::KeyCallback(GLFWwindow* window, int key, int scancode, int act
         glfwSetWindowShouldClose(window, true);
         return;
     }
-    if (ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureKeyboard)
+    if (ImGui::GetCurrentContext() && ImGui::GetIO().WantTextInput)
+        return;
+    const bool viewportFocused = app->m_Workspace &&
+        app->m_Workspace->GetViewportRegion().focused;
+    if (!viewportFocused && key != GLFW_KEY_F6)
         return;
     if (action == GLFW_PRESS && app->m_ViewportController)
     {
@@ -1441,7 +1488,11 @@ void Application::KeyCallback(GLFWwindow* window, int key, int scancode, int act
     }
     // 着色器重载（F6）
     if (key == GLFW_KEY_F6 && action == GLFW_PRESS) {
-		app->m_Renderer->ReloadShaders();
+        const bool loaded = app->m_Renderer->ReloadShaders();
+        if (app->m_Workspace)
+            app->m_Workspace->AddLog(loaded
+                ? "Shaders reloaded successfully."
+                : "Shader reload failed. See terminal for compiler details.");
     }
 
     // 投影模式切换（P）

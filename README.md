@@ -110,6 +110,8 @@ ctest --test-dir out/build/windows-ninja-debug --output-on-failure
 
 ## 编辑器操作
 
+默认工作区左侧上方是 Viewport，左下方由 Console 与 Content Browser 共用标签区，右侧是并排的 Scene 和 Inspector。`View` 菜单可打开 Material Editor、Renderer Statistics，或用 `Reset Layout` 恢复默认布局。下列场景快捷键在 Viewport 获得焦点时生效；鼠标场景操作从视口图像内开始。
+
 | 操作 | 用途 |
 | --- | --- |
 | 鼠标左键点选 | 选择模型或可见灯光 Gizmo |
@@ -154,7 +156,7 @@ ThirdParty/              项目使用的第三方依赖
 | Toon、Face Shadow、Outline | [Toon Shading](docs/npr-toon.md) · [Face Shadow](docs/npr-face-shadow.md) · [Outline](docs/npr-outline.md) |
 | 透明渲染 | [Translucency Pass](docs/translucency-pass.md) |
 | HDR、Bloom、SSAO | [HDR and Tone Mapping](docs/hdr-tone-mapping.md) · [Bloom and Post Process](docs/bloom-postprocess.md) · [SSAO](docs/ssao.md) |
-| 编辑器工作流 | [Scene Window and Inspector](docs/editor-scene-inspector.md) · [Viewport Transform Controls](docs/viewport-transform-controls.md) |
+| 编辑器工作流 | [Docking Layout](docs/editor-docking-layout.md) · [Scene Window and Inspector](docs/editor-scene-inspector.md) · [Viewport Transform Controls](docs/viewport-transform-controls.md) |
 | 性能分析 | [GPU Pass Profiling](docs/gpu-pass-profiling.md) · [RenderDoc Baseline](docs/renderdoc-baseline.md) |
 
 ## 许可证与资产署名
