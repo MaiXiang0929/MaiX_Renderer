@@ -37,7 +37,7 @@ or a deferred/G-buffer path and is outside this implementation.
 
 ## Validation
 
-Launch `OpenGL_Project.exe --material-lab`, open `Renderer Statistics`, and
+Launch `MaiX_Renderer.exe --material-lab`, open `Renderer Statistics`, and
 enable SSAO. An enabled frame should report three SSAO fullscreen draws and a
 non-zero SSAO GPU time after timer-query results become available. Check the
 material contact areas and concavities, background pixels, silhouette halos,

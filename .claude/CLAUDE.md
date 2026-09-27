@@ -1,4 +1,4 @@
-# OpenGL_Project
+# MaiX_Renderer
 
 一个基于现代 OpenGL (Core Profile) 的 Interactive Computer Graphics 练习项目。
 

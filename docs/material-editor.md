@@ -14,6 +14,6 @@ The GPU path is unchanged: on the next draw, each pass binds the updated
 scalar uniforms and existing texture slots. Texture replacement, material
 instances, serialization, and undo/redo remain future milestones.
 
-Run `OpenGL_Project.exe --material-lab` to inspect the four PBR materials and
+Run `MaiX_Renderer.exe --material-lab` to inspect the four PBR materials and
 change Base Color, Metallic, Roughness, AO, Normal Scale, Opacity, or Blend
 Mode at runtime.

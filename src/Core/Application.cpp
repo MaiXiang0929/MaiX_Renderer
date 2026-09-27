@@ -153,8 +153,8 @@ bool Application::Init() {
 	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);    // MacOS 需要设置前向兼容
 #endif
 
-    // 创建窗口 (默认 1920x1080)
-    m_Window = glfwCreateWindow(m_Width, m_Height, "OpenGL Engine", nullptr, nullptr);
+    // 创建编辑器主窗口，并使用对外展示的引擎名称作为标题。
+    m_Window = glfwCreateWindow(m_Width, m_Height, "MaiX Engine", nullptr, nullptr);
     if (!m_Window) {
         std::cerr << "[Error] Failed to create GLFW window" << std::endl;
         glfwTerminate();

@@ -68,10 +68,10 @@ The Lumine target asset is loaded from its external source folder rather than
 copied into this repository. Keep the attribution in the asset's `README.txt`
 when recording or distributing the demo.
 
-Run from the directory containing `OpenGL_Project.exe`:
+Run from the directory containing `MaiX_Renderer.exe`:
 
 ```powershell
-.\OpenGL_Project.exe --face-shadow-demo `
+.\MaiX_Renderer.exe --face-shadow-demo `
   "D:\Desktop\Unity URP shader\重逢-荧\Lumine FBX.fbx" `
   "D:\Desktop\Unity URP shader\重逢-荧\textures\Avatar_Girl_Tex_FaceLightmap.png" `
   "Lumine Face"

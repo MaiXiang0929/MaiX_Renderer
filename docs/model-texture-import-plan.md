@@ -260,7 +260,7 @@ GPU 继续负责顶点变换、光栅化、深度、材质采样和光照。导�
 使用以下可执行文件：
 
 ```text
-D:\Code\Projects\OpenGL_Project\out\build\windows-ninja-debug\OpenGL_Project.exe
+D:\Code\Projects\MaiX_Renderer\out\build\windows-ninja-debug\MaiX_Renderer.exe
 ```
 
 目标模型：
@@ -285,7 +285,7 @@ D:\Desktop\Unity URP shader\重逢-荧\Lumine FBX.fbx
 
 #### A. 启动与初始状态
 
-- [ ] 启动后出现 `OpenGL Engine` 窗口，没有立即退出或黑屏后崩溃。
+- [ ] 启动后出现 `MaiX Engine` 窗口，没有立即退出或黑屏后崩溃。
 - [ ] 初始茶壶场景可以显示，`Asset Import` 面板状态为 `Idle`。
 - [ ] `File` 菜单中存在 `Import FBX...`，按钮可点击。
 - [ ] 拖动窗口或操作相机时程序保持响应。
