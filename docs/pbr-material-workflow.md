@@ -61,7 +61,7 @@ geometry share the same PBR fragment shader.
 Run the opt-in validation scene with:
 
 ```text
-OpenGL_Project.exe --material-lab
+MaiX_Renderer.exe --material-lab
 ```
 
 It creates four materials on one shared teapot Mesh in a 2x2 layout:

@@ -1,4 +1,4 @@
-# MaiX Renderer：现代实时光栅化渲染器路线图
+# MaiX_Renderer：现代实时光栅化渲染器路线图
 
 ## 1. 项目定位
 
@@ -141,7 +141,7 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 
 ### 部分完成
 
-- [ ] 编辑器主窗口标题为 `MaiX Engine`，已接入 ImGui Docking 默认布局，左下 Console 与 Content Browser 共用标签区，右侧 Scene 与 Inspector 并排；最终画面改为 Viewport 内的 Present 纹理，拾取与 Gizmo 改用视口矩形；构建与启动检查已完成，布局、输入和画面效果待用户视觉验收，见 `docs/editor-docking-layout.md`
+- [ ] CMake 项目与可执行文件命名为 `MaiX_Renderer`，编辑器主窗口标题为 `MaiX Engine`；已接入 ImGui Docking 默认布局，左下 Console 与 Content Browser 共用标签区，右侧 Scene 与 Inspector 并排；更名后重新配置、构建、启动与 13 项测试通过；最终画面改为 Viewport 内的 Present 纹理，拾取与 Gizmo 改用视口矩形；布局、输入和画面效果待用户视觉验收，见 `docs/editor-docking-layout.md`
 - [ ] RenderPipeline 已具备 Pass 边界，但资源依赖仍主要通过共享 Frame Context 传递
 - [ ] HDR Scene Color、Bloom、SSAO、手动曝光与色调映射已完成；自动曝光尚未实现
 - [ ] 视锥体裁剪已完成包围球粗裁剪，但遮挡裁剪、距离裁剪和更精确的包围体尚未实现

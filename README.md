@@ -1,6 +1,6 @@
-# MaiX Renderer
+# MaiX_Renderer
 
-MaiX Renderer 是一个基于 C++17 与 OpenGL 4.0 Core Profile 的实时光栅化渲染器，面向渲染技术美术、Shader 开发与图形编程实践。项目围绕可调节的 PBR/NPR 材质、多 Pass 渲染管线和编辑器工作流展开，提供从场景提交到最终画面显示的完整实现。
+MaiX_Renderer 是一个基于 C++17 与 OpenGL 4.0 Core Profile 的实时光栅化渲染器，面向渲染技术美术、Shader 开发与图形编程实践。项目围绕可调节的 PBR/NPR 材质、多 Pass 渲染管线和编辑器工作流展开，提供从场景提交到最终画面显示的完整实现。
 
 **技术栈：** C++17 · OpenGL 4.0 · GLSL · CMake · Dear ImGui · ImGuizmo
 
@@ -70,7 +70,7 @@ GLFW、GLAD、ufbx、cyCodeBase、LodePNG、Dear ImGui 和 ImGuizmo 等依赖位
 ```powershell
 cmake --preset windows-ninja-debug
 cmake --build --preset windows-ninja-debug
-.\out\build\windows-ninja-debug\OpenGL_Project.exe
+.\out\build\windows-ninja-debug\MaiX_Renderer.exe
 ```
 
 构建产物位于 `out/build/windows-ninja-debug/`；构建时会将最新的 `assets/` 复制到可执行文件目录。
@@ -81,22 +81,22 @@ cmake --build --preset windows-ninja-debug
 
 ```powershell
 # PBR 材质场景
-.\out\build\windows-ninja-debug\OpenGL_Project.exe --material-lab
+.\out\build\windows-ninja-debug\MaiX_Renderer.exe --material-lab
 
 # 透明材质场景
-.\out\build\windows-ninja-debug\OpenGL_Project.exe --translucency-test
+.\out\build\windows-ninja-debug\MaiX_Renderer.exe --translucency-test
 
 # N×N 共享资源 Instancing 场景，N 为 1–32
-.\out\build\windows-ninja-debug\OpenGL_Project.exe --instance-grid 16
+.\out\build\windows-ninja-debug\MaiX_Renderer.exe --instance-grid 16
 
 # 查看完整命令行参数
-.\out\build\windows-ninja-debug\OpenGL_Project.exe --help
+.\out\build\windows-ninja-debug\MaiX_Renderer.exe --help
 ```
 
 Face Shadow 入口需要用户提供 FBX、连续变化的面部阴影贴图，以及 FBX 中的精确材质名称；外部角色资产不包含在仓库中：
 
 ```powershell
-.\out\build\windows-ninja-debug\OpenGL_Project.exe --face-shadow-demo `
+.\out\build\windows-ninja-debug\MaiX_Renderer.exe --face-shadow-demo `
   "<角色模型.fbx>" "<面部阴影贴图.png>" "<材质名称>"
 ```
 

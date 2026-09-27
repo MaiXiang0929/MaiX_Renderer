@@ -6,8 +6,8 @@ The benchmark is disabled by default. It can be enabled without changing the
 normal material-map positional arguments:
 
 ```text
-OpenGL_Project.exe --instance-grid 16
-OpenGL_Project.exe normal.png displacement.png --instance-grid 8
+MaiX_Renderer.exe --instance-grid 16
+MaiX_Renderer.exe normal.png displacement.png --instance-grid 8
 ```
 
 `N` is limited to `1..32`. The default scene still submits one opaque teapot.

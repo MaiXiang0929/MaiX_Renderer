@@ -139,7 +139,7 @@ bool ParseApplicationOptions(
 const char* GetApplicationUsage()
 {
     return
-        "Usage: OpenGL_Project [normal.png] [displacement.png] "
+        "Usage: MaiX_Renderer [normal.png] [displacement.png] "
         "[--instance-grid N] [--material-lab] [--translucency-test] "
         "[--face-shadow-demo model.fbx face-map.png material]\n"
         "  --instance-grid N  Submit an N x N shared-resource benchmark grid "
