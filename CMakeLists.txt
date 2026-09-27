@@ -214,7 +214,7 @@ target_link_libraries(
 # Debug 配置下排除 Release CRT，解决与预编译 glfw3.lib 的 MSVCRT/MSVCRTD 混用冲突
 # 该冲突会导致 Run-Time Check Failure #2（栈损坏）
 target_link_options(${PROJECT_NAME} PRIVATE
-    $<$<CONFIG:Debug>:/NODEFAULTLIB:MSVCRT>
+    $<$<CONFIG:Debug>:LINKER:/NODEFAULTLIB:MSVCRT>
 )
 
 # ============================
