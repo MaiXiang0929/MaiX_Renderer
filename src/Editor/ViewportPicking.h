@@ -13,6 +13,7 @@ struct EditableModel;
 struct EditorPickResult
 {
     EditorSelectionType type = EditorSelectionType::None;
+    ModelId modelId;
     unsigned int lightId = ~0u;
 };
 
@@ -58,5 +59,5 @@ EditorPickResult PickEditorObject(
     float framebufferHeight,
     const cy::Matrix4f& projection,
     const cy::Matrix4f& view,
-    const EditableModel& model,
+    const std::vector<EditableModel>& models,
     const std::vector<EditableLight>& lights);

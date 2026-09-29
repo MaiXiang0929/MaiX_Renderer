@@ -98,15 +98,10 @@ private:
     float m_ModelDiameter   = 0.0f;            ///< 模型包围盒直径，用于缩放地面
     std::uint32_t m_MainLightId = std::numeric_limits<std::uint32_t>::max();
 
-    struct ModelResourceGroup
-    {
-        std::vector<std::uint32_t> primitives;
-        std::vector<MeshHandle> meshes;
-        std::vector<MaterialHandle> materials;
-    };
-    ModelResourceGroup m_ActiveModelResources;
+    std::vector<EditableModel> m_Models;
+    std::uint64_t m_NextModelId = 1;
+    ModelId m_DefaultModelId;
     EditorSelection m_EditorSelection;
-    EditableModel m_ActiveModel;
     std::vector<EditableLight> m_EditableLights;
 
 private:
@@ -119,9 +114,11 @@ private:
 
     bool CommitImportedModel(
         AssetImport::ImportedModelData& model,
-        std::string& error);
+        std::string& error,
+        ModelId& importedId);
     bool LoadStartupFaceShadowDemo();
-    void DestroyModelResources(ModelResourceGroup& resources);
+    void DestroyModelResources(EditableModel& model);
+    bool RemoveModel(ModelId id);
     EditableLight* FindEditableLight(std::uint32_t id);
     const EditableLight* FindEditableLight(std::uint32_t id) const;
     

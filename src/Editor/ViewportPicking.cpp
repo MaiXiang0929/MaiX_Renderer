@@ -133,7 +133,7 @@ EditorPickResult PickEditorObject(
     float framebufferHeight,
     const cy::Matrix4f& projection,
     const cy::Matrix4f& view,
-    const EditableModel& model,
+    const std::vector<EditableModel>& models,
     const std::vector<EditableLight>& lights)
 {
     EditorPickResult result;
@@ -172,8 +172,17 @@ EditorPickResult PickEditorObject(
         framebufferHeight,
         projection,
         view);
-    float modelDistance = 0.0f;
-    if (HitTestEditableModel(ray, model, modelDistance))
-        result.type = EditorSelectionType::Model;
+    float nearestModelDistance = std::numeric_limits<float>::max();
+    for (const EditableModel& model : models)
+    {
+        float modelDistance = 0.0f;
+        if (HitTestEditableModel(ray, model, modelDistance) &&
+            modelDistance < nearestModelDistance)
+        {
+            result.type = EditorSelectionType::Model;
+            result.modelId = model.id;
+            nearestModelDistance = modelDistance;
+        }
+    }
     return result;
 }

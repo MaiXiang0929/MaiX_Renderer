@@ -136,7 +136,8 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 - [x] 最小 Toon Face Shadow 已接入线性 SDF 纹理、角色局部 Face Forward/Right、左右自动镜像与独立 Key Light；`--face-shadow-demo` 已成功导入目标 Lumine FBX，并将连续 FaceLightmap 以 Linear 数据绑定到 `Lumine Face`；Standard/Instanced/Tessellation 共用 Forward 路径，视觉效果待用户验收
 - [x] Outline Pass 已接入 CPU/GPU 提交统计、GPU Timer Query、Shader Reload 和独立 NPR Shader 资源
 - [x] SSAO 已使用 Forward 可采样深度重建观察空间位置与法线，完成半分辨率 R8 遮蔽/滤波与全分辨率 HDR 合成
-- [x] FBX 静态模型导入已接通多 Mesh、多材质分段、索引绘制、Base Color 纹理、异步 CPU 解析与事务式资源替换
+- [x] FBX 静态模型导入已接通多 Mesh、多材质分段、索引绘制、Base Color 纹理、异步 CPU 解析与事务式资源追加；失败时回滚本次创建的 Primitive/Mesh/Material
+- [x] Scene 已支持多个独立模型及会话内稳定 `ModelId`；导入后自动选中，Scene/Inspector/Gizmo/拾取/聚焦/移除按模型 ID 操作，移除时先注销 Primitive 再销毁 Mesh/Material；同名导入使用 `_001` 等可用后缀，Scene 只显示模型名称；构建、14 项测试及默认/Material Lab/Instancing 启动检查通过，双 FBX 画面与交互待用户验收，见 `docs/multi-model-scene.md`
 - [x] 编辑器视口已接入相机 Orbit/Pan/Dolly、模型/灯光互斥拾取、ImGuizmo Transform 与选中对象聚焦
 - [x] 最小 Scene Window / Inspector 已接入共享选择状态、模型 Transform 与类型相关灯光参数
 - [x] CMake 构建时清理并复制最新 assets
@@ -146,7 +147,7 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 
 ### 部分完成
 
-- [ ] CMake 项目与可执行文件命名为 `MaiX_Renderer`，编辑器主窗口标题为 `MaiX Engine`；已接入 ImGui Docking 默认布局，左下 Console 与 Content Browser 共用标签区，右侧 Scene 与 Inspector 并排；更名后重新配置、构建、启动与 13 项测试通过；最终画面改为 Viewport 内的 Present 纹理，拾取与 Gizmo 改用视口矩形；布局、输入和画面效果待用户视觉验收，见 `docs/editor-docking-layout.md`
+- [ ] CMake 项目与可执行文件命名为 `MaiX_Renderer`，编辑器主窗口标题为 `MaiX Engine`；已接入 ImGui Docking 默认布局，左下 Console 与 Content Browser 共用标签区，右侧 Scene 与 Inspector 并排；更名后重新配置、构建、启动与 14 项测试通过；最终画面改为 Viewport 内的 Present 纹理，拾取与 Gizmo 改用视口矩形；布局、输入和画面效果待用户视觉验收，见 `docs/editor-docking-layout.md`
 - [ ] RenderPipeline 已具备 Pass 边界，但资源依赖仍主要通过共享 Frame Context 传递
 - [ ] HDR Scene Color、Bloom、SSAO、手动曝光与色调映射已完成；自动曝光尚未实现
 - [ ] 视锥体裁剪已完成包围球粗裁剪，但遮挡裁剪、距离裁剪和更精确的包围体尚未实现
@@ -234,6 +235,7 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 
 - OpenGL 资源仍由各 Resource 类直接管理，尚未抽象成跨 API RHI。
 - Renderer 通过只增槽位、不复用 ID 的资源表和强类型 Handle 拥有 Mesh/Material；销毁会拒绝仍被 Primitive 引用的资源，旧 Handle 指向空槽时会被拒绝。Scene Proxy 与 `RenderItem` 仍缓存非 owning 裸指针，视图只供当帧同步使用；空槽复用、generation 校验和更完整的 Primitive/Light 移除边界留待明确需求。
+- `ModelId` 仅标识本次运行中的场景模型，不跨会话持久化；模型导入每次建立独立 GPU 资源，尚无跨模型 Mesh/Material 去重。场景层级、保存/加载与通用 GUID 留待出现明确需求。
 - RenderPass 之间仍通过共享 `RenderPassContext` 和 Pass 之间的直接引用传递视图及纹理资源，资源读写依赖尚未显式声明，后续可引入 Render Graph。
 - 当前裁剪只使用世界空间包围球，非均匀缩放取最大轴形成保守半径；细长物体可能产生误保留，但不会错误剔除。遮挡裁剪与距离裁剪尚未实现。
 - 主视图、反射视图和阴影视图每帧分别遍历场景并重建 `RenderItem` 列表；对象规模扩大后需要评估重复 CPU 遍历、容器填充和包围体变换成本。

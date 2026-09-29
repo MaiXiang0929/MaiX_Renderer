@@ -24,9 +24,9 @@ void SetEditorPanelPosition(float width, float offset)
 }
 }
 
-void SceneHierarchyPanel::Draw(
+ModelId SceneHierarchyPanel::Draw(
     EditorSelection& selection,
-    const EditableModel& model,
+    const std::vector<EditableModel>& models,
     const std::vector<EditableLight>& lights)
 {
     SetEditorPanelPosition(300.0f, 380.0f);
@@ -34,28 +34,34 @@ void SceneHierarchyPanel::Draw(
     if (!ImGui::Begin("Scene"))
     {
         ImGui::End();
-        return;
+        return {};
     }
 
     ImGui::SeparatorText("Objects");
-    if (!model.IsValid())
+    if (models.empty())
     {
         ImGui::TextUnformatted("No model loaded.");
     }
     else
     {
-        const std::string label = model.name.empty()
-            ? "Model"
-            : model.name;
-        const std::string selectableLabel = label + "##ActiveModel";
-        if (ImGui::Selectable(
-                selectableLabel.c_str(), selection.IsModelSelected()))
+        for (const EditableModel& model : models)
         {
-            selection.SelectModel();
+            const std::string label = model.name.empty() ? "Model" : model.name;
+            const std::string selectableLabel =
+                label + "##Model" + std::to_string(model.id.value);
+            if (ImGui::Selectable(
+                    selectableLabel.c_str(), selection.IsModelSelected(model.id)))
+                selection.SelectModel(model.id);
+            ImGui::SameLine();
+            ImGui::TextDisabled("%zu sections", model.sections.size());
         }
-        ImGui::SameLine();
-        ImGui::TextDisabled("%zu sections", model.sections.size());
     }
+
+    ModelId removedModel;
+    if (selection.type == EditorSelectionType::Model &&
+        FindEditableModel(models, selection.modelId) != nullptr &&
+        ImGui::Button("Remove selected model"))
+        removedModel = selection.modelId;
 
     if (ImGui::TreeNodeEx(
             "Lights",
@@ -93,4 +99,5 @@ void SceneHierarchyPanel::Draw(
     }
 
     ImGui::End();
+    return removedModel;
 }

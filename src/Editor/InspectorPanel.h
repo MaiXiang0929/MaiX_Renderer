@@ -14,7 +14,7 @@ class InspectorPanel
 public:
     void Draw(
         EditorSelection& selection,
-        EditableModel& model,
+        std::vector<EditableModel>& models,
         std::vector<EditableLight>& lights,
         Renderer& renderer);
 };

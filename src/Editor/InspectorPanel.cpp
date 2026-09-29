@@ -42,7 +42,7 @@ const char* LightTypeName(LightType type)
 
 void InspectorPanel::Draw(
     EditorSelection& selection,
-    EditableModel& model,
+    std::vector<EditableModel>& models,
     std::vector<EditableLight>& lights,
     Renderer& renderer)
 {
@@ -61,20 +61,28 @@ void InspectorPanel::Draw(
         return;
     }
 
-    if (selection.IsModelSelected())
+    if (selection.type == EditorSelectionType::Model)
     {
-        ImGui::TextUnformatted(model.name.empty() ? "Model" : model.name.c_str());
+        EditableModel* model = FindEditableModel(models, selection.modelId);
+        if (model == nullptr)
+        {
+            selection.Clear();
+            ImGui::TextUnformatted("Selected model is unavailable.");
+            ImGui::End();
+            return;
+        }
+        ImGui::TextUnformatted(model->name.empty() ? "Model" : model->name.c_str());
         ImGui::SeparatorText("Transform");
         bool changed = false;
         changed |= ImGui::DragFloat3(
-            "Position", &model.transform.position.x, 0.05f);
+            "Position", &model->transform.position.x, 0.05f);
         changed |= ImGui::DragFloat3(
-            "Rotation", &model.transform.rotationDegrees.x, 1.0f);
+            "Rotation", &model->transform.rotationDegrees.x, 1.0f);
         changed |= ImGui::DragFloat3(
-            "Scale", &model.transform.scale.x, 0.01f, 0.001f, 1000.0f);
-        EditorValueConstraints::SanitizeScale(model.transform.scale);
-        if (changed && model.IsValid())
-            ApplyEditableModelTransform(model, renderer);
+            "Scale", &model->transform.scale.x, 0.01f, 0.001f, 1000.0f);
+        EditorValueConstraints::SanitizeScale(model->transform.scale);
+        if (changed && model->IsValid())
+            ApplyEditableModelTransform(*model, renderer);
         ImGui::End();
         return;
     }
@@ -130,7 +138,7 @@ void InspectorPanel::Draw(
             innerDegrees, outerDegrees);
         light->proxy.innerConeAngle = innerDegrees * Pi / 180.0f;
         light->proxy.outerConeAngle = outerDegrees * Pi / 180.0f;
-        ImGui::TextDisabled("Spot direction targets the active model.");
+        ImGui::TextDisabled("Spot direction targets the scene center.");
     }
 
     if (changed)

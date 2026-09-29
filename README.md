@@ -100,7 +100,7 @@ Face Shadow 入口需要用户提供 FBX、连续变化的面部阴影贴图，�
   "<角色模型.fbx>" "<面部阴影贴图.png>" "<材质名称>"
 ```
 
-运行时也可使用 `File > Import FBX...` 导入静态模型。项目通过异步 CPU 解析和 GPU 资源创建替换当前模型。
+运行时可使用 `File > Import FBX...` 导入静态模型。每次导入会向 Scene 追加独立模型，保留已有模型；导入完成后自动选中新模型。同名模型依次显示为 `名称`、`名称_001`、`名称_002`。CPU 解析异步进行，GPU 资源在主线程提交。
 
 ### 测试
 
@@ -115,6 +115,8 @@ ctest --test-dir out/build/windows-ninja-debug --output-on-failure
 | 操作 | 用途 |
 | --- | --- |
 | 鼠标左键点选 | 选择模型或可见灯光 Gizmo |
+| Scene 中点选模型 | 按模型独立选择；Inspector 和 Gizmo 只修改当前模型 |
+| Scene 中 `Remove selected model` | 移除选中模型及其 Primitive、Mesh、Material 资源 |
 | `Alt` + 左键拖动 | Orbit 相机 |
 | `Alt` + 中键拖动 | Pan 相机 |
 | `Alt` + 右键拖动或滚轮 | Dolly 相机 |
@@ -123,6 +125,8 @@ ctest --test-dir out/build/windows-ninja-debug --output-on-failure
 | `W` / `E` / `R` | ImGuizmo 移动 / 旋转 / 缩放 |
 | `Q` | 切换世界/局部 Transform 空间 |
 | `F6` | 重新加载 GLSL Shader |
+
+相同 FBX 连续导入两次时，两个模型初始位置相同，画面会重叠。选中新导入的模型后，可在 Inspector 中修改 Position X，或用 `W` 和 Gizmo 将它移开。[多模型场景说明](docs/multi-model-scene.md)记录了数据流、限制与验收步骤。
 | `Esc` | 退出程序 |
 
 ## 项目结构

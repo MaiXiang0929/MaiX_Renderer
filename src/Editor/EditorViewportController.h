@@ -45,7 +45,7 @@ public:
     void FocusSelection(
         Camera& camera,
         const EditorSelection& selection,
-        const EditableModel& model,
+        const std::vector<EditableModel>& models,
         const std::vector<EditableLight>& lights) const;
 
     bool IsLeftDown() const { return m_LeftDown; }
@@ -56,7 +56,7 @@ public:
     void Draw(
         Camera& camera,
         EditorSelection& selection,
-        EditableModel& model,
+        std::vector<EditableModel>& models,
         std::vector<EditableLight>& lights,
         Renderer& renderer,
         const EditorViewportRegion& viewport);
