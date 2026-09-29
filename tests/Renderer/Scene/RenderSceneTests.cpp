@@ -241,6 +241,35 @@ void TestPrimitiveRemovalAffectsFutureViews()
         "Future render views should exclude a removed primitive.");
 }
 
+void TestResourceReferencesTrackSceneMembership()
+{
+    RenderScene scene;
+    PrimitiveSceneProxy hidden = MakePrimitive(0, 11, 7);
+    hidden.visible = false;
+    const PrimitiveId firstId = scene.AddPrimitive(hidden);
+    const PrimitiveId secondId = scene.AddPrimitive(MakePrimitive(0, 12, 7));
+    const PrimitiveId thirdId = scene.AddPrimitive(MakePrimitive(0, 12, 8));
+
+    Require(scene.HasMeshReference(7) && scene.HasMeshReference(8),
+        "A live primitive must keep its mesh referenced, even when hidden.");
+    Require(scene.HasMaterialReference(11) && scene.HasMaterialReference(12),
+        "A live primitive must keep its material referenced, even when hidden.");
+    Require(!scene.HasMeshReference(9) && !scene.HasMaterialReference(13),
+        "Unreferenced resource IDs must remain releasable.");
+
+    Require(scene.RemovePrimitive(firstId), "The hidden primitive should be removable.");
+    Require(scene.HasMeshReference(7) && !scene.HasMaterialReference(11),
+        "Removing one primitive must retain shared mesh references only.");
+
+    Require(scene.RemovePrimitive(secondId), "The second primitive should be removable.");
+    Require(!scene.HasMeshReference(7) && scene.HasMaterialReference(12),
+        "A resource becomes releasable only after its last reference is removed.");
+
+    Require(scene.RemovePrimitive(thirdId), "The third primitive should be removable.");
+    Require(!scene.HasMeshReference(8) && !scene.HasMaterialReference(12),
+        "Removing the final primitive must clear both resource references.");
+}
+
 void TestLightViewIsAnIndependentSnapshot()
 {
     RenderScene scene;
@@ -283,6 +312,7 @@ int main()
     TestReflectionTranslucentSortingUsesReflectionView();
     TestSharedResourceIdentitySurvivesViewBuild();
     TestPrimitiveRemovalAffectsFutureViews();
+    TestResourceReferencesTrackSceneMembership();
     TestLightViewIsAnIndependentSnapshot();
     std::cout << "RenderScene tests passed." << std::endl;
     return EXIT_SUCCESS;

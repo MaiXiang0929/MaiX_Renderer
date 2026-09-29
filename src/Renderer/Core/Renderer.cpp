@@ -134,6 +134,13 @@ bool Renderer::DestroyMesh(MeshHandle handle)
         !m_MeshResources[handle.id])
         return false;
 
+    if (m_RenderScene.HasMeshReference(handle.id))
+    {
+        std::cerr << "[Renderer] DestroyMesh rejected: mesh " << handle.id
+                  << " is still referenced by a primitive." << std::endl;
+        return false;
+    }
+
     m_MeshResources[handle.id].reset();
     return true;
 }
@@ -162,6 +169,13 @@ bool Renderer::DestroyMaterial(MaterialHandle handle)
     if (!handle.IsValid() || handle.id >= m_MaterialResources.size() ||
         !m_MaterialResources[handle.id])
         return false;
+
+    if (m_RenderScene.HasMaterialReference(handle.id))
+    {
+        std::cerr << "[Renderer] DestroyMaterial rejected: material " << handle.id
+                  << " is still referenced by a primitive." << std::endl;
+        return false;
+    }
 
     m_MaterialResources[handle.id].reset();
     return true;
@@ -328,13 +342,37 @@ PrimitiveId Renderer::AddPrimitive(
     bool castsShadow)
 {
     const MeshHandle mesh = CreateMesh(vertices);
-    const MaterialHandle materialHandle = CreateMaterial(std::move(material));
-    return AddPrimitive(
-        mesh,
-        materialHandle,
-        localToWorld,
-        bounds,
-        castsShadow);
+    if (!mesh.IsValid())
+        return InvalidPrimitiveId;
+
+    MaterialHandle materialHandle;
+    try
+    {
+        materialHandle = CreateMaterial(std::move(material));
+        if (materialHandle.IsValid())
+        {
+            const PrimitiveId id = AddPrimitive(
+                mesh,
+                materialHandle,
+                localToWorld,
+                bounds,
+                castsShadow);
+            if (id != InvalidPrimitiveId)
+                return id;
+
+            DestroyMaterial(materialHandle);
+        }
+    }
+    catch (...)
+    {
+        if (materialHandle.IsValid())
+            DestroyMaterial(materialHandle);
+        DestroyMesh(mesh);
+        throw;
+    }
+
+    DestroyMesh(mesh);
+    return InvalidPrimitiveId;
 }
 
 bool Renderer::UpdatePrimitiveTransform(
