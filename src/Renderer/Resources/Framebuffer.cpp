@@ -8,6 +8,7 @@
 #include "Framebuffer.h"
 #include <cstring>
 #include <iostream>
+#include <utility>
 
 // 匿名命名空间中的名称只在当前 Framebuffer.cpp 文件内可见，其他 .cpp 文件无法访问
 namespace {
@@ -28,6 +29,54 @@ namespace {
         }
         return false;
     }
+
+    // Init 会临时绑定候选资源；销毁旧资源前把旧绑定映射到新资源。
+    class ScopedFramebufferBindings {
+    public:
+        ScopedFramebufferBindings() {
+            glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &m_DrawFramebuffer);
+            glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &m_ReadFramebuffer);
+            glGetIntegerv(GL_TEXTURE_BINDING_2D, &m_Texture);
+            glGetIntegerv(GL_RENDERBUFFER_BINDING, &m_Renderbuffer);
+        }
+
+        ~ScopedFramebufferBindings() {
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER,
+                static_cast<GLuint>(m_DrawFramebuffer));
+            glBindFramebuffer(GL_READ_FRAMEBUFFER,
+                static_cast<GLuint>(m_ReadFramebuffer));
+            glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(m_Texture));
+            glBindRenderbuffer(GL_RENDERBUFFER,
+                static_cast<GLuint>(m_Renderbuffer));
+        }
+
+        void Remap(GLuint oldFramebuffer, GLuint newFramebuffer,
+                   GLuint oldColorTexture, GLuint newColorTexture,
+                   GLuint oldDepthTexture, GLuint newDepthTexture,
+                   GLuint oldRenderbuffer, GLuint newRenderbuffer) {
+            if (m_DrawFramebuffer == static_cast<GLint>(oldFramebuffer) &&
+                oldFramebuffer != 0)
+                m_DrawFramebuffer = static_cast<GLint>(newFramebuffer);
+            if (m_ReadFramebuffer == static_cast<GLint>(oldFramebuffer) &&
+                oldFramebuffer != 0)
+                m_ReadFramebuffer = static_cast<GLint>(newFramebuffer);
+            if (m_Texture == static_cast<GLint>(oldColorTexture) &&
+                oldColorTexture != 0)
+                m_Texture = static_cast<GLint>(newColorTexture);
+            if (m_Texture == static_cast<GLint>(oldDepthTexture) &&
+                oldDepthTexture != 0)
+                m_Texture = static_cast<GLint>(newDepthTexture);
+            if (m_Renderbuffer == static_cast<GLint>(oldRenderbuffer) &&
+                oldRenderbuffer != 0)
+                m_Renderbuffer = static_cast<GLint>(newRenderbuffer);
+        }
+
+    private:
+        GLint m_DrawFramebuffer = 0;
+        GLint m_ReadFramebuffer = 0;
+        GLint m_Texture = 0;
+        GLint m_Renderbuffer = 0;
+    };
 }
 
 Framebuffer::~Framebuffer() {
@@ -60,68 +109,84 @@ bool Framebuffer::Init(const FramebufferSpecification& specification) {
         m_MipmapsEnabled == specification.mipmapsEnabled &&
         m_FBO != 0) return true;
 
-    Cleanup(); // 清理旧数据（防止 Resize 时内存泄漏）
-
-    m_Width = specification.width;
-    m_Height = specification.height;
-    m_ColorFormat = specification.colorFormat;
-    m_DepthStencilEnabled = specification.depthStencilEnabled;
-    m_SampleableDepth = specification.sampleableDepth;
-    m_MipmapsEnabled = specification.mipmapsEnabled;
+    ScopedFramebufferBindings bindings;
+    Framebuffer candidate;
+    candidate.m_Width = specification.width;
+    candidate.m_Height = specification.height;
+    candidate.m_ColorFormat = specification.colorFormat;
+    candidate.m_DepthStencilEnabled = specification.depthStencilEnabled;
+    candidate.m_SampleableDepth = specification.sampleableDepth;
+    candidate.m_MipmapsEnabled = specification.mipmapsEnabled;
 
     // 1. 创建 FBO
-    glGenFramebuffers(1, &m_FBO);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_FBO);
+    glGenFramebuffers(1, &candidate.m_FBO);
+    if (candidate.m_FBO == 0) {
+        std::cerr << "[Framebuffer] Unable to create framebuffer."
+                  << std::endl;
+        return false;
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, candidate.m_FBO);
 
     // 2. 创建 Color Texture Attachment
-    glGenTextures(1, &m_ColorTexture);
-    glBindTexture(GL_TEXTURE_2D, m_ColorTexture);
+    glGenTextures(1, &candidate.m_ColorTexture);
+    if (candidate.m_ColorTexture == 0) {
+        std::cerr << "[Framebuffer] Unable to create color texture."
+                  << std::endl;
+        return false;
+    }
+    glBindTexture(GL_TEXTURE_2D, candidate.m_ColorTexture);
     const GLint internalFormat =
-        m_ColorFormat == FramebufferColorFormat::RGBA16F ? GL_RGBA16F
-        : m_ColorFormat == FramebufferColorFormat::R8 ? GL_R8 : GL_RGBA8;
+        candidate.m_ColorFormat == FramebufferColorFormat::RGBA16F ? GL_RGBA16F
+        : candidate.m_ColorFormat == FramebufferColorFormat::R8 ? GL_R8 : GL_RGBA8;
     const GLenum pixelFormat =
-        m_ColorFormat == FramebufferColorFormat::R8 ? GL_RED : GL_RGBA;
-    const GLenum dataType = m_ColorFormat == FramebufferColorFormat::RGBA16F
+        candidate.m_ColorFormat == FramebufferColorFormat::R8 ? GL_RED : GL_RGBA;
+    const GLenum dataType = candidate.m_ColorFormat == FramebufferColorFormat::RGBA16F
         ? GL_FLOAT
         : GL_UNSIGNED_BYTE;
     glTexImage2D(
         GL_TEXTURE_2D,
         0,
         internalFormat,
-        m_Width,
-        m_Height,
+        candidate.m_Width,
+        candidate.m_Height,
         0,
         pixelFormat,
         dataType,
         nullptr);
 
-    if (m_MipmapsEnabled)
+    if (candidate.m_MipmapsEnabled)
         glGenerateMipmap(GL_TEXTURE_2D);
     glTexParameteri(
         GL_TEXTURE_2D,
         GL_TEXTURE_MIN_FILTER,
-        m_MipmapsEnabled ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
+        candidate.m_MipmapsEnabled ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
     // 驱动支持时使用硬件允许的最大各向异性等级，改善倾斜平面的缩小采样质量。
-    if (m_MipmapsEnabled && SupportsAnisotropicFiltering()) {
+    if (candidate.m_MipmapsEnabled && SupportsAnisotropicFiltering()) {
         GLfloat maxAnisotropy = 1.0f;
         glGetFloatv(MaxTextureMaxAnisotropyExt, &maxAnisotropy);
         glTexParameterf(GL_TEXTURE_2D, TextureMaxAnisotropyExt, maxAnisotropy);
     }
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_ColorTexture, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+        GL_TEXTURE_2D, candidate.m_ColorTexture, 0);
 
-    if (m_DepthStencilEnabled && m_SampleableDepth) {
-        glGenTextures(1, &m_DepthTexture);
-        glBindTexture(GL_TEXTURE_2D, m_DepthTexture);
+    if (candidate.m_DepthStencilEnabled && candidate.m_SampleableDepth) {
+        glGenTextures(1, &candidate.m_DepthTexture);
+        if (candidate.m_DepthTexture == 0) {
+            std::cerr << "[Framebuffer] Unable to create depth texture."
+                      << std::endl;
+            return false;
+        }
+        glBindTexture(GL_TEXTURE_2D, candidate.m_DepthTexture);
         glTexImage2D(
             GL_TEXTURE_2D,
             0,
             GL_DEPTH24_STENCIL8,
-            m_Width,
-            m_Height,
+            candidate.m_Width,
+            candidate.m_Height,
             0,
             GL_DEPTH_STENCIL,
             GL_UNSIGNED_INT_24_8,
@@ -134,33 +199,57 @@ bool Framebuffer::Init(const FramebufferSpecification& specification) {
             GL_FRAMEBUFFER,
             GL_DEPTH_STENCIL_ATTACHMENT,
             GL_TEXTURE_2D,
-            m_DepthTexture,
+            candidate.m_DepthTexture,
             0);
     }
-    else if (m_DepthStencilEnabled) {
-        glGenRenderbuffers(1, &m_RBO);
-        glBindRenderbuffer(GL_RENDERBUFFER, m_RBO);
+    else if (candidate.m_DepthStencilEnabled) {
+        glGenRenderbuffers(1, &candidate.m_RBO);
+        if (candidate.m_RBO == 0) {
+            std::cerr << "[Framebuffer] Unable to create depth renderbuffer."
+                      << std::endl;
+            return false;
+        }
+        glBindRenderbuffer(GL_RENDERBUFFER, candidate.m_RBO);
         glRenderbufferStorage(
-            GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, m_Width, m_Height);
+            GL_RENDERBUFFER, GL_DEPTH24_STENCIL8,
+            candidate.m_Width, candidate.m_Height);
         glFramebufferRenderbuffer(
             GL_FRAMEBUFFER,
             GL_DEPTH_STENCIL_ATTACHMENT,
             GL_RENDERBUFFER,
-            m_RBO);
+            candidate.m_RBO);
     }
 
     // 4. 检查 FBO 完整性
-    const bool complete =
-        glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    if (!complete) {
+    const GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (status != GL_FRAMEBUFFER_COMPLETE) {
         std::cerr << "[Framebuffer] Incomplete framebuffer at "
-                  << m_Width << "x" << m_Height << "." << std::endl;
-        Cleanup();
+                  << candidate.m_Width << "x" << candidate.m_Height
+                  << " (status=0x" << std::hex << status << std::dec << ")."
+                  << std::endl;
         return false;
     }
+
+    bindings.Remap(m_FBO, candidate.m_FBO,
+        m_ColorTexture, candidate.m_ColorTexture,
+        m_DepthTexture, candidate.m_DepthTexture,
+        m_RBO, candidate.m_RBO);
+    Swap(candidate);
     return true;
+}
+
+void Framebuffer::Swap(Framebuffer& other) noexcept {
+    using std::swap;
+    swap(m_FBO, other.m_FBO);
+    swap(m_ColorTexture, other.m_ColorTexture);
+    swap(m_DepthTexture, other.m_DepthTexture);
+    swap(m_RBO, other.m_RBO);
+    swap(m_Width, other.m_Width);
+    swap(m_Height, other.m_Height);
+    swap(m_ColorFormat, other.m_ColorFormat);
+    swap(m_DepthStencilEnabled, other.m_DepthStencilEnabled);
+    swap(m_SampleableDepth, other.m_SampleableDepth);
+    swap(m_MipmapsEnabled, other.m_MipmapsEnabled);
 }
 
 void Framebuffer::Cleanup() {

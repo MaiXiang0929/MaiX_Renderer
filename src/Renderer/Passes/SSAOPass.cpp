@@ -23,6 +23,17 @@ bool SSAOPass::Resize(unsigned int width, unsigned int height)
     return m_Raw.Init(ao) && m_Filtered.Init(ao) && m_Composite.Init(composite);
 }
 
+bool SSAOPass::TargetsMatch(int aoWidth, int aoHeight,
+                            int compositeWidth, int compositeHeight) const
+{
+    return m_Raw.GetWidth() == aoWidth &&
+        m_Raw.GetHeight() == aoHeight &&
+        m_Filtered.GetWidth() == aoWidth &&
+        m_Filtered.GetHeight() == aoHeight &&
+        m_Composite.GetWidth() == compositeWidth &&
+        m_Composite.GetHeight() == compositeHeight;
+}
+
 bool SSAOPass::ReloadShaders()
 {
     return m_OcclusionShader.Load("assets/shaders/postprocess/fullscreen.vert", "assets/shaders/postprocess/ssao.frag") &&

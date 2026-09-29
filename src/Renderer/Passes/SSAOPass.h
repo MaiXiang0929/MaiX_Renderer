@@ -19,6 +19,8 @@ public:
     int GetTargetHeight() const { return m_Raw.GetHeight(); }
     int GetCompositeWidth() const { return m_Composite.GetWidth(); }
     int GetCompositeHeight() const { return m_Composite.GetHeight(); }
+    bool TargetsMatch(int aoWidth, int aoHeight,
+                      int compositeWidth, int compositeHeight) const;
 
 private:
     void BindTexture(GLuint texture, unsigned int unit) const;

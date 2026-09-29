@@ -152,9 +152,9 @@ bool RenderPipeline::EnsureRenderTargetExtents(
 
     const RenderTargetExtent bloomExtent =
         CalculateBloomTargetExtent(viewportWidth, viewportHeight);
-    const bool bloomMatches =
-        m_BloomPass.GetTargetWidth() == static_cast<int>(bloomExtent.width) &&
-        m_BloomPass.GetTargetHeight() == static_cast<int>(bloomExtent.height);
+    const bool bloomMatches = m_BloomPass.TargetsMatch(
+        static_cast<int>(bloomExtent.width),
+        static_cast<int>(bloomExtent.height));
     if (!bloomMatches && !m_BloomPass.Resize(
             bloomExtent.width, bloomExtent.height))
         return false;
@@ -177,11 +177,11 @@ bool RenderPipeline::EnsureRenderTargetExtents(
 
     const RenderTargetExtent ssaoExtent =
         CalculateSsaoTargetExtent(viewportWidth, viewportHeight);
-    const bool ssaoMatches =
-        m_SSAOPass.GetTargetWidth() == static_cast<int>(ssaoExtent.width) &&
-        m_SSAOPass.GetTargetHeight() == static_cast<int>(ssaoExtent.height) &&
-        m_SSAOPass.GetCompositeWidth() == static_cast<int>(viewportWidth) &&
-        m_SSAOPass.GetCompositeHeight() == static_cast<int>(viewportHeight);
+    const bool ssaoMatches = m_SSAOPass.TargetsMatch(
+        static_cast<int>(ssaoExtent.width),
+        static_cast<int>(ssaoExtent.height),
+        static_cast<int>(viewportWidth),
+        static_cast<int>(viewportHeight));
     if (!ssaoMatches && !m_SSAOPass.Resize(ssaoExtent.width, ssaoExtent.height))
         return false;
     resized |= !ssaoMatches;

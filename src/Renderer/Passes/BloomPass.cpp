@@ -13,19 +13,28 @@ bool BloomPass::Init()
 
 bool BloomPass::Resize(unsigned int width, unsigned int height)
 {
-    const bool highlightsReady = m_Highlights.Init(
+    return m_Highlights.Init(
         static_cast<int>(width),
         static_cast<int>(height),
-        FramebufferColorFormat::RGBA16F);
-    const bool firstBlurReady = m_BlurTargets[0].Init(
-        static_cast<int>(width),
-        static_cast<int>(height),
-        FramebufferColorFormat::RGBA16F);
-    const bool secondBlurReady = m_BlurTargets[1].Init(
-        static_cast<int>(width),
-        static_cast<int>(height),
-        FramebufferColorFormat::RGBA16F);
-    return highlightsReady && firstBlurReady && secondBlurReady;
+        FramebufferColorFormat::RGBA16F) &&
+        m_BlurTargets[0].Init(
+            static_cast<int>(width),
+            static_cast<int>(height),
+            FramebufferColorFormat::RGBA16F) &&
+        m_BlurTargets[1].Init(
+            static_cast<int>(width),
+            static_cast<int>(height),
+            FramebufferColorFormat::RGBA16F);
+}
+
+bool BloomPass::TargetsMatch(int width, int height) const
+{
+    return m_Highlights.GetWidth() == width &&
+        m_Highlights.GetHeight() == height &&
+        m_BlurTargets[0].GetWidth() == width &&
+        m_BlurTargets[0].GetHeight() == height &&
+        m_BlurTargets[1].GetWidth() == width &&
+        m_BlurTargets[1].GetHeight() == height;
 }
 
 bool BloomPass::ReloadShaders()

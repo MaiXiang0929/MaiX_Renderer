@@ -27,6 +27,7 @@ public:
 
     int GetTargetWidth() const { return m_Highlights.GetWidth(); }
     int GetTargetHeight() const { return m_Highlights.GetHeight(); }
+    bool TargetsMatch(int width, int height) const;
 
 private:
     static constexpr int BlurPassCount = 8;
