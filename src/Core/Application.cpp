@@ -444,6 +444,12 @@ bool Application::Init() {
         0.1f,
         std::max(1000.0f, cameraDistance + m_SceneRadius * 1.5f));
 
+    m_Models.emplace_back();
+    EditableModel& defaultModel = m_Models.back();
+    defaultModel.id = ModelId{m_NextModelId++};
+    m_DefaultModelId = defaultModel.id;
+    defaultModel.name = m_MaterialLab ? "Material Lab" : "Teapot";
+
     const MeshHandle instanceMesh = m_Renderer->CreateMesh(vertices);
     if (!instanceMesh.IsValid())
     {
@@ -451,8 +457,7 @@ bool Application::Init() {
                   << std::endl;
         return false;
     }
-    m_ActiveModelResources.meshes.push_back(instanceMesh);
-    m_ActiveModel.name = m_MaterialLab ? "Material Lab" : "Teapot";
+    defaultModel.meshes.push_back(instanceMesh);
     MaterialHandle instanceMaterial;
 
     if (m_MaterialLab)
@@ -507,7 +512,7 @@ bool Application::Init() {
                 m_Renderer->CreateMaterial(std::move(material));
             if (!materialHandle.IsValid())
                 continue;
-            m_ActiveModelResources.materials.push_back(materialHandle);
+            defaultModel.materials.push_back(materialHandle);
 
             const cy::Matrix4f localToWorld =
                 cy::Matrix4f::Translation(instanceOffsets[index]) *
@@ -519,8 +524,7 @@ bool Application::Init() {
                 bounds);
             if (primitiveId != InvalidPrimitiveId)
             {
-                m_ActiveModelResources.primitives.push_back(primitiveId);
-                m_ActiveModel.sections.push_back({
+                defaultModel.sections.push_back({
                     primitiveId, localToWorld, bounds });
             }
         }
@@ -539,7 +543,7 @@ bool Application::Init() {
                       << std::endl;
             return false;
         }
-        m_ActiveModelResources.materials.push_back(instanceMaterial);
+        defaultModel.materials.push_back(instanceMaterial);
 
         for (const cy::Vec3f& offset : instanceOffsets)
         {
@@ -553,13 +557,12 @@ bool Application::Init() {
                 bounds);
             if (primitiveId != InvalidPrimitiveId)
             {
-                m_ActiveModelResources.primitives.push_back(primitiveId);
-                m_ActiveModel.sections.push_back({
+                defaultModel.sections.push_back({
                     primitiveId, localToWorld, bounds });
             }
         }
     }
-    if (m_ActiveModelResources.primitives.empty())
+    if (defaultModel.sections.empty())
     {
         std::cerr << "[Error] Failed to submit the opaque instance scene."
                   << std::endl;
@@ -580,7 +583,7 @@ bool Application::Init() {
     if (m_TranslucencyTest)
         CreateTranslucencyTestScene();
 
-    const PrimitiveBounds sceneBounds = m_ActiveModel.GetWorldBounds();
+    const PrimitiveBounds sceneBounds = defaultModel.GetWorldBounds();
     const cy::Vec3f sceneCenter = sceneBounds.radius > 0.0f
         ? sceneBounds.center
         : cy::Vec3f(0.0f);
@@ -718,9 +721,11 @@ void Application::CreateTranslucencyTestScene()
 /// @brief 更新应用程序状态
 bool Application::CommitImportedModel(
     AssetImport::ImportedModelData& model,
-    std::string& error)
+    std::string& error,
+    ModelId& importedId)
 {
     error.clear();
+    importedId = {};
     if (m_Renderer == nullptr)
     {
         error = "Renderer is unavailable.";
@@ -732,17 +737,16 @@ bool Application::CommitImportedModel(
         return false;
     }
 
-    ModelResourceGroup pendingResources;
     EditableModel pendingModel;
     pendingModel.name = model.name;
-    pendingResources.meshes.reserve(model.meshes.size());
-    pendingResources.materials.reserve(model.materials.size());
-    pendingResources.primitives.reserve(model.meshes.size());
+    pendingModel.meshes.reserve(model.meshes.size());
+    pendingModel.materials.reserve(model.materials.size());
+    pendingModel.sections.reserve(model.meshes.size());
 
-    const auto fail = [this, &pendingResources, &error](std::string message)
+    const auto fail = [this, &pendingModel, &error](std::string message)
     {
         error = std::move(message);
-        DestroyModelResources(pendingResources);
+        DestroyModelResources(pendingModel);
         return false;
     };
 
@@ -821,13 +825,13 @@ bool Application::CommitImportedModel(
                     "Renderer material creation failed: " +
                     importedMaterial.name);
             }
-            pendingResources.materials.push_back(materialHandle);
+            pendingModel.materials.push_back(materialHandle);
         }
 
         for (const AssetImport::ImportedMeshData& importedMesh : model.meshes)
         {
             if (importedMesh.materialIndex >=
-                pendingResources.materials.size())
+                pendingModel.materials.size())
             {
                 return fail(
                     "Imported mesh references an invalid material: " +
@@ -842,14 +846,14 @@ bool Application::CommitImportedModel(
                 return fail(
                     "Renderer mesh creation failed: " + importedMesh.name);
             }
-            pendingResources.meshes.push_back(meshHandle);
+            pendingModel.meshes.push_back(meshHandle);
 
             PrimitiveBounds bounds;
             bounds.center = importedMesh.boundsCenter;
             bounds.radius = importedMesh.boundsRadius;
             const PrimitiveId primitiveId = m_Renderer->AddPrimitive(
                 meshHandle,
-                pendingResources.materials[importedMesh.materialIndex],
+                pendingModel.materials[importedMesh.materialIndex],
                 importedMesh.localToWorld,
                 bounds);
             if (primitiveId == InvalidPrimitiveId)
@@ -858,7 +862,6 @@ bool Application::CommitImportedModel(
                     "Renderer primitive submission failed: " +
                     importedMesh.name);
             }
-            pendingResources.primitives.push_back(primitiveId);
             pendingModel.sections.push_back({
                 primitiveId, importedMesh.localToWorld, bounds });
         }
@@ -870,16 +873,22 @@ bool Application::CommitImportedModel(
             exception.what());
     }
 
-    ModelResourceGroup previousResources =
-        std::move(m_ActiveModelResources);
-    m_ActiveModelResources = std::move(pendingResources);
-    m_ActiveModel = std::move(pendingModel);
-    DestroyModelResources(previousResources);
-
-    // Imported vertices already contain their evaluated FBX node transform.
-    // Preserve the existing camera fit so distant helper objects do not make
-    // the character tiny in the viewport.
-    m_ObjCenter = cy::Vec3f(0.0f, 0.0f, 0.0f);
+    if (m_NextModelId == 0)
+        return fail("Scene model ID space exhausted.");
+    pendingModel.id = ModelId{m_NextModelId};
+    try
+    {
+        pendingModel.name = MakeUniqueModelName(m_Models, model.name);
+        if (pendingModel.name.empty())
+            return fail("Scene model name space exhausted.");
+        m_Models.push_back(std::move(pendingModel));
+    }
+    catch (const std::exception& exception)
+    {
+        return fail(std::string("Unable to add the model to the scene: ") +
+            exception.what());
+    }
+    importedId = ModelId{m_NextModelId++};
 
     std::cout
         << "[AssetImport] model='" << model.name
@@ -938,14 +947,24 @@ bool Application::LoadStartupFaceShadowDemo()
         std::distance(importResult.model.materials.begin(), materialIterator));
 
     std::string commitError;
-    if (!CommitImportedModel(importResult.model, commitError))
+    ModelId importedId;
+    if (!CommitImportedModel(importResult.model, commitError, importedId))
     {
         std::cerr
             << "[FaceShadowDemo] Unable to upload the startup model: "
             << commitError << std::endl;
         return false;
     }
-    if (materialIndex >= m_ActiveModelResources.materials.size())
+    // Startup demo keeps its historical single-character scene.
+    for (std::size_t index = 0; index < m_Models.size();)
+    {
+        if (m_Models[index].id == importedId)
+            ++index;
+        else
+            RemoveModel(m_Models[index].id);
+    }
+    EditableModel* demoModel = FindEditableModel(m_Models, importedId);
+    if (demoModel == nullptr || materialIndex >= demoModel->materials.size())
     {
         std::cerr
             << "[FaceShadowDemo] Imported material mapping is invalid."
@@ -956,7 +975,7 @@ bool Application::LoadStartupFaceShadowDemo()
     // This asset contains four weapon helper sections far from the character.
     // Keep their primitives renderable, but prevent them from moving the
     // lighting/framing target away from the face-shadow subject.
-    if (importResult.model.meshes.size() == m_ActiveModel.sections.size() &&
+    if (importResult.model.meshes.size() == demoModel->sections.size() &&
         importResult.model.meshes.size() >= 4)
     {
         auto median = [](std::vector<float> values)
@@ -997,7 +1016,7 @@ bool Application::LoadStartupFaceShadowDemo()
         {
             if (distances[index] <= warningDistance)
                 continue;
-            m_ActiveModel.sections[index].localBounds.radius = 0.0f;
+            demoModel->sections[index].localBounds.radius = 0.0f;
             ++ignoredDistantSections;
         }
         if (ignoredDistantSections > 0)
@@ -1009,7 +1028,7 @@ bool Application::LoadStartupFaceShadowDemo()
         }
     }
 
-    const PrimitiveBounds demoBounds = m_ActiveModel.GetWorldBounds();
+    const PrimitiveBounds demoBounds = demoModel->GetWorldBounds();
     if (demoBounds.radius > 0.0f)
     {
         m_ObjCenter = demoBounds.center;
@@ -1052,7 +1071,7 @@ bool Application::LoadStartupFaceShadowDemo()
     }
 
     const MaterialHandle materialHandle =
-        m_ActiveModelResources.materials[materialIndex];
+        demoModel->materials[materialIndex];
     Renderer::MaterialSnapshot snapshot;
     if (!m_Renderer->GetMaterialSnapshot(materialHandle, snapshot))
     {
@@ -1090,21 +1109,40 @@ bool Application::LoadStartupFaceShadowDemo()
     return true;
 }
 
-void Application::DestroyModelResources(ModelResourceGroup& resources)
+void Application::DestroyModelResources(EditableModel& model)
 {
     if (m_Renderer == nullptr)
     {
-        resources = {};
+        model.sections.clear();
+        model.meshes.clear();
+        model.materials.clear();
         return;
     }
 
-    for (const std::uint32_t primitiveId : resources.primitives)
-        m_Renderer->RemovePrimitive(primitiveId);
-    for (const MeshHandle mesh : resources.meshes)
+    for (const EditableModelSection& section : model.sections)
+        m_Renderer->RemovePrimitive(section.primitiveId);
+    for (const MeshHandle mesh : model.meshes)
         m_Renderer->DestroyMesh(mesh);
-    for (const MaterialHandle material : resources.materials)
+    for (const MaterialHandle material : model.materials)
         m_Renderer->DestroyMaterial(material);
-    resources = {};
+    model.sections.clear();
+    model.meshes.clear();
+    model.materials.clear();
+}
+
+bool Application::RemoveModel(ModelId id)
+{
+    const auto found = std::find_if(m_Models.begin(), m_Models.end(),
+        [id](const EditableModel& model) { return model.id == id; });
+    if (found == m_Models.end())
+        return false;
+    if (m_EditorSelection.IsModelSelected(id))
+        m_EditorSelection.Clear();
+    if (m_DefaultModelId == id)
+        m_DefaultModelId = {};
+    DestroyModelResources(*found);
+    m_Models.erase(found);
+    return true;
 }
 
 EditableLight* Application::FindEditableLight(std::uint32_t id)
@@ -1134,11 +1172,13 @@ void Application::Update() {
         return;
 
     std::string error;
-    if (CommitImportedModel(completedImport->model, error))
+    ModelId importedId;
+    if (CommitImportedModel(completedImport->model, error, importedId))
     {
+        m_EditorSelection.SelectModel(importedId);
         m_AssetImportPanel->ReportCommitSuccess(
             completedImport->model,
-            m_ActiveModelResources.primitives.size());
+            FindEditableModel(m_Models, importedId)->sections.size());
         if (m_Workspace)
             m_Workspace->AddLog("FBX imported: " +
                 completedImport->model.sourcePath.filename().string());
@@ -1169,12 +1209,12 @@ void Application::Render() {
     cy::Matrix4f projMatrix = m_Camera.GetProjectionMatrix();
     cy::Matrix4f viewMatrix = m_Camera.GetViewMatrix();
 
-    const PrimitiveBounds activeBounds = m_ActiveModel.GetWorldBounds();
-    const cy::Vec3f sceneCenter = activeBounds.radius > 0.0f
-        ? activeBounds.center
+    const PrimitiveBounds sceneBounds = GetSceneWorldBounds(m_Models);
+    const cy::Vec3f sceneCenter = sceneBounds.radius > 0.0f
+        ? sceneBounds.center
         : cy::Vec3f(0.0f, 0.0f, 0.0f);
     const float sceneRadius = std::max(
-        std::max(m_SceneRadius, activeBounds.radius), 1.0f);
+        std::max(m_SceneRadius, sceneBounds.radius), 1.0f);
 
     EditableLight* editableMainLight = FindEditableLight(m_MainLightId);
     const cy::Vec3f lightWorldPosition = editableMainLight
@@ -1216,20 +1256,38 @@ void Application::Render() {
         lightFov, 1.0f, lightNear, lightFar);
     const cy::Matrix4f lightVP = lightProjection * lightView;
     // 反射视图仍由 Application 根据场景地面位置计算，Pass 只消费结果。
+    float groundY = m_GroundY;
+    if (m_Models.size() != 1 || m_Models.front().id != m_DefaultModelId)
+    {
+        bool hasModelBounds = false;
+        for (const EditableModel& model : m_Models)
+        {
+            const PrimitiveBounds bounds = model.GetWorldBounds();
+            if (bounds.radius <= 0.0f)
+                continue;
+            const float bottom = bounds.center.y - bounds.radius;
+            groundY = hasModelBounds ? std::min(groundY, bottom) : bottom;
+            hasModelBounds = true;
+        }
+    }
     const cy::Matrix4f reflectMatrix =
-        cy::Matrix4f::Translation(cy::Vec3f(0.0f, m_GroundY, 0.0f)) *
+        cy::Matrix4f::Translation(cy::Vec3f(0.0f, groundY, 0.0f)) *
         cy::Matrix4f::Scale(1.0f, -1.0f, 1.0f) *
-        cy::Matrix4f::Translation(cy::Vec3f(0.0f, -m_GroundY, 0.0f));
+        cy::Matrix4f::Translation(cy::Vec3f(0.0f, -groundY, 0.0f));
     const cy::Matrix4f reflectView = viewMatrix * reflectMatrix;
 
     // 相机世界位置（用于地面着色器视线方向计算）
     const cy::Vec3f cameraWorldPos = m_Camera.GetPosition();
 
     const float groundSize = std::max(
-        m_ModelDiameter * 2.0f, m_SceneRadius * 2.0f);
+        m_ModelDiameter * 2.0f, sceneRadius * 2.0f);
+    const bool onlyDefaultModel = m_Models.size() == 1 &&
+        m_Models.front().id == m_DefaultModelId;
+    const cy::Vec3f groundCenter = onlyDefaultModel
+        ? cy::Vec3f(-m_ObjCenter.x, groundY, -m_ObjCenter.z)
+        : cy::Vec3f(sceneCenter.x, groundY, sceneCenter.z);
     const cy::Matrix4f groundModel =
-        cy::Matrix4f::Translation(cy::Vec3f(
-            -m_ObjCenter.x, m_GroundY, -m_ObjCenter.z)) *
+        cy::Matrix4f::Translation(groundCenter) *
         cy::Matrix4f::Scale(groundSize, 1.0f, groundSize);
     if (editableMainLight)
     {
@@ -1260,7 +1318,7 @@ void Application::Render() {
     m_Workspace->DrawViewportImage(m_Renderer->GetFinalColorTexture());
     if (viewport.visible)
         m_ViewportController->Draw(
-            m_Camera, m_EditorSelection, m_ActiveModel,
+            m_Camera, m_EditorSelection, m_Models,
             m_EditableLights, *m_Renderer, viewport);
     m_Workspace->EndViewport();
 
@@ -1269,10 +1327,12 @@ void Application::Render() {
         m_StatisticsPanel->Draw(*m_Renderer);
     if (m_Workspace->ShowMaterialEditor())
         m_MaterialEditorPanel->Draw(*m_Renderer, nativeWindowHandle);
-    m_SceneHierarchyPanel->Draw(
-        m_EditorSelection, m_ActiveModel, m_EditableLights);
+    const ModelId removedModel = m_SceneHierarchyPanel->Draw(
+        m_EditorSelection, m_Models, m_EditableLights);
+    if (removedModel.IsValid())
+        RemoveModel(removedModel);
     m_InspectorPanel->Draw(
-        m_EditorSelection, m_ActiveModel, m_EditableLights, *m_Renderer);
+        m_EditorSelection, m_Models, m_EditableLights, *m_Renderer);
     m_Workspace->DrawBottomPanels(*m_AssetImportPanel, nativeWindowHandle);
     ImGui::Render();
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -1303,7 +1363,9 @@ void Application::Shutdown() {
 
 	// 释放渲染器资源
 	if (m_Renderer) {
-        DestroyModelResources(m_ActiveModelResources);
+        for (EditableModel& model : m_Models)
+            DestroyModelResources(model);
+        m_Models.clear();
 		delete m_Renderer;
 		m_Renderer = nullptr;
 	}
@@ -1411,7 +1473,7 @@ void Application::CursorPositionCallback(
         EditableLight* mainLight = app->FindEditableLight(app->m_MainLightId);
         if (mainLight)
         {
-            const PrimitiveBounds bounds = app->m_ActiveModel.GetWorldBounds();
+            const PrimitiveBounds bounds = GetSceneWorldBounds(app->m_Models);
             const cy::Vec3f center = bounds.radius > 0.0f
                 ? bounds.center
                 : cy::Vec3f(0.0f);
@@ -1483,7 +1545,7 @@ void Application::KeyCallback(GLFWwindow* window, int key, int scancode, int act
             app->m_ViewportController->FocusSelection(
                 app->m_Camera,
                 app->m_EditorSelection,
-                app->m_ActiveModel,
+                app->m_Models,
                 app->m_EditableLights);
     }
     // 着色器重载（F6）

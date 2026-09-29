@@ -108,13 +108,17 @@ void EditorViewportController::ToggleSpace()
 void EditorViewportController::FocusSelection(
     Camera& camera,
     const EditorSelection& selection,
-    const EditableModel& model,
+    const std::vector<EditableModel>& models,
     const std::vector<EditableLight>& lights) const
 {
     if (selection.type == EditorSelectionType::Model)
     {
-        const PrimitiveBounds bounds = model.GetWorldBounds();
-        camera.FocusBounds(bounds.center, bounds.radius);
+        const EditableModel* model = FindEditableModel(models, selection.modelId);
+        if (model)
+        {
+            const PrimitiveBounds bounds = model->GetWorldBounds();
+            camera.FocusBounds(bounds.center, bounds.radius);
+        }
     }
     else if (selection.type == EditorSelectionType::Light)
     {
@@ -127,7 +131,7 @@ void EditorViewportController::FocusSelection(
 void EditorViewportController::Draw(
     Camera& camera,
     EditorSelection& selection,
-    EditableModel& model,
+    std::vector<EditableModel>& models,
     std::vector<EditableLight>& lights,
     Renderer& renderer,
     const EditorViewportRegion& viewport)
@@ -140,7 +144,12 @@ void EditorViewportController::Draw(
     {
         selection.Clear();
     }
-    const bool modelSelected = selection.IsModelSelected();
+    EditableModel* selectedModel = selection.type == EditorSelectionType::Model
+        ? FindEditableModel(models, selection.modelId)
+        : nullptr;
+    if (selection.type == EditorSelectionType::Model && !selectedModel)
+        selection.Clear();
+    const bool modelSelected = selectedModel != nullptr;
 
     ImGuizmo::SetOrthographic(!camera.IsPerspective());
     ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
@@ -155,7 +164,7 @@ void EditorViewportController::Draw(
     if (modelSelected || lightHasPosition)
     {
         Transform& activeTransform = modelSelected
-            ? model.transform
+            ? selectedModel->transform
             : selectedLight->transform;
         cy::Matrix4f matrix = activeTransform.ToMatrix();
         const cy::Matrix4f view = camera.GetViewMatrix();
@@ -207,7 +216,7 @@ void EditorViewportController::Draw(
                 static_cast<float>(viewport.pixelHeight),
                 camera.GetProjectionMatrix(),
                 camera.GetViewMatrix(),
-                model,
+                models,
                 lights);
             if (pick.type == EditorSelectionType::Light)
             {
@@ -216,7 +225,7 @@ void EditorViewportController::Draw(
             else
             {
                 if (pick.type == EditorSelectionType::Model)
-                    selection.SelectModel();
+                    selection.SelectModel(pick.modelId);
                 else
                     selection.Clear();
             }
@@ -226,13 +235,13 @@ void EditorViewportController::Draw(
 
     if (transformChanged && modelSelected)
     {
-        model.transform.scale.x = std::clamp(
-            std::abs(model.transform.scale.x), 0.001f, 1000.0f);
-        model.transform.scale.y = std::clamp(
-            std::abs(model.transform.scale.y), 0.001f, 1000.0f);
-        model.transform.scale.z = std::clamp(
-            std::abs(model.transform.scale.z), 0.001f, 1000.0f);
-        ApplyEditableModelTransform(model, renderer);
+        selectedModel->transform.scale.x = std::clamp(
+            std::abs(selectedModel->transform.scale.x), 0.001f, 1000.0f);
+        selectedModel->transform.scale.y = std::clamp(
+            std::abs(selectedModel->transform.scale.y), 0.001f, 1000.0f);
+        selectedModel->transform.scale.z = std::clamp(
+            std::abs(selectedModel->transform.scale.z), 0.001f, 1000.0f);
+        ApplyEditableModelTransform(*selectedModel, renderer);
     }
     else if (transformChanged && selectedLight)
     {

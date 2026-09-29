@@ -93,19 +93,22 @@ void TestEditorSelectionTransitions()
     Require(selection.type == EditorSelectionType::None,
         "Editor selection should start empty.");
 
-    selection.SelectModel();
-    Require(selection.IsModelSelected() &&
+    selection.SelectModel(ModelId{11});
+    Require(selection.IsModelSelected(ModelId{11}) &&
+            !selection.IsModelSelected(ModelId{12}) &&
             selection.lightId == InvalidLightId,
-        "Selecting the model should clear any light identity.");
+        "Selecting a model should retain its identity and clear light identity.");
 
     selection.SelectLight(7);
-    Require(!selection.IsModelSelected() && selection.IsLightSelected(7),
+    Require(!selection.IsModelSelected(ModelId{11}) &&
+            selection.IsLightSelected(7),
         "Selecting a light should replace the model selection.");
 
     selection.Clear();
     Require(selection.type == EditorSelectionType::None &&
+            !selection.modelId.IsValid() &&
             selection.lightId == InvalidLightId,
-        "Clearing selection should reset both type and light identity.");
+        "Clearing selection should reset type and object identities.");
 }
 
 void TestModelAndLightSelectionAreDistinct()
@@ -114,6 +117,7 @@ void TestModelAndLightSelectionAreDistinct()
     camera.SetAspectRatio(1.0f);
 
     EditableModel model;
+    model.id = ModelId{11};
     model.sections.push_back({
         1,
         cy::Matrix4f::Identity(),
@@ -124,6 +128,7 @@ void TestModelAndLightSelectionAreDistinct()
     light.proxy.type = LightType::Point;
     light.transform.position = cy::Vec3f(0.0f);
     std::vector<EditableLight> lights{light};
+    std::vector<EditableModel> models{model};
 
     EditorPickResult pick = PickEditorObject(
         500.0f,
@@ -132,7 +137,7 @@ void TestModelAndLightSelectionAreDistinct()
         1000.0f,
         camera.GetProjectionMatrix(),
         camera.GetViewMatrix(),
-        model,
+        models,
         lights);
     Require(
         pick.type == EditorSelectionType::Light && pick.lightId == 7,
@@ -146,13 +151,13 @@ void TestModelAndLightSelectionAreDistinct()
         1000.0f,
         camera.GetProjectionMatrix(),
         camera.GetViewMatrix(),
-        model,
+        models,
         lights);
     Require(
-        pick.type == EditorSelectionType::Model,
+        pick.type == EditorSelectionType::Model && pick.modelId == model.id,
         "The model should remain independently selectable away from light icons.");
 
-    model.transform.position.x = 20.0f;
+    models.front().transform.position.x = 20.0f;
     pick = PickEditorObject(
         500.0f,
         500.0f,
@@ -160,11 +165,87 @@ void TestModelAndLightSelectionAreDistinct()
         1000.0f,
         camera.GetProjectionMatrix(),
         camera.GetViewMatrix(),
-        model,
+        models,
         lights);
     Require(
         pick.type == EditorSelectionType::None,
         "Clicking empty space should clear both model and light selection.");
+}
+
+void TestMultipleModelPickingAndBounds()
+{
+    Camera camera(cy::Vec3f(0.0f), 10.0f);
+    camera.SetAspectRatio(1.0f);
+
+    EditableModel back;
+    back.id = ModelId{21};
+    back.sections.push_back({
+        1, cy::Matrix4f::Identity(), {cy::Vec3f(0.0f), 1.0f} });
+    back.transform.position.z = -2.0f;
+
+    EditableModel front;
+    front.id = ModelId{22};
+    front.sections.push_back({
+        2, cy::Matrix4f::Identity(), {cy::Vec3f(0.0f), 1.0f} });
+    front.transform.position.z = 2.0f;
+
+    std::vector<EditableModel> models{back, front};
+    const std::vector<EditableLight> noLights;
+    const auto pickCenter = [&]()
+    {
+        return PickEditorObject(
+            500.0f, 500.0f, 1000.0f, 1000.0f,
+            camera.GetProjectionMatrix(), camera.GetViewMatrix(),
+            models, noLights);
+    };
+
+    Require(pickCenter().modelId == front.id,
+        "Picking overlapping models should select the nearest model ID.");
+    const PrimitiveBounds sceneBounds = GetSceneWorldBounds(models);
+    Require(NearlyEqual(sceneBounds.center.z, 0.0f) &&
+            NearlyEqual(sceneBounds.radius, 3.0f),
+        "Scene bounds should contain both independently positioned models.");
+
+    FindEditableModel(models, front.id)->transform.position.x = 20.0f;
+    Require(pickCenter().modelId == back.id,
+        "Moving one model should expose the other model to picking.");
+    models.erase(models.begin() + 1);
+    Require(FindEditableModel(models, front.id) == nullptr &&
+            FindEditableModel(models, back.id) != nullptr,
+        "Removing one model should preserve the other model identity.");
+}
+
+void TestUniqueModelNamesAfterRemoval()
+{
+    std::vector<EditableModel> models;
+    EditableModel first;
+    first.id = ModelId{2};
+    first.name = MakeUniqueModelName(models, "Avatar");
+    models.push_back(first);
+    Require(first.name == "Avatar", "First import should keep its filename stem.");
+
+    EditableModel second;
+    second.id = ModelId{3};
+    second.name = MakeUniqueModelName(models, "Avatar");
+    models.push_back(second);
+    Require(second.name == "Avatar_001",
+        "A duplicate filename should receive the first padded suffix.");
+
+    EditableModel third;
+    third.id = ModelId{4};
+    third.name = MakeUniqueModelName(models, "Avatar");
+    models.push_back(third);
+    Require(third.name == "Avatar_002",
+        "A further duplicate should skip names already in the scene.");
+
+    models.erase(models.begin() + 1);
+    EditableModel replacement;
+    replacement.id = ModelId{5};
+    replacement.name = MakeUniqueModelName(models, "Avatar");
+    models.push_back(replacement);
+    Require(replacement.name == "Avatar_001" &&
+            replacement.id != second.id,
+        "Removing a model may reuse its display name without reusing its ID.");
 }
 
 void TestEditorValueConstraints()
@@ -205,6 +286,8 @@ int main()
     TestMergedWorldBounds();
     TestEditorSelectionTransitions();
     TestModelAndLightSelectionAreDistinct();
+    TestMultipleModelPickingAndBounds();
+    TestUniqueModelNamesAfterRemoval();
     TestEditorValueConstraints();
     std::cout << "Editor interaction tests passed." << std::endl;
     return EXIT_SUCCESS;

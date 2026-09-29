@@ -7,12 +7,13 @@
 
 struct EditableLight;
 struct EditableModel;
+struct ModelId;
 
 class SceneHierarchyPanel
 {
 public:
-    void Draw(
+    ModelId Draw(
         EditorSelection& selection,
-        const EditableModel& model,
+        const std::vector<EditableModel>& models,
         const std::vector<EditableLight>& lights);
 };

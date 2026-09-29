@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "Editor/EditableModel.h"
 #include "Renderer/Scene/LightSceneProxy.h"
 
 enum class EditorSelectionType
@@ -13,17 +14,20 @@ enum class EditorSelectionType
 struct EditorSelection
 {
     EditorSelectionType type = EditorSelectionType::None;
+    ModelId modelId;
     LightId lightId = InvalidLightId;
 
     void Clear()
     {
         type = EditorSelectionType::None;
+        modelId = {};
         lightId = InvalidLightId;
     }
 
-    void SelectModel()
+    void SelectModel(ModelId id)
     {
-        type = EditorSelectionType::Model;
+        type = id.IsValid() ? EditorSelectionType::Model : EditorSelectionType::None;
+        modelId = id;
         lightId = InvalidLightId;
     }
 
@@ -32,12 +36,13 @@ struct EditorSelection
         type = id == InvalidLightId
             ? EditorSelectionType::None
             : EditorSelectionType::Light;
+        modelId = {};
         lightId = id;
     }
 
-    bool IsModelSelected() const
+    bool IsModelSelected(ModelId id) const
     {
-        return type == EditorSelectionType::Model;
+        return type == EditorSelectionType::Model && modelId == id;
     }
 
     bool IsLightSelected(LightId id) const
