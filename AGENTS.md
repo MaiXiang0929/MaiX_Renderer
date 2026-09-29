@@ -127,6 +127,7 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 - [x] 三帧缓冲的 GPU Timer Query 已输出各 Pass last/EMA 时间，并以非阻塞方式处理尚未完成的 Query
 - [x] ImGui `Renderer Statistics` 面板已显示场景、资源、CPU/GPU Pass 统计，并提供常用渲染调试参数
 - [x] Forward 与 Reflection 离屏目标已随窗口 framebuffer 动态重建；反射保持半分辨率，最小化时跳过零尺寸渲染
+- [x] Framebuffer Resize 改为候选附件完整后提交，失败时保留旧目标与绑定；Bloom/SSAO 检查全部内部目标并在失败后重试，`FramebufferTests` 覆盖 OpenGL 失败与成功重建
 - [x] Forward Scene Color 已升级为 RGBA16F，PostProcessPass 支持手动曝光、ACES Tone Mapping 与 sRGB 输出编码
 - [x] BloomPass 已完成半分辨率 HDR 高亮提取与双向模糊；PostProcessPass 负责 Bloom 合成、曝光、ACES 与 sRGB 编码，PresentPass 仅负责最终显示
 - [x] Toon Shading Model 已接入 Forward PBR Shader，支持分段漫反射、阴影色和 Rim Light，并由 Material Editor 实时调节
@@ -140,7 +141,7 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 - [x] 最小 Scene Window / Inspector 已接入共享选择状态、模型 Transform 与类型相关灯光参数
 - [x] CMake 构建时清理并复制最新 assets
 - [x] 默认场景 `teapot.obj` 与当前 VS2022 构建所需 `glfw3.lib` 已纳入 Git 跟踪，避免新克隆缺少运行或链接输入
-- [x] CMake 配置、编译、链接与 13 项测试通过；Material Lab、默认/Instancing/Tessellation 路径及全部 Shader 初始化检查完成
+- [x] CMake 配置、编译、链接与 14 项测试通过；Material Lab、默认/Instancing/Tessellation 路径及全部 Shader 初始化检查完成
 - [x] 根目录 README 已按项目简介、核心能力、渲染架构、快速开始、编辑器操作与延伸文档重组，运行示例使用可替换的外部资产路径
 
 ### 部分完成
@@ -238,7 +239,7 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 - 主视图、反射视图和阴影视图每帧分别遍历场景并重建 `RenderItem` 列表；对象规模扩大后需要评估重复 CPU 遍历、容器填充和包围体变换成本。
 - 不透明列表已按稳定资源 ID 排序并按 Shader/Material/Mesh 批次执行 Instancing；每实例通过 64 字节 model-view UBO 输入，OpenGL 4.0 的 16 KiB 可移植上限使单 Draw 最多容纳 256 个实例。透明与 Tessellation 仍使用逐项提交，Texture cache 留待多批次场景重新评估。
 - 透明排序使用各自主视图/反射视图下的物体包围球中心观察空间深度；相交网格、网格内部三角形顺序、Alpha Cutout 阴影与 OIT 仍未处理。
-- Resize 会在渲染线程立即重建 Forward/Reflection 颜色与深度附件；持续拖动窗口可能产生重复 GPU 分配，后续可结合 Render Graph 资源池或 resize debounce 优化。
+- Resize 会在渲染线程立即重建各 Pass 的颜色与深度附件；单个 Framebuffer 重建已具备失败回退，但整条管线的目标仍逐个更新，任一失败时本帧跳过渲染并在下一帧重试。持续拖动窗口可能产生重复 GPU 分配，后续按性能证据评估资源池或 resize debounce。
 - Forward PBR 最多消费 16 盏灯；当前仍只有一张 2D shadow map，Point Light 阴影与多阴影灯尚未实现。
 - Outline 使用观察空间厚度，当前只覆盖主视图不透明 Toon 材质；Tessellation 开启时跳过，透明/反射描边、屏幕空间恒定像素宽度和 Outline Instancing 尚未处理。
 - SSAO 当前从深度重建观察空间法线，使用固定屏幕空间采样核，并在 HDR Scene Color 上统一合成；间接光分离、时域稳定和 GTAO/HBAO 不在当前边界。

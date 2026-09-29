@@ -68,6 +68,8 @@ public:
     bool HasMipmaps() const { return m_MipmapsEnabled; }
 
 private:
+    void Swap(Framebuffer& other) noexcept;
+
     GLuint m_FBO = 0;
     GLuint m_ColorTexture = 0;
     GLuint m_DepthTexture = 0;

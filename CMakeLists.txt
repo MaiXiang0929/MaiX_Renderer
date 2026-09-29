@@ -310,6 +310,30 @@ if(BUILD_TESTING)
     add_test(NAME RenderTargetSizingTests COMMAND RenderTargetSizingTests)
 
     add_executable(
+        FramebufferTests
+        tests/Renderer/Resources/FramebufferTests.cpp
+        src/Renderer/Resources/Framebuffer.cpp
+        ThirdParty/glad/src/glad.c
+    )
+
+    target_include_directories(
+        FramebufferTests
+        PRIVATE
+        ${SRC_DIR}
+        ${THIRD_PARTY_DIR}/glad/include
+        ${THIRD_PARTY_DIR}/glfw/include
+    )
+
+    target_link_directories(FramebufferTests PRIVATE
+        ${THIRD_PARTY_DIR}/glfw/lib-vc2022)
+    target_link_libraries(FramebufferTests PRIVATE glfw3.lib opengl32.lib)
+    target_compile_options(FramebufferTests PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
+    target_link_options(FramebufferTests PRIVATE
+        $<$<CONFIG:Debug>:LINKER:/NODEFAULTLIB:MSVCRT>)
+    add_test(NAME FramebufferTests COMMAND FramebufferTests)
+
+    add_executable(
         PostProcessSettingsTests
         tests/Renderer/Pipeline/PostProcessSettingsTests.cpp
     )
