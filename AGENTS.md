@@ -119,6 +119,7 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 - [x] 独立 `TranslucencyPass` 已支持主视图与反射视图透明物体从后向前稳定排序、纹理 Alpha、显式 Blend Mode、Alpha Blend 和深度只读
 - [x] PBR 使用 std140 UBO 消费最多 16 盏 Directional/Point/Spot 灯光，并为单一 2D shadow map 记录对应灯光索引
 - [x] Renderer 已提供强类型 Mesh/Material Handle 与共享资源提交接口；透明测试场景的三张平面共享一份 Mesh
+- [x] Mesh/Material 销毁前检查所有 Primitive 引用（含不可见对象），拒绝释放仍被场景代理使用的资源；便利创建接口在失败或异常时回收已创建资源，`RenderSceneTests` 覆盖共享引用的最后一次移除
 - [x] `--instance-grid N` 已提供默认关闭的共享资源多实例基准；1/64/256 实例运行数据与 RenderDoc 捕获记录于 `docs/instance-benchmark.md`
 - [x] 不透明标准三角形已按 Shader/Material/Mesh 批次执行 Instancing；256 实例时 Shadow/Reflection/Forward 分别降为 1/2/3 Draw，单实例与 Tessellation 保持原路径
 - [x] RenderPipeline 已加入可选 GPU Debug Group，各 Pass 具备 Draw 与 Shader/Material/Mesh/Texture 提交统计
@@ -231,7 +232,7 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 ## 7. 当前技术债与约束
 
 - OpenGL 资源仍由各 Resource 类直接管理，尚未抽象成跨 API RHI。
-- Renderer 通过只增资源表和强类型 Handle 拥有 Mesh/Material，Scene Proxy 与 `RenderItem` 仍缓存非 owning 裸指针；资源删除、generation 校验和 Primitive/Light 完整移除边界仍需补充。
+- Renderer 通过只增槽位、不复用 ID 的资源表和强类型 Handle 拥有 Mesh/Material；销毁会拒绝仍被 Primitive 引用的资源，旧 Handle 指向空槽时会被拒绝。Scene Proxy 与 `RenderItem` 仍缓存非 owning 裸指针，视图只供当帧同步使用；空槽复用、generation 校验和更完整的 Primitive/Light 移除边界留待明确需求。
 - RenderPass 之间仍通过共享 `RenderPassContext` 和 Pass 之间的直接引用传递视图及纹理资源，资源读写依赖尚未显式声明，后续可引入 Render Graph。
 - 当前裁剪只使用世界空间包围球，非均匀缩放取最大轴形成保守半径；细长物体可能产生误保留，但不会错误剔除。遮挡裁剪与距离裁剪尚未实现。
 - 主视图、反射视图和阴影视图每帧分别遍历场景并重建 `RenderItem` 列表；对象规模扩大后需要评估重复 CPU 遍历、容器填充和包围体变换成本。

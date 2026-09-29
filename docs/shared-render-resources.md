@@ -14,9 +14,11 @@ AddPrimitive(meshHandle, materialHandle, transform, ...)
 
 原有 `AddPrimitive(vertices, material, ...)` 作为便利接口保留，内部创建独立 Mesh/Material 后转调句柄接口。它适合一次性资源；需要实例化时应显式创建并复用 Handle。
 
+`RemovePrimitive` 移除场景引用后，调用方可用 `DestroyMesh` / `DestroyMaterial` 释放不再使用的资源。只要任一 Primitive（包括不可见 Primitive）仍引用资源，销毁请求就返回 `false` 并输出诊断，资源和 GPU 对象保持有效。便利接口在后续创建步骤失败时回收已创建的资源；异常会在清理后继续向上抛出。
+
 ## GPU 数据流
 
-Mesh 首次创建时上传一份 VAO/VBO。多个 Primitive 共享 Mesh 时，每个 Draw 仍独立上传 `model`、`MV`、`MVP` 和 `lightMVP`，但绑定并绘制同一份几何缓冲。Material Handle 可以独立或共享，纹理资源仍由 Material 内部的 `shared_ptr<Texture2D>` 管理。
+Mesh 首次创建时上传一份 VAO/VBO。多个 Primitive 共享 Mesh 时，不透明标准三角形可按 Shader/Material/Mesh 批次进行 Instancing；透明与曲面细分路径仍逐项提交。Material Handle 可以独立或共享，纹理资源仍由 Material 内部的 `shared_ptr<Texture2D>` 管理。
 
 透明验收场景中的三张平面现在共享一份 Mesh，并分别使用三份 Material：
 
@@ -30,6 +32,6 @@ Mesh 首次创建时上传一份 VAO/VBO。多个 Primitive 共享 Mesh 时，�
 
 ## 当前限制
 
-资源表当前只增不删，Handle ID 可直接作为数组索引并在资源生命周期内保持稳定。尚未提供 Mesh/Material 删除、引用计数、空槽复用或 generation 校验；引入资源卸载时必须扩展 Handle，防止旧 ID 命中新资源。
+资源表的槽位只增不复用；销毁会清空槽位，因此旧 Handle 会被现有有效性检查拒绝，不会命中新资源。当前没有引用计数、空槽复用或 generation 校验。场景代理和 `RenderView` 中的资源指针仍是非 owning 指针；`RenderView` 仅供当帧同步执行，不能在移除 Primitive 并销毁资源后继续使用旧视图。
 
 共享资源减少了重复 GPU Buffer 和 CPU 资源对象，但当前各 Resource 类仍自行绑定/解绑 OpenGL 状态。是否加入 Shader、VAO 和纹理状态缓存，应以 RenderDoc 捕获的实际状态切换为依据。

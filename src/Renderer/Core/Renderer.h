@@ -64,8 +64,10 @@ public:
     MeshHandle CreateMesh(
         const std::vector<Vertex>& vertices,
         const std::vector<std::uint32_t>& indices);
+    /// @brief 若任一 Primitive 仍引用资源，则拒绝销毁并返回 false。
     bool DestroyMesh(MeshHandle handle);
     MaterialHandle CreateMaterial(Material material);
+    /// @brief 若任一 Primitive 仍引用资源，则拒绝销毁并返回 false。
     bool DestroyMaterial(MaterialHandle handle);
     bool GetMaterialSnapshot(
         MaterialHandle handle,

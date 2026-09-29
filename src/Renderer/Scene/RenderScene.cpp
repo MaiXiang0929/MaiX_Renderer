@@ -109,6 +109,28 @@ bool RenderScene::RemovePrimitive(PrimitiveId id)
     return true;
 }
 
+bool RenderScene::HasMeshReference(RenderResourceId meshId) const
+{
+    return std::any_of(
+        m_Primitives.begin(),
+        m_Primitives.end(),
+        [meshId](const PrimitiveSceneProxy& proxy)
+        {
+            return proxy.meshId == meshId;
+        });
+}
+
+bool RenderScene::HasMaterialReference(RenderResourceId materialId) const
+{
+    return std::any_of(
+        m_Primitives.begin(),
+        m_Primitives.end(),
+        [materialId](const PrimitiveSceneProxy& proxy)
+        {
+            return proxy.materialId == materialId;
+        });
+}
+
 bool RenderScene::UpdatePrimitiveTransform(
     PrimitiveId id,
     const cy::Matrix4f& localToWorld)
