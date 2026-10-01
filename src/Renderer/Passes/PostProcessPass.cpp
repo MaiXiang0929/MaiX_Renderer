@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "PostProcessPass.h"
 
-#include "ForwardPass.h"
 #include "Renderer/Diagnostics/RenderSubmissionStats.h"
 #include "Renderer/Pipeline/RenderSettings.h"
 #include "Renderer/Resources/Mesh.h"
@@ -33,27 +32,24 @@ void PostProcessPass::Execute(RenderPassContext& context)
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);
 
-    m_Framebuffer.Bind();
-    glClear(GL_COLOR_BUFFER_BIT);
+    context.Resources().BeginTarget(PassResourceId::PostColor);
     m_Shader.Bind();
 
     glActiveTexture(GL_TEXTURE0);
-    const GLuint sceneColorTexture = context.sceneColorTexture != 0
-        ? context.sceneColorTexture
-        : m_ForwardPass.GetColorTexture();
+    const GLuint sceneColorTexture = context.Resources().HdrTexture();
     RenderSubmissionStats::Get().RecordTextureBind(
         GL_TEXTURE_2D, 0, sceneColorTexture);
     glBindTexture(GL_TEXTURE_2D, sceneColorTexture);
     m_Shader.SetInt("sceneTexture", 0);
 
-    const bool bloomEnabled = context.postProcess.bloomEnabled &&
-        context.bloomTexture != 0;
+    const bool bloomEnabled = context.postProcess.bloomEnabled;
     if (bloomEnabled)
     {
+        const GLuint bloomTexture = context.Resources().Texture(PassResourceId::Bloom);
         glActiveTexture(GL_TEXTURE1);
         RenderSubmissionStats::Get().RecordTextureBind(
-            GL_TEXTURE_2D, 1, context.bloomTexture);
-        glBindTexture(GL_TEXTURE_2D, context.bloomTexture);
+            GL_TEXTURE_2D, 1, bloomTexture);
+        glBindTexture(GL_TEXTURE_2D, bloomTexture);
     }
     m_Shader.SetInt("bloomTexture", 1);
     m_Shader.SetInt("bloomEnabled", bloomEnabled ? 1 : 0);
@@ -66,9 +62,8 @@ void PostProcessPass::Execute(RenderPassContext& context)
         context.postProcess.exposureCompensation);
     context.presentMesh.Draw();
 
-    m_Framebuffer.Unbind();
-    m_Framebuffer.GenerateMipmaps();
-    context.postProcessTexture = GetColorTexture();
+    context.Resources().EndTarget(PassResourceId::PostColor);
+    context.Resources().Publish(PassResourceId::PostColor);
     if (depthTestEnabled) glEnable(GL_DEPTH_TEST);
     if (blendEnabled) glEnable(GL_BLEND);
 }

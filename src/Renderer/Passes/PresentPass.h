@@ -13,6 +13,7 @@ public:
     bool Resize(unsigned int width, unsigned int height);
     bool ReloadShaders();
     GLuint GetColorTexture() const { return m_Framebuffer.GetColorTexture(); }
+    const Framebuffer& GetTarget() const { return m_Framebuffer; }
     int GetTargetWidth() const { return m_Framebuffer.GetWidth(); }
     int GetTargetHeight() const { return m_Framebuffer.GetHeight(); }
 

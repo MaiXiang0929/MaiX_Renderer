@@ -8,6 +8,7 @@
 
 #include "Editor/EditableLight.h"
 #include "Editor/EditableModel.h"
+#include "Editor/EditorMaterialSelection.h"
 #include "Editor/EditorValueConstraints.h"
 #include "Renderer/Core/Renderer.h"
 
@@ -40,25 +41,26 @@ const char* LightTypeName(LightType type)
 }
 }
 
-void InspectorPanel::Draw(
+bool InspectorPanel::Draw(
     EditorSelection& selection,
     std::vector<EditableModel>& models,
     std::vector<EditableLight>& lights,
-    Renderer& renderer)
+    Renderer& renderer,
+    EditorMaterialSelection& materialSelection)
 {
     SetEditorPanelPosition(360.0f, 8.0f);
     ImGui::SetNextWindowSize(ImVec2(360.0f, 520.0f), ImGuiCond_FirstUseEver);
     if (!ImGui::Begin("Inspector"))
     {
         ImGui::End();
-        return;
+        return false;
     }
 
     if (selection.type == EditorSelectionType::None)
     {
         ImGui::TextUnformatted("Select an object in the Scene or viewport.");
         ImGui::End();
-        return;
+        return false;
     }
 
     if (selection.type == EditorSelectionType::Model)
@@ -69,7 +71,7 @@ void InspectorPanel::Draw(
             selection.Clear();
             ImGui::TextUnformatted("Selected model is unavailable.");
             ImGui::End();
-            return;
+            return false;
         }
         ImGui::TextUnformatted(model->name.empty() ? "Model" : model->name.c_str());
         ImGui::SeparatorText("Transform");
@@ -83,8 +85,46 @@ void InspectorPanel::Draw(
         EditorValueConstraints::SanitizeScale(model->transform.scale);
         if (changed && model->IsValid())
             ApplyEditableModelTransform(*model, renderer);
+
+        ImGui::SeparatorText("Materials");
+        bool openMaterialEditor = false;
+        bool hasAvailableMaterial = false;
+        const std::vector<MaterialHandle> handles = model->GetUsedMaterials();
+        for (std::size_t index = 0; index < handles.size(); ++index)
+        {
+            Renderer::MaterialSnapshot snapshot;
+            if (!renderer.GetMaterialSnapshot(handles[index], snapshot))
+                continue;
+            hasAvailableMaterial = true;
+            const std::string label = "Slot " + std::to_string(index + 1) +
+                ": " + (snapshot.name.empty() ? "Material" : snapshot.name);
+            ImGui::PushID(static_cast<int>(handles[index].id));
+            if (ImGui::Selectable(label.c_str(),
+                    !materialSelection.AllMaterials() &&
+                    materialSelection.Owner() == model->id &&
+                    materialSelection.Material().id == handles[index].id))
+            {
+                // 点击模型材质时回到模型范围，并打开共用的参数编辑面板。
+                materialSelection.Select(model->id, handles[index]);
+                openMaterialEditor = true;
+            }
+            ImGui::PopID();
+            for (std::size_t sectionIndex = 0; sectionIndex < model->sections.size();
+                 ++sectionIndex)
+            {
+                const EditableModelSection& section = model->sections[sectionIndex];
+                if (section.material.id == handles[index].id)
+                {
+                    const std::string sectionName = section.name.empty()
+                        ? "Section " + std::to_string(sectionIndex + 1) : section.name;
+                    ImGui::TextDisabled("  %s", sectionName.c_str());
+                }
+            }
+        }
+        if (!hasAvailableMaterial)
+            ImGui::TextUnformatted("No available materials used by this model.");
         ImGui::End();
-        return;
+        return openMaterialEditor;
     }
 
     EditableLight* light = FindEditableLight(lights, selection.lightId);
@@ -93,7 +133,7 @@ void InspectorPanel::Draw(
         selection.Clear();
         ImGui::TextUnformatted("Selected light is unavailable.");
         ImGui::End();
-        return;
+        return false;
     }
 
     ImGui::TextUnformatted(light->name.empty() ? "Light" : light->name.c_str());
@@ -145,4 +185,5 @@ void InspectorPanel::Draw(
         ApplyEditableLightTransform(*light, renderer);
 
     ImGui::End();
+    return false;
 }

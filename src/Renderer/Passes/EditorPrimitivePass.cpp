@@ -55,16 +55,13 @@ bool EditorPrimitivePass::ReloadShaders()
 
 void EditorPrimitivePass::Execute(RenderPassContext& context)
 {
-    m_OverlayTarget.Bind();
-    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-    context.editorOverlayTexture = GetColorTexture();
+    context.Resources().BeginTarget(PassResourceId::Overlay);
 
     if (!context.frame.editorPrimitivesEnabled ||
         context.mainView.lights.empty())
     {
-        m_OverlayTarget.Unbind();
-        m_OverlayTarget.GenerateMipmaps();
+        context.Resources().EndTarget(PassResourceId::Overlay);
+        context.Resources().Publish(PassResourceId::Overlay);
         return;
     }
 
@@ -113,8 +110,8 @@ void EditorPrimitivePass::Execute(RenderPassContext& context)
     if (depthTestEnabled) glEnable(GL_DEPTH_TEST);
     glDepthMask(depthWriteEnabled);
 
-    m_OverlayTarget.Unbind();
-    m_OverlayTarget.GenerateMipmaps();
+    context.Resources().EndTarget(PassResourceId::Overlay);
+    context.Resources().Publish(PassResourceId::Overlay);
 }
 
 void EditorPrimitivePass::CreateBillboardMesh()

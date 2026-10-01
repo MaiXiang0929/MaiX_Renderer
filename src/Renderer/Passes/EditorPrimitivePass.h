@@ -31,6 +31,7 @@ public:
         return m_OverlayTarget.GetColorTexture();
     }
     int GetTargetWidth() const { return m_OverlayTarget.GetWidth(); }
+    const Framebuffer& GetTarget() const { return m_OverlayTarget; }
     int GetTargetHeight() const { return m_OverlayTarget.GetHeight(); }
 
 private:

@@ -35,16 +35,10 @@ public:
         const cy::Matrix4f& view);
 
     GLuint GetColorTexture() const { return m_Framebuffer.GetColorTexture(); }
+    const Framebuffer& GetTarget() const { return m_Framebuffer; }
     GLuint GetDepthTexture() const { return m_Framebuffer.GetDepthTexture(); }
     int GetTargetWidth() const { return m_Framebuffer.GetWidth(); }
     int GetTargetHeight() const { return m_Framebuffer.GetHeight(); }
-    void BindColorTarget() const { m_Framebuffer.Bind(); }
-    void UnbindColorTarget(bool generateMipmaps = true) const
-    {
-        m_Framebuffer.Unbind();
-        if (generateMipmaps)
-            m_Framebuffer.GenerateMipmaps();
-    }
 
 private:
     static constexpr GLuint ForwardLightsBindingPoint = 0;

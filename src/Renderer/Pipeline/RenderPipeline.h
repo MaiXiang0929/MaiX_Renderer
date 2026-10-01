@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 /// @file RenderPipeline.h
 /// @brief 渲染管线类的头文件
-/// @details 该文件声明了 RenderPipeline 类，它直接拥有并按固定顺序执行四个真实渲染 Pass：ForwardPass、ShadowPass、ReflectionPass 和 PresentPass。
+/// @details 固定顺序执行现有 Pass，并验证它们的当帧资源访问契约。
 /// @author MaiX
 /// @date 2026-08-11
 
@@ -32,7 +32,7 @@ public:
     bool Init();
     bool ReloadShaders();
     void Execute(RenderPassContext& context);
-    GLuint GetFinalColorTexture() const { return m_PresentPass.GetColorTexture(); }
+    GLuint GetFinalColorTexture() const { return m_FinalColorTexture; }
 
     const std::vector<RenderPass*>& GetPasses() const
     {
@@ -44,6 +44,7 @@ public:
     }
 
 private:
+    void BindFrameResources(FrameResources& resources, const RenderPassContext& context) const;
     bool EnsureRenderTargetExtents(
         unsigned int viewportWidth,
         unsigned int viewportHeight);
@@ -60,4 +61,6 @@ private:
     PresentPass m_PresentPass;
     GpuPassProfiler m_GpuProfiler;
     std::vector<RenderPass*> m_Passes;
+    GLuint m_FinalColorTexture = 0;
+    std::string m_LastResourceError;
 };

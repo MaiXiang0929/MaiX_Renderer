@@ -8,6 +8,7 @@
 #include "Editor/EditableLight.h"
 #include "Editor/EditableModel.h"
 #include "Editor/EditorSelection.h"
+#include "Editor/EditorMaterialSelection.h"
 #include "Editor/EditorValueConstraints.h"
 #include "Editor/ViewportPicking.h"
 
@@ -248,6 +249,72 @@ void TestUniqueModelNamesAfterRemoval()
         "Removing a model may reuse its display name without reusing its ID.");
 }
 
+void TestMaterialSelectionAcrossModelsAndDeletion()
+{
+    EditableModel first;
+    first.id = ModelId{11};
+    first.name = "Avatar";
+    first.sections.push_back({1, cy::Matrix4f::Identity(), {}, MaterialHandle{10}, "Body"});
+    first.sections.push_back({2, cy::Matrix4f::Identity(), {}, MaterialHandle{20}, "Face"});
+    first.sections.push_back({3, cy::Matrix4f::Identity(), {}, MaterialHandle{10}, "Hair"});
+    EditableModel second = first;
+    second.id = ModelId{12};
+    second.name = "Avatar_001";
+    for (auto& section : second.sections)
+        section.material.id += 20;
+    std::vector<EditableModel> models{first, second};
+    std::vector<MaterialHandle> live{{10}, {20}, {30}, {40}};
+    EditorSelection objectSelection;
+    EditorMaterialSelection materialSelection;
+    objectSelection.SelectModel(first.id);
+    auto candidates = materialSelection.Synchronize(objectSelection, models, live);
+    Require(candidates.size() == 2 && materialSelection.Material().id == 10,
+        "Model material candidates should deduplicate shared section resources.");
+    materialSelection.Select(first.id, MaterialHandle{20});
+    materialSelection.Synchronize(objectSelection, models, live);
+    Require(materialSelection.Material().id == 20,
+        "Synchronizing the same model should retain its chosen material handle.");
+
+    objectSelection.SelectModel(second.id);
+    materialSelection.Synchronize(objectSelection, models, live);
+    Require(materialSelection.Owner() == second.id && materialSelection.Material().id == 30,
+        "Switching duplicate imports should select a material belonging to the new model.");
+    models.erase(models.begin());
+    live.erase(live.begin(), live.begin() + 2);
+    materialSelection.Synchronize(objectSelection, models, live);
+    Require(materialSelection.Material().id == 30,
+        "Deleting preceding list entries should not change the selected resource.");
+    live.erase(live.begin());
+    candidates = materialSelection.Synchronize(objectSelection, models, live);
+    Require(candidates.size() == 1 && !materialSelection.Material().IsValid(),
+        "An invalid material should clear selection without silently selecting a different one.");
+    models.clear();
+    materialSelection.Synchronize(objectSelection, models, live);
+    Require(!materialSelection.Owner().IsValid() && !materialSelection.Material().IsValid(),
+        "Deleting the owner should clear both material and model identities.");
+
+    materialSelection.SetAllMaterials(true);
+    materialSelection.Synchronize(objectSelection, models, live);
+    Require(materialSelection.Material().id == 40,
+        "Explicit debug scope should allow editing materials without a model owner.");
+    live.push_back(MaterialHandle{50});
+    live.erase(live.begin());
+    materialSelection.Synchronize(objectSelection, models, live);
+    Require(!materialSelection.Material().IsValid(),
+        "Deleting the globally selected resource should not retarget another live material.");
+    models.push_back(first);
+    live.push_back(MaterialHandle{10});
+    objectSelection.SelectModel(first.id);
+    materialSelection.Select(first.id, MaterialHandle{10});
+    materialSelection.Synchronize(objectSelection, models, live);
+    Require(!materialSelection.AllMaterials() && materialSelection.Material().id == 10,
+        "Inspector material selection should leave debug scope and target the model.");
+    objectSelection.SelectLight(7);
+    materialSelection.Synchronize(objectSelection, models, live);
+    Require(!materialSelection.Material().IsValid(),
+        "Selecting a light should clear model-scoped material editing.");
+}
+
 void TestEditorValueConstraints()
 {
     cy::Vec3f scale(-2.0f, 0.0f, 2000.0f);
@@ -289,6 +356,7 @@ int main()
     TestMultipleModelPickingAndBounds();
     TestUniqueModelNamesAfterRemoval();
     TestEditorValueConstraints();
+    TestMaterialSelectionAcrossModelsAndDeletion();
     std::cout << "Editor interaction tests passed." << std::endl;
     return EXIT_SUCCESS;
 }

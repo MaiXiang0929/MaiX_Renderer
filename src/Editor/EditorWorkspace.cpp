@@ -69,7 +69,40 @@ void EditorWorkspace::BuildDefaultLayout(ImGuiID dockspaceId)
     ImGui::DockBuilderDockWindow("Content Browser", bottom);
     ImGui::DockBuilderDockWindow("Scene", scene);
     ImGui::DockBuilderDockWindow("Inspector", inspector);
+    // 共用现有 Inspector 节点，不新增分区，也不改变其他面板的比例。
+    ImGui::DockBuilderDockWindow("Material Editor", inspector);
     ImGui::DockBuilderFinish(dockspaceId);
+    m_MaterialDockChecked = false;
+}
+
+void EditorWorkspace::OpenMaterialEditor()
+{
+    m_ShowMaterialEditor = true;
+    m_MaterialFocusRequested = true;
+}
+
+void EditorWorkspace::PrepareMaterialEditor()
+{
+    if (!m_ShowMaterialEditor)
+        return;
+
+    if (!m_MaterialDockChecked)
+    {
+        const ImGuiWindow* inspector = ImGui::FindWindowByName("Inspector");
+        if (inspector && inspector->DockId != 0 &&
+            ImGui::DockBuilderGetNode(inspector->DockId))
+        {
+            // 旧配置中的浮动材质窗口只迁移自身；Inspector 已保存的节点和尺寸继续使用。
+            ImGui::SetNextWindowDockID(inspector->DockId, ImGuiCond_Always);
+            m_MaterialDockChecked = true;
+        }
+    }
+    if (m_MaterialFocusRequested)
+    {
+        // 仅响应打开请求激活标签，不能每帧聚焦，否则会抢走视口输入。
+        ImGui::SetNextWindowFocus();
+        m_MaterialFocusRequested = false;
+    }
 }
 
 void EditorWorkspace::BeginFrame(AssetImportPanel& assetImport, void* nativeWindowHandle)
@@ -83,7 +116,9 @@ void EditorWorkspace::BeginFrame(AssetImportPanel& assetImport, void* nativeWind
         }
         if (ImGui::BeginMenu("View"))
         {
-            ImGui::MenuItem("Material Editor", nullptr, &m_ShowMaterialEditor);
+            if (ImGui::MenuItem("Material Editor", nullptr, &m_ShowMaterialEditor) &&
+                m_ShowMaterialEditor)
+                OpenMaterialEditor();
             ImGui::MenuItem("Renderer Statistics", nullptr, &m_ShowStatistics);
             ImGui::Separator();
             if (ImGui::MenuItem("Reset Layout"))

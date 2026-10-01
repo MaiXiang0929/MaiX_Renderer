@@ -9,14 +9,27 @@
 #include "RenderPipeline.h"
 
 #include <iostream>
+#include <array>
 
 #include "Renderer/Diagnostics/GpuDebugScope.h"
 #include "Renderer/Diagnostics/RenderSubmissionStats.h"
 #include "Renderer/Core/OpenGLStateCache.h"
 #include "Renderer/Pipeline/RenderTargetSizing.h"
+#include "Renderer/Pipeline/RenderSettings.h"
+#include "Renderer/Resources/CubemapTexture.h"
 
 namespace
 {
+RenderResourceBinding Snapshot(const Framebuffer& target, bool depth = false)
+{
+    const auto format = depth ? ResourceFormat::Depth24Stencil8
+        : target.GetColorFormat() == FramebufferColorFormat::RGBA16F ? ResourceFormat::RGBA16F
+        : target.GetColorFormat() == FramebufferColorFormat::R8 ? ResourceFormat::R8 : ResourceFormat::RGBA8;
+    return {depth ? target.GetDepthTexture() : target.GetColorTexture(),
+        target.GetFramebufferId(), target.GetDepthTexture(),
+        static_cast<unsigned int>(target.GetWidth()), static_cast<unsigned int>(target.GetHeight()),
+        format, target.HasDepthStencil(), false, target.HasMipmaps()};
+}
 const char* GetPassDebugName(RenderPassType type)
 {
     switch (type)
@@ -38,12 +51,8 @@ const char* GetPassDebugName(RenderPassType type)
 }
 
 RenderPipeline::RenderPipeline()
-    : m_OutlinePass(m_ForwardPass)
-    , m_TranslucencyPass(m_ForwardPass)
-    , m_SSAOPass(m_ForwardPass)
+    : m_TranslucencyPass(m_ForwardPass)
     , m_ReflectionPass(m_ForwardPass, m_TranslucencyPass)
-    , m_BloomPass(m_ForwardPass)
-    , m_PostProcessPass(m_ForwardPass)
 {
     // 顺序由 GPU 资源依赖决定：阴影和反射必须先于主颜色与 Present。
     m_Passes = {
@@ -62,6 +71,20 @@ RenderPipeline::RenderPipeline()
 
 bool RenderPipeline::Init()
 {
+    // 所有当前开关组合都验证固定顺序；不执行拓扑排序，也不增加 GPU 工作。
+    for (unsigned int flags = 0; flags < 8; ++flags)
+    {
+        std::array<PassResourceContract, static_cast<std::size_t>(RenderPassType::Count)> contracts;
+        for (std::size_t i = 0; i < m_Passes.size(); ++i)
+            contracts[i] = BuildPassResourceContract(m_Passes[i]->GetType(),
+                {(flags & 1) != 0, (flags & 2) != 0, (flags & 4) != 0});
+        std::string error;
+        if (!ValidatePassResourceSequence(contracts.data(), contracts.size(), error))
+        {
+            std::cerr << "[PassResources] " << error << std::endl;
+            return false;
+        }
+    }
     const bool forwardLoaded = m_ForwardPass.Init();
     const bool outlineLoaded = m_OutlinePass.Init();
     const bool ssaoLoaded = m_SSAOPass.Init();
@@ -99,6 +122,8 @@ bool RenderPipeline::ReloadShaders()
 
 void RenderPipeline::Execute(RenderPassContext& context)
 {
+    m_FinalColorTexture = 0;
+    context.passResources = nullptr;
     if (context.frame.viewportWidth == 0 ||
         context.frame.viewportHeight == 0)
         return;
@@ -108,22 +133,80 @@ void RenderPipeline::Execute(RenderPassContext& context)
             context.frame.viewportHeight))
         return;
 
+    FrameResources resources;
+    resources.BeginFrame(context.frame.viewportWidth, context.frame.viewportHeight);
+    BindFrameResources(resources, context);
+    const PassResourceFeatures features{context.frame.shadowsEnabled,
+        context.postProcess.ssaoEnabled, context.postProcess.bloomEnabled};
     RenderSubmissionStats& stats = RenderSubmissionStats::Get();
     stats.BeginFrame();
     m_GpuProfiler.BeginFrame();
     for (RenderPass* pass : m_Passes)
     {
         const RenderPassType type = pass->GetType();
-        OpenGLStateCache::Get().Invalidate();
-        stats.BeginPass(type);
-        m_GpuProfiler.BeginPass(type);
-        const GpuDebugScope debugScope(GetPassDebugName(type));
-        pass->Execute(context);
+        const auto contract = BuildPassResourceContract(type, features);
+        PassResources access(resources, contract);
+        bool passStarted = false;
+        try
+        {
+            // 先检查所有输入与输出，缺失资源时不能提交该 Pass 的 GPU 命令。
+            access.Validate();
+            context.passResources = &access;
+            OpenGLStateCache::Get().Invalidate();
+            stats.BeginPass(type);
+            m_GpuProfiler.BeginPass(type);
+            passStarted = true;
+            const GpuDebugScope debugScope(GetPassDebugName(type));
+            pass->Execute(context);
+            access.Complete();
+        }
+        catch (const ResourceContractError& error)
+        {
+            if (m_LastResourceError != error.what())
+                std::cerr << "[PassResources] " << error.what() << std::endl;
+            m_LastResourceError = error.what();
+            context.passResources = nullptr;
+            if (passStarted)
+            {
+                m_GpuProfiler.EndPass();
+                stats.EndPass();
+            }
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            OpenGLStateCache::Get().Invalidate();
+            break;
+        }
+        context.passResources = nullptr;
         m_GpuProfiler.EndPass();
         stats.EndPass();
     }
     stats.EndFrame();
     m_GpuProfiler.EndFrame();
+    // 已分配不等于本帧有效；失败或 Resize 中断后不向 Viewport 暴露旧内容。
+    m_FinalColorTexture = resources.GetFinalTexture();
+    if (m_FinalColorTexture != 0) m_LastResourceError.clear();
+}
+
+void RenderPipeline::BindFrameResources(FrameResources& resources, const RenderPassContext& context) const
+{
+    using Id = PassResourceId;
+    resources.Bind(Id::Environment, {context.cubemap.GetID(), 0, 0, 0, 0,
+        ResourceFormat::Cubemap, false, true});
+    const ShadowMap& shadow = m_ShadowPass.GetTarget();
+    resources.Bind(Id::ShadowDepth, {shadow.GetDepthTexture(), shadow.GetFramebufferId(),
+        shadow.GetDepthTexture(), static_cast<unsigned int>(shadow.GetWidth()),
+        static_cast<unsigned int>(shadow.GetHeight()), ResourceFormat::Depth24, true, false});
+    resources.Bind(Id::ReflectionColor, Snapshot(m_ReflectionPass.GetTarget()));
+    const auto mainColor = Snapshot(m_ForwardPass.GetTarget());
+    resources.Bind(Id::ForwardColor, mainColor);
+    resources.Bind(Id::OutlinedColor, mainColor);
+    resources.Bind(Id::SceneHdrColor, mainColor);
+    resources.Bind(Id::ForwardDepth, Snapshot(m_ForwardPass.GetTarget(), true));
+    resources.Bind(Id::SsaoAO, Snapshot(m_SSAOPass.GetAoTarget()));
+    resources.Bind(Id::SsaoColor, Snapshot(m_SSAOPass.GetTarget()));
+    resources.Bind(Id::Bloom, Snapshot(m_BloomPass.GetTarget()));
+    resources.Bind(Id::PostColor, Snapshot(m_PostProcessPass.GetTarget()));
+    resources.Bind(Id::Overlay, Snapshot(m_EditorPrimitivePass.GetTarget()));
+    resources.Bind(Id::FinalColor, Snapshot(m_PresentPass.GetTarget()));
 }
 
 bool RenderPipeline::EnsureRenderTargetExtents(
@@ -182,7 +265,8 @@ bool RenderPipeline::EnsureRenderTargetExtents(
         static_cast<int>(ssaoExtent.height),
         static_cast<int>(viewportWidth),
         static_cast<int>(viewportHeight));
-    if (!ssaoMatches && !m_SSAOPass.Resize(ssaoExtent.width, ssaoExtent.height))
+    if (!ssaoMatches && !m_SSAOPass.Resize(ssaoExtent.width, ssaoExtent.height,
+            viewportWidth, viewportHeight))
         return false;
     resized |= !ssaoMatches;
 

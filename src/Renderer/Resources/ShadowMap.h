@@ -33,6 +33,9 @@ public:
     void Unbind() const;
 
     GLuint GetDepthTexture() const { return m_DepthTexture; }
+    GLuint GetFramebufferId() const { return m_FBO; }
+    int GetWidth() const { return m_Width; }
+    int GetHeight() const { return m_Height; }
 
 private:
     GLuint m_FBO = 0;

@@ -58,6 +58,7 @@ public:
 
     /// @brief 获取生成的离屏颜色纹理 ID
     GLuint GetColorTexture() const { return m_ColorTexture; }
+    GLuint GetFramebufferId() const { return m_FBO; }
 
     int GetWidth() const { return m_Width; }
     int GetHeight() const { return m_Height; }

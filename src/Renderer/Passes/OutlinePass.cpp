@@ -3,7 +3,6 @@
 
 #include <algorithm>
 
-#include "ForwardPass.h"
 #include "Renderer/Diagnostics/RenderSubmissionStats.h"
 #include "Renderer/Pipeline/RenderSettings.h"
 #include "Renderer/Resources/Material.h"
@@ -45,7 +44,11 @@ void OutlinePass::Execute(RenderPassContext& context)
             context.mainView.opaqueItems.begin(),
             context.mainView.opaqueItems.end(),
             ShouldDrawOutline))
+    {
+        // 没有绘制也必须显式传递阶段结果；不能让后处理误用未完成的颜色身份。
+        context.Resources().Publish(PassResourceId::OutlinedColor);
         return;
+    }
 
     const GLboolean depthTestEnabled = glIsEnabled(GL_DEPTH_TEST);
     const GLboolean blendEnabled = glIsEnabled(GL_BLEND);
@@ -57,7 +60,7 @@ void OutlinePass::Execute(RenderPassContext& context)
     glGetIntegerv(GL_DEPTH_FUNC, &depthFunction);
     glGetIntegerv(GL_CULL_FACE_MODE, &cullFaceMode);
 
-    m_ForwardPass.BindColorTarget();
+    context.Resources().BeginTarget(PassResourceId::OutlinedColor);
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
     glDepthMask(GL_FALSE);
@@ -100,5 +103,6 @@ void OutlinePass::Execute(RenderPassContext& context)
     glDepthFunc(depthFunction);
     if (!depthTestEnabled)
         glDisable(GL_DEPTH_TEST);
-    m_ForwardPass.UnbindColorTarget(false);
+    context.Resources().EndTarget(PassResourceId::OutlinedColor, false);
+    context.Resources().Publish(PassResourceId::OutlinedColor);
 }

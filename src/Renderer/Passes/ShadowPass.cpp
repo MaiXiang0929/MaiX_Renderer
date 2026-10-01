@@ -44,12 +44,10 @@ bool ShadowPass::ReloadShaders()
 
 void ShadowPass::Execute(RenderPassContext& context)
 {
-    context.shadowTexture = m_ShadowMap.GetDepthTexture();
     if (!context.frame.shadowsEnabled)
         return;
 
-    m_ShadowMap.BindForWriting();
-    glClear(GL_DEPTH_BUFFER_BIT);
+    context.Resources().BeginTarget(PassResourceId::ShadowDepth);
     glEnable(GL_POLYGON_OFFSET_FILL);
     glPolygonOffset(2.0f, 4.0f);
 
@@ -234,5 +232,6 @@ void ShadowPass::Execute(RenderPassContext& context)
     }
 
     glDisable(GL_POLYGON_OFFSET_FILL);
-    m_ShadowMap.Unbind();
+    context.Resources().EndTarget(PassResourceId::ShadowDepth);
+    context.Resources().Publish(PassResourceId::ShadowDepth);
 }
