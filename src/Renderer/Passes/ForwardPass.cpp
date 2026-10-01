@@ -14,6 +14,14 @@
 
 namespace
 {
+void BindEnvironment(RenderPassContext& context, unsigned int unit)
+{
+    const GLuint texture = context.Resources().Texture(PassResourceId::Environment);
+    RenderSubmissionStats::Get().RecordTextureBind(GL_TEXTURE_CUBE_MAP, unit, texture);
+    glActiveTexture(GL_TEXTURE0 + unit);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, texture);
+}
+
 InstanceTransformData BuildInstanceTransform(
     const cy::Matrix4f& view,
     const cy::Matrix4f& model)
@@ -134,9 +142,10 @@ LightUploadData ForwardPass::UploadLights(
 void ForwardPass::Execute(RenderPassContext& context)
 {
     // CPU 侧切换主颜色目标；随后所有绘制命令写入同一个 Framebuffer。
-    m_Framebuffer.Bind();
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    context.Resources().BeginTarget(PassResourceId::ForwardColor);
+    const GLuint reflectionTexture = context.Resources().Texture(PassResourceId::ReflectionColor);
+    const GLuint shadowTexture = context.frame.shadowsEnabled
+        ? context.Resources().Texture(PassResourceId::ShadowDepth) : 0;
 
     RenderSkybox(context, context.frame.view);
 
@@ -151,17 +160,17 @@ void ForwardPass::Execute(RenderPassContext& context)
         context.frame.cameraWorldPosition.x,
         context.frame.cameraWorldPosition.y,
         context.frame.cameraWorldPosition.z);
-    context.cubemap.Bind(0);
+    BindEnvironment(context, 0);
     m_GroundShader.SetInt("cubemap", 0);
     glActiveTexture(GL_TEXTURE1);
     RenderSubmissionStats::Get().RecordTextureBind(
-        GL_TEXTURE_2D, 1, context.reflectionTexture);
-    glBindTexture(GL_TEXTURE_2D, context.reflectionTexture);
+        GL_TEXTURE_2D, 1, reflectionTexture);
+    glBindTexture(GL_TEXTURE_2D, reflectionTexture);
     m_GroundShader.SetInt("reflectionTex", 1);
     glActiveTexture(GL_TEXTURE2);
     RenderSubmissionStats::Get().RecordTextureBind(
-        GL_TEXTURE_2D, 2, context.shadowTexture);
-    glBindTexture(GL_TEXTURE_2D, context.shadowTexture);
+        GL_TEXTURE_2D, 2, shadowTexture);
+    glBindTexture(GL_TEXTURE_2D, shadowTexture);
     m_GroundShader.SetInt("shadowMap", 2);
     m_GroundShader.SetInt(
         "shadowsEnabled", context.frame.shadowsEnabled ? 1 : 0);
@@ -169,9 +178,9 @@ void ForwardPass::Execute(RenderPassContext& context)
 
     RenderSurface(context, context.mainView);
 
-    context.sceneColorTexture = GetColorTexture();
-
-    m_Framebuffer.Unbind();
+    context.Resources().EndTarget(PassResourceId::ForwardColor, false);
+    context.Resources().Publish(PassResourceId::ForwardColor);
+    context.Resources().Publish(PassResourceId::ForwardDepth);
 }
 
 void ForwardPass::RenderSurface(
@@ -420,12 +429,14 @@ void ForwardPass::PrepareSurfaceShader(
     }
     shader.SetInt("wireframePass", 0);
 
-    context.cubemap.Bind(4);
+    BindEnvironment(context, 4);
     shader.SetInt("cubemap", 4);
     glActiveTexture(GL_TEXTURE5);
+    const GLuint shadowTexture = context.frame.shadowsEnabled
+        ? context.Resources().Texture(PassResourceId::ShadowDepth) : 0;
     RenderSubmissionStats::Get().RecordTextureBind(
-        GL_TEXTURE_2D, 5, context.shadowTexture);
-    glBindTexture(GL_TEXTURE_2D, context.shadowTexture);
+        GL_TEXTURE_2D, 5, shadowTexture);
+    glBindTexture(GL_TEXTURE_2D, shadowTexture);
     shader.SetInt("shadowMap", 5);
     shader.SetInt(
         "shadowsEnabled", context.frame.shadowsEnabled ? 1 : 0);
@@ -436,7 +447,7 @@ void ForwardPass::RenderSkybox(
     RenderPassContext& context,
     const cy::Matrix4f& view)
 {
-    if (!context.cubemap.IsValid())
+    if (context.Resources().Texture(PassResourceId::Environment) == 0)
         return;
 
     cy::Matrix4f skyboxView = view;
@@ -448,7 +459,7 @@ void ForwardPass::RenderSkybox(
     m_SkyboxShader.SetMatrix4(
         "projection", &context.frame.projection.cell[0]);
     m_SkyboxShader.SetMatrix4("view", &skyboxView.cell[0]);
-    context.cubemap.Bind(0);
+    BindEnvironment(context, 0);
     m_SkyboxShader.SetInt("skybox", 0);
 
     glDepthMask(GL_FALSE);

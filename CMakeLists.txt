@@ -80,6 +80,8 @@ set(SOURCES
 
     # Renderer Pipeline
     src/Renderer/Pipeline/RenderPipeline.cpp
+    src/Renderer/Pipeline/PassResourceContract.cpp
+    src/Renderer/Pipeline/PassResourcesGL.cpp
 
     # Renderer Scene
     src/Renderer/Scene/RenderScene.cpp
@@ -313,6 +315,8 @@ if(BUILD_TESTING)
         FramebufferTests
         tests/Renderer/Resources/FramebufferTests.cpp
         src/Renderer/Resources/Framebuffer.cpp
+        src/Renderer/Pipeline/PassResourceContract.cpp
+        src/Renderer/Pipeline/PassResourcesGL.cpp
         ThirdParty/glad/src/glad.c
     )
 
@@ -393,6 +397,7 @@ if(BUILD_TESTING)
     add_executable(
         RenderPassContractTests
         tests/Renderer/Pipeline/RenderPassContractTests.cpp
+        src/Renderer/Pipeline/PassResourceContract.cpp
     )
 
     target_include_directories(

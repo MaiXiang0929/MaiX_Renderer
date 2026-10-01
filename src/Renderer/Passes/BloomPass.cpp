@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "BloomPass.h"
 
-#include "ForwardPass.h"
 #include "Renderer/Diagnostics/RenderSubmissionStats.h"
 #include "Renderer/Pipeline/RenderSettings.h"
 #include "Renderer/Resources/Mesh.h"
@@ -50,7 +49,6 @@ bool BloomPass::ReloadShaders()
 
 void BloomPass::Execute(RenderPassContext& context)
 {
-    context.bloomTexture = 0;
     if (!context.postProcess.bloomEnabled)
         return;
 
@@ -62,9 +60,7 @@ void BloomPass::Execute(RenderPassContext& context)
     m_Highlights.Bind();
     glClear(GL_COLOR_BUFFER_BIT);
     m_ExtractShader.Bind();
-    const GLuint sceneColorTexture = context.sceneColorTexture != 0
-        ? context.sceneColorTexture
-        : m_ForwardPass.GetColorTexture();
+    const GLuint sceneColorTexture = context.Resources().HdrTexture();
     BindTexture(sceneColorTexture, 0);
     m_ExtractShader.SetInt("sceneTexture", 0);
     m_ExtractShader.SetFloat(
@@ -79,7 +75,10 @@ void BloomPass::Execute(RenderPassContext& context)
     for (int passIndex = 0; passIndex < BlurPassCount; ++passIndex)
     {
         Framebuffer& destination = m_BlurTargets[passIndex % 2];
-        destination.Bind();
+        if (passIndex == BlurPassCount - 1)
+            context.Resources().BeginTarget(PassResourceId::Bloom);
+        else
+            destination.Bind(); // 内部 Ping/Pong 仍归本 Pass 管理。
         BindTexture(sourceTexture, 0);
         const bool horizontal = passIndex % 2 == 0;
         m_BlurShader.SetFloat(
@@ -90,8 +89,8 @@ void BloomPass::Execute(RenderPassContext& context)
         sourceTexture = destination.GetColorTexture();
     }
 
-    context.bloomTexture = sourceTexture;
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    context.Resources().EndTarget(PassResourceId::Bloom, false);
+    context.Resources().Publish(PassResourceId::Bloom);
     if (depthTestEnabled) glEnable(GL_DEPTH_TEST);
     if (blendEnabled) glEnable(GL_BLEND);
 }

@@ -475,7 +475,7 @@ void Renderer::ExecutePipeline(RenderFrameData& frame)
     shadowView.frustum = Frustum::FromViewProjection(frame.lightVP);
     m_RenderScene.BuildRenderView(shadowView);
 
-    // Renderer 在这里完成资源注入，Application 和 RenderPipeline 都不直接拥有资源。
+    // Renderer 注入场景绘制资源；Pipeline 组织 Pass，并绑定各 Pass 自己拥有的渲染目标。
     RenderPassContext context{
         frame,
         mainView,

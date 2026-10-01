@@ -24,16 +24,13 @@ bool ReflectionPass::ReloadShaders()
 
 void ReflectionPass::Execute(RenderPassContext& context)
 {
-    m_Framebuffer.Bind();
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    context.Resources().BeginTarget(PassResourceId::ReflectionColor);
 
     m_ForwardPass.RenderSkybox(context, context.frame.reflectionView);
     m_ForwardPass.RenderSurface(context, context.reflectionView);
     m_TranslucencyPass.RenderToBoundTarget(
         context, context.reflectionView);
 
-    m_Framebuffer.Unbind();
-    m_Framebuffer.GenerateMipmaps();
-    context.reflectionTexture = m_Framebuffer.GetColorTexture();
+    context.Resources().EndTarget(PassResourceId::ReflectionColor);
+    context.Resources().Publish(PassResourceId::ReflectionColor);
 }

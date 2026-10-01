@@ -61,6 +61,21 @@ EditableModel* FindEditableModel(std::vector<EditableModel>& models, ModelId id)
     return found == models.end() ? nullptr : &*found;
 }
 
+std::vector<MaterialHandle> EditableModel::GetUsedMaterials() const
+{
+    std::vector<MaterialHandle> result;
+    // 同一材质可被多个分段共享；编辑列表只保留一次实际使用的句柄。
+    for (const EditableModelSection& section : sections)
+    {
+        if (section.material.IsValid() &&
+            std::none_of(result.begin(), result.end(),
+                [&section](MaterialHandle handle)
+                { return handle.id == section.material.id; }))
+            result.push_back(section.material);
+    }
+    return result;
+}
+
 const EditableModel* FindEditableModel(
     const std::vector<EditableModel>& models, ModelId id)
 {

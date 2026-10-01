@@ -380,6 +380,7 @@ bool Application::Init() {
     std::filesystem::path diffusePath;
     std::filesystem::path specularPath;
     Material mainMaterial;
+    mainMaterial.SetName("Surface");
     const std::filesystem::path modelDirectory =
         std::filesystem::path(m_ObjPath).parent_path();
 
@@ -492,6 +493,8 @@ bool Application::Init() {
         {
             const LabMaterialDescription& description = descriptions[index];
             Material material = mainMaterial;
+            // 为测试材质提供可辨认名称，Inspector 与材质编辑器共享此名称。
+            material.SetName(description.name);
             MaterialProperties& properties = material.GetProperties();
             properties.baseColor = description.baseColor;
             properties.specularColor = cy::Vec3f(1.0f, 1.0f, 1.0f);
@@ -525,7 +528,8 @@ bool Application::Init() {
             if (primitiveId != InvalidPrimitiveId)
             {
                 defaultModel.sections.push_back({
-                    primitiveId, localToWorld, bounds });
+                    primitiveId, localToWorld, bounds, materialHandle,
+                    description.name });
             }
         }
 
@@ -558,7 +562,8 @@ bool Application::Init() {
             if (primitiveId != InvalidPrimitiveId)
             {
                 defaultModel.sections.push_back({
-                    primitiveId, localToWorld, bounds });
+                    primitiveId, localToWorld, bounds, instanceMaterial,
+                    "Surface" });
             }
         }
     }
@@ -851,6 +856,10 @@ bool Application::CommitImportedModel(
             PrimitiveBounds bounds;
             bounds.center = importedMesh.boundsCenter;
             bounds.radius = importedMesh.boundsRadius;
+            // 名称分配可能抛异常；在提交 Primitive 前完成，确保回滚能追踪每个代理。
+            EditableModelSection section{
+                InvalidPrimitiveId, importedMesh.localToWorld, bounds,
+                pendingModel.materials[importedMesh.materialIndex], importedMesh.name };
             const PrimitiveId primitiveId = m_Renderer->AddPrimitive(
                 meshHandle,
                 pendingModel.materials[importedMesh.materialIndex],
@@ -862,8 +871,8 @@ bool Application::CommitImportedModel(
                     "Renderer primitive submission failed: " +
                     importedMesh.name);
             }
-            pendingModel.sections.push_back({
-                primitiveId, importedMesh.localToWorld, bounds });
+            section.primitiveId = primitiveId;
+            pendingModel.sections.push_back(std::move(section));
         }
     }
     catch (const std::exception& exception)
@@ -1325,14 +1334,25 @@ void Application::Render() {
     m_AssetImportPanel->Draw(nativeWindowHandle);
     if (m_Workspace->ShowStatistics())
         m_StatisticsPanel->Draw(*m_Renderer);
-    if (m_Workspace->ShowMaterialEditor())
-        m_MaterialEditorPanel->Draw(*m_Renderer, nativeWindowHandle);
     const ModelId removedModel = m_SceneHierarchyPanel->Draw(
         m_EditorSelection, m_Models, m_EditableLights);
     if (removedModel.IsValid())
         RemoveModel(removedModel);
-    m_InspectorPanel->Draw(
-        m_EditorSelection, m_Models, m_EditableLights, *m_Renderer);
+    // 先应用场景选择/删除，再同步材质身份；即使材质面板关闭也清理失效选择。
+    m_MaterialSelection.Synchronize(
+        m_EditorSelection, m_Models, m_Renderer->GetMaterialHandles());
+    if (m_InspectorPanel->Draw(
+            m_EditorSelection, m_Models, m_EditableLights, *m_Renderer,
+            m_MaterialSelection))
+        m_Workspace->OpenMaterialEditor();
+    if (m_Workspace->ShowMaterialEditor())
+    {
+        // NextWindow 设置必须紧邻材质面板 Begin，避免被其它窗口消费。
+        m_Workspace->PrepareMaterialEditor();
+        m_MaterialEditorPanel->Draw(
+            *m_Renderer, m_EditorSelection, m_Models, m_MaterialSelection,
+            nativeWindowHandle);
+    }
     m_Workspace->DrawBottomPanels(*m_AssetImportPanel, nativeWindowHandle);
     ImGui::Render();
     glBindFramebuffer(GL_FRAMEBUFFER, 0);

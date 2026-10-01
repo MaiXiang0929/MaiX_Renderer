@@ -30,21 +30,22 @@ bool PresentPass::ReloadShaders()
 void PresentPass::Execute(RenderPassContext& context)
 {
     // 最终颜色由 PresentPass 持有；ImGui 仅在同一帧读取纹理，不管理其生命周期。
-    m_Framebuffer.Bind();
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    context.Resources().BeginTarget(PassResourceId::FinalColor);
+    const GLuint postProcessTexture = context.Resources().Texture(PassResourceId::PostColor);
+    const GLuint editorOverlayTexture = context.Resources().Texture(PassResourceId::Overlay);
 
     m_Shader.Bind();
     glActiveTexture(GL_TEXTURE0);
     RenderSubmissionStats::Get().RecordTextureBind(
-        GL_TEXTURE_2D, 0, context.postProcessTexture);
-    glBindTexture(GL_TEXTURE_2D, context.postProcessTexture);
+        GL_TEXTURE_2D, 0, postProcessTexture);
+    glBindTexture(GL_TEXTURE_2D, postProcessTexture);
     m_Shader.SetInt("renderedTexture", 0);
     glActiveTexture(GL_TEXTURE1);
     RenderSubmissionStats::Get().RecordTextureBind(
-        GL_TEXTURE_2D, 1, context.editorOverlayTexture);
-    glBindTexture(GL_TEXTURE_2D, context.editorOverlayTexture);
+        GL_TEXTURE_2D, 1, editorOverlayTexture);
+    glBindTexture(GL_TEXTURE_2D, editorOverlayTexture);
     m_Shader.SetInt("editorOverlayTexture", 1);
     context.presentMesh.Draw();
-    m_Framebuffer.Unbind();
+    context.Resources().EndTarget(PassResourceId::FinalColor);
+    context.Resources().Publish(PassResourceId::FinalColor);
 }

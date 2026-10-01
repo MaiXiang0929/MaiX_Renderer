@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MIT
 #include <cstdlib>
+#include <cmath>
 #include <iostream>
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
 #include "Renderer/Resources/Framebuffer.h"
+#include "Renderer/Pipeline/PassResourceContract.h"
 
 namespace
 {
@@ -29,6 +31,81 @@ GLuint BoundTexture()
     GLint value = 0;
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &value);
     return static_cast<GLuint>(value);
+}
+
+void TestPassAttachmentActions()
+{
+    Framebuffer target;
+    FramebufferSpecification specification;
+    specification.width = 64;
+    specification.height = 48;
+    specification.colorFormat = FramebufferColorFormat::RGBA16F;
+    specification.sampleableDepth = true;
+    specification.mipmapsEnabled = false;
+    Require(target.Init(specification), "Pass attachment target creation failed.");
+    using Id = PassResourceId;
+    FrameResources frame;
+    frame.BeginFrame(64, 48);
+    frame.Bind(Id::Environment, {0, 0, 0, 0, 0, ResourceFormat::Cubemap, false, true});
+    const RenderResourceBinding color{target.GetColorTexture(), target.GetFramebufferId(),
+        target.GetDepthTexture(), 64, 48, ResourceFormat::RGBA16F, true};
+    frame.Bind(Id::ForwardColor, color);
+    frame.Bind(Id::OutlinedColor, color);
+    frame.Bind(Id::ForwardDepth, {target.GetDepthTexture(), target.GetFramebufferId(),
+        target.GetDepthTexture(), 64, 48, ResourceFormat::Depth24Stencil8, true});
+
+    auto forward = BuildPassResourceContract(RenderPassType::Forward, {false, false, false});
+    // 这里只测试附件命令，省去场景反射输入；保留标准 Forward 的输出声明。
+    forward.inputCount = 1;
+    PassResources produce(frame, forward);
+    produce.Validate();
+    target.Bind();
+    glClearColor(0.3f, 0.5f, 0.7f, 1.0f);
+    glClearDepth(0.25);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+    glDepthMask(GL_FALSE);
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(0, 0, 1, 1);
+    produce.BeginTarget(Id::ForwardColor);
+    GLfloat pixel[4]{};
+    GLfloat depth = 0;
+    glReadPixels(63, 47, 1, 1, GL_RGBA, GL_FLOAT, pixel);
+    glReadPixels(63, 47, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &depth);
+    Require(pixel[0] == 0.0f && pixel[1] == 0.0f && pixel[2] == 0.0f && pixel[3] == 1.0f &&
+        std::abs(depth - 1.0f) < 1.0e-5f,
+        "Clear actions must clear whole attachments despite previous write masks and scissor.");
+    GLboolean colorMask[4]{};
+    GLboolean depthMask = GL_TRUE;
+    glGetBooleanv(GL_COLOR_WRITEMASK, colorMask);
+    glGetBooleanv(GL_DEPTH_WRITEMASK, &depthMask);
+    Require(!colorMask[0] && !colorMask[1] && !colorMask[2] && !colorMask[3] &&
+        !depthMask && glIsEnabled(GL_SCISSOR_TEST), "Clear must restore write masks and scissor state.");
+
+    glDisable(GL_SCISSOR_TEST);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glDepthMask(GL_TRUE);
+    glClearColor(0.3f, 0.5f, 0.7f, 1.0f);
+    glClearDepth(0.25);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    produce.EndTarget(Id::ForwardColor, false);
+    produce.Publish(Id::ForwardColor);
+    produce.Publish(Id::ForwardDepth);
+    produce.Complete();
+    const auto outline = BuildPassResourceContract(RenderPassType::Outline, {false, false, false});
+    PassResources preserve(frame, outline);
+    preserve.Validate();
+    preserve.BeginTarget(Id::OutlinedColor);
+    glReadPixels(0, 0, 1, 1, GL_RGBA, GL_FLOAT, pixel);
+    glReadPixels(0, 0, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &depth);
+    Require(std::abs(pixel[0] - 0.3f) < 0.001f && std::abs(pixel[1] - 0.5f) < 0.001f &&
+        std::abs(pixel[2] - 0.7f) < 0.001f && std::abs(depth - 0.25f) < 1.0e-5f,
+        "Preserve actions must retain existing HDR color and depth.");
+    preserve.EndTarget(Id::OutlinedColor, false);
+    preserve.Publish(Id::OutlinedColor);
+    preserve.Complete();
+    glClearDepth(1.0);
+    Require(glGetError() == GL_NO_ERROR, "Attachment contract operations must not cause GL errors.");
 }
 }
 
@@ -115,6 +192,7 @@ int main()
         glBindTexture(GL_TEXTURE_2D, 0);
     }
 
+    TestPassAttachmentActions();
     glfwDestroyWindow(window);
     glfwTerminate();
     std::cout << "FramebufferTests passed." << std::endl;

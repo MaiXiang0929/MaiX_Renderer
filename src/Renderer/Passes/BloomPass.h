@@ -7,17 +7,10 @@
 #include "Renderer/Resources/Framebuffer.h"
 #include "Renderer/Resources/Shader.h"
 
-class ForwardPass;
-
 /// Extracts and blurs HDR highlights before tone mapping.
 class BloomPass final : public RenderPass
 {
 public:
-    explicit BloomPass(ForwardPass& forwardPass)
-        : m_ForwardPass(forwardPass)
-    {
-    }
-
     bool Init();
     bool Resize(unsigned int width, unsigned int height);
     bool ReloadShaders();
@@ -28,13 +21,13 @@ public:
     int GetTargetWidth() const { return m_Highlights.GetWidth(); }
     int GetTargetHeight() const { return m_Highlights.GetHeight(); }
     bool TargetsMatch(int width, int height) const;
+    const Framebuffer& GetTarget() const { return m_BlurTargets[(BlurPassCount - 1) % 2]; }
 
 private:
     static constexpr int BlurPassCount = 8;
 
     void BindTexture(GLuint texture, unsigned int unit) const;
 
-    ForwardPass& m_ForwardPass;
     Shader m_ExtractShader;
     Shader m_BlurShader;
     Framebuffer m_Highlights;

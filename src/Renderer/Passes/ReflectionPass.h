@@ -24,6 +24,7 @@ public:
     int GetTargetWidth() const { return m_Framebuffer.GetWidth(); }
     int GetTargetHeight() const { return m_Framebuffer.GetHeight(); }
     bool ReloadShaders();
+    const Framebuffer& GetTarget() const { return m_Framebuffer; }
 
     RenderPassType GetType() const override
     {

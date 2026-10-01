@@ -8,13 +8,15 @@
 struct EditableLight;
 struct EditableModel;
 class Renderer;
+class EditorMaterialSelection;
 
 class InspectorPanel
 {
 public:
-    void Draw(
+    bool Draw(
         EditorSelection& selection,
         std::vector<EditableModel>& models,
         std::vector<EditableLight>& lights,
-        Renderer& renderer);
+        Renderer& renderer,
+        EditorMaterialSelection& materialSelection);
 };

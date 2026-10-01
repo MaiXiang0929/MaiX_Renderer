@@ -21,6 +21,9 @@ struct EditableModelSection
     PrimitiveId primitiveId = InvalidPrimitiveId;
     cy::Matrix4f localTransform = cy::Matrix4f::Identity();
     PrimitiveBounds localBounds;
+    // 记录分段实际使用的材质，不拥有 GPU 资源，也不支持在此重新分配材质。
+    MaterialHandle material;
+    std::string name;
 };
 
 struct EditableModel
@@ -35,6 +38,7 @@ struct EditableModel
 
     bool IsValid() const { return !sections.empty(); }
     PrimitiveBounds GetWorldBounds() const;
+    std::vector<MaterialHandle> GetUsedMaterials() const;
 };
 
 EditableModel* FindEditableModel(std::vector<EditableModel>& models, ModelId id);

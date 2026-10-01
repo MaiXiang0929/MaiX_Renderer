@@ -4,14 +4,12 @@
 #include "Renderer/Resources/Framebuffer.h"
 #include "Renderer/Resources/Shader.h"
 
-class ForwardPass;
-
 class SSAOPass final : public RenderPass
 {
 public:
-    explicit SSAOPass(ForwardPass& forwardPass) : m_ForwardPass(forwardPass) {}
     bool Init();
-    bool Resize(unsigned int width, unsigned int height);
+    bool Resize(unsigned int width, unsigned int height,
+                unsigned int compositeWidth, unsigned int compositeHeight);
     bool ReloadShaders();
     RenderPassType GetType() const override { return RenderPassType::SSAO; }
     void Execute(RenderPassContext& context) override;
@@ -21,10 +19,11 @@ public:
     int GetCompositeHeight() const { return m_Composite.GetHeight(); }
     bool TargetsMatch(int aoWidth, int aoHeight,
                       int compositeWidth, int compositeHeight) const;
+    const Framebuffer& GetAoTarget() const { return m_Filtered; }
+    const Framebuffer& GetTarget() const { return m_Composite; }
 
 private:
     void BindTexture(GLuint texture, unsigned int unit) const;
-    ForwardPass& m_ForwardPass;
     Shader m_OcclusionShader;
     Shader m_BlurShader;
     Shader m_CompositeShader;

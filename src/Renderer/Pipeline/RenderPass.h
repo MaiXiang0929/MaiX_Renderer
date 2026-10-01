@@ -6,27 +6,13 @@
 #include "cyMatrix.h"
 #include "cyVector.h"
 #include "Renderer/Scene/LightSceneProxy.h"
+#include "PassResourceContract.h"
 
 class CubemapTexture;
 class Mesh;
 struct RenderView;
 struct TessellationSettings;
 struct PostProcessSettings;
-
-enum class RenderPassType
-{
-    Shadow,
-    Reflection,
-    Forward,
-    Outline,
-    Translucency,
-    SSAO,
-    Bloom,
-    PostProcess,
-    EditorPrimitive,
-    Present,
-    Count
-};
 
 /// @brief Application 每帧提交给渲染器的纯场景数据。
 /// @details 这里只保存矩阵、光源和视口等 CPU 数据，不持有任何 OpenGL 资源。
@@ -53,7 +39,7 @@ struct RenderFrameData
 };
 
 /// @brief RenderPipeline 在各 Pass 之间共享的执行上下文。
-/// @details Renderer 负责填入资源引用；Pass 只读取资源并提交对应的 GPU 命令。
+/// @details Renderer 填入场景引用；Pipeline 注入当前 Pass 的受限资源访问器，Pass 按契约读写附件。
 struct RenderPassContext
 {
     RenderFrameData& frame;
@@ -68,14 +54,14 @@ struct RenderPassContext
     TessellationSettings& tessellation;
     const PostProcessSettings& postProcess;
 
-    // 前序 Pass 生成、后序 Pass 消费的 GPU 纹理句柄。
-    GLuint shadowTexture = 0;
-    GLuint reflectionTexture = 0;
-    GLuint bloomTexture = 0;
-    GLuint postProcessTexture = 0;
-    GLuint editorOverlayTexture = 0;
-    GLuint sceneColorTexture = 0;
-    GLuint ssaoTexture = 0;
+    // Pipeline 只在当前 Pass 执行期间注入受限访问器，不保留跨帧纹理字段。
+    PassResources* passResources = nullptr;
+    PassResources& Resources() const
+    {
+        if (!passResources)
+            throw ResourceContractError("Pass resources are not active.");
+        return *passResources;
+    }
 };
 
 /// @brief 所有真实渲染阶段的统一接口。

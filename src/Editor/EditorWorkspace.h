@@ -46,6 +46,8 @@ public:
     void AddLog(std::string message);
 
     bool ShowMaterialEditor() const { return m_ShowMaterialEditor; }
+    void OpenMaterialEditor();
+    void PrepareMaterialEditor();
     bool ShowStatistics() const { return m_ShowStatistics; }
     const EditorViewportRegion& GetViewportRegion() const { return m_ViewportRegion; }
 
@@ -60,6 +62,8 @@ private:
     bool m_ResetLayout = false;
     bool m_SkipViewportFrame = false;
     bool m_ShowMaterialEditor = false;
+    bool m_MaterialDockChecked = false;
+    bool m_MaterialFocusRequested = false;
     bool m_ShowStatistics = false;
     bool m_ViewportOpen = false;
     EditorViewportRegion m_ViewportRegion;

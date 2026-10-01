@@ -52,6 +52,8 @@ OpenGL GPU → 窗口
 
 每帧由 `Application` 更新相机、模型 Transform 和灯光，`RenderScene::BuildRenderView()` 生成各视图的可见项。CPU 负责裁剪、排序、矩阵与资源绑定准备；GPU 执行顶点变换、光栅化、深度与混合测试、纹理采样、光照和像素输出。各 Pass 依次消费场景视图与前序 Pass 生成的纹理资源。
 
+固定管线通过显式资源契约声明各 Pass 的输入、输出与附件清空/保留行为；执行前校验本帧资源、尺寸和格式，输出发布后才允许后续 Pass 消费。Framebuffer 仍由各 Pass 管理，不额外复制主场景颜色。详见[Pass 资源契约](docs/pass-resource-contracts.md)。
+
 ## 快速开始
 
 ### 环境要求
@@ -110,12 +112,13 @@ ctest --test-dir out/build/windows-ninja-debug --output-on-failure
 
 ## 编辑器操作
 
-默认工作区左侧上方是 Viewport，左下方由 Console 与 Content Browser 共用标签区，右侧是并排的 Scene 和 Inspector。`View` 菜单可打开 Material Editor、Renderer Statistics，或用 `Reset Layout` 恢复默认布局。下列场景快捷键在 Viewport 获得焦点时生效；鼠标场景操作从视口图像内开始。
+默认工作区左侧上方是 Viewport，左下方由 Console 与 Content Browser 共用标签区，右侧是并排的 Scene 和 Inspector。Material Editor 打开后与 Inspector 共用最右侧区域，通过标签切换。`View` 菜单可打开 Material Editor、Renderer Statistics，或用 `Reset Layout` 恢复默认布局。下列场景快捷键在 Viewport 获得焦点时生效；鼠标场景操作从视口图像内开始。
 
 | 操作 | 用途 |
 | --- | --- |
 | 鼠标左键点选 | 选择模型或可见灯光 Gizmo |
 | Scene 中点选模型 | 按模型独立选择；Inspector 和 Gizmo 只修改当前模型 |
+| Inspector 中点击材质 | 激活同一区域的 Material Editor 标签，编辑该模型实际使用的材质 |
 | Scene 中 `Remove selected model` | 移除选中模型及其 Primitive、Mesh、Material 资源 |
 | `Alt` + 左键拖动 | Orbit 相机 |
 | `Alt` + 中键拖动 | Pan 相机 |
@@ -125,9 +128,11 @@ ctest --test-dir out/build/windows-ninja-debug --output-on-failure
 | `W` / `E` / `R` | ImGuizmo 移动 / 旋转 / 缩放 |
 | `Q` | 切换世界/局部 Transform 空间 |
 | `F6` | 重新加载 GLSL Shader |
+| `Esc` | 退出程序 |
 
 相同 FBX 连续导入两次时，两个模型初始位置相同，画面会重叠。选中新导入的模型后，可在 Inspector 中修改 Position X，或用 `W` 和 Gizmo 将它移开。[多模型场景说明](docs/multi-model-scene.md)记录了数据流、限制与验收步骤。
-| `Esc` | 退出程序 |
+
+Material Editor 默认跟随所选模型，显示所属模型名称和材质列表。`All materials (debug)` 可查看全部场景材质；点击 Inspector 中的材质会返回模型范围。删除正在编辑的模型后会清理材质选择。详见[模型与材质编辑联动](docs/model-material-editing.md)。
 
 ## 项目结构
 
@@ -159,6 +164,7 @@ ThirdParty/              项目使用的第三方依赖
 | PBR 材质与纹理约定 | [PBR Material Workflow](docs/pbr-material-workflow.md) |
 | Toon、Face Shadow、Outline | [Toon Shading](docs/npr-toon.md) · [Face Shadow](docs/npr-face-shadow.md) · [Outline](docs/npr-outline.md) |
 | 透明渲染 | [Translucency Pass](docs/translucency-pass.md) |
+| 多 Pass 资源与附件语义 | [Pass Resource Contracts](docs/pass-resource-contracts.md) |
 | HDR、Bloom、SSAO | [HDR and Tone Mapping](docs/hdr-tone-mapping.md) · [Bloom and Post Process](docs/bloom-postprocess.md) · [SSAO](docs/ssao.md) |
 | 编辑器工作流 | [Docking Layout](docs/editor-docking-layout.md) · [Scene Window and Inspector](docs/editor-scene-inspector.md) · [Viewport Transform Controls](docs/viewport-transform-controls.md) |
 | 性能分析 | [GPU Pass Profiling](docs/gpu-pass-profiling.md) · [RenderDoc Baseline](docs/renderdoc-baseline.md) |

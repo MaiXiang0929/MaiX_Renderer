@@ -1,6 +1,5 @@
 #include "SSAOPass.h"
 
-#include "ForwardPass.h"
 #include "Renderer/Diagnostics/RenderSubmissionStats.h"
 #include "Renderer/Pipeline/RenderSettings.h"
 #include "Renderer/Resources/Mesh.h"
@@ -8,7 +7,8 @@
 
 bool SSAOPass::Init() { return ReloadShaders(); }
 
-bool SSAOPass::Resize(unsigned int width, unsigned int height)
+bool SSAOPass::Resize(unsigned int width, unsigned int height,
+                      unsigned int compositeWidth, unsigned int compositeHeight)
 {
     FramebufferSpecification ao;
     ao.width = static_cast<int>(width);
@@ -17,8 +17,8 @@ bool SSAOPass::Resize(unsigned int width, unsigned int height)
     ao.depthStencilEnabled = false;
     ao.mipmapsEnabled = false;
     FramebufferSpecification composite = ao;
-    composite.width = m_ForwardPass.GetTargetWidth();
-    composite.height = m_ForwardPass.GetTargetHeight();
+    composite.width = static_cast<int>(compositeWidth);
+    composite.height = static_cast<int>(compositeHeight);
     composite.colorFormat = FramebufferColorFormat::RGBA16F;
     return m_Raw.Init(ao) && m_Filtered.Init(ao) && m_Composite.Init(composite);
 }
@@ -50,10 +50,9 @@ void SSAOPass::BindTexture(GLuint texture, unsigned int unit) const
 
 void SSAOPass::Execute(RenderPassContext& context)
 {
-    context.sceneColorTexture = m_ForwardPass.GetColorTexture();
-    context.ssaoTexture = 0;
-    if (!context.postProcess.ssaoEnabled || m_ForwardPass.GetDepthTexture() == 0 ||
-        m_Raw.GetColorTexture() == 0 || m_Composite.GetColorTexture() == 0) return;
+    if (!context.postProcess.ssaoEnabled) return;
+    const auto& depth = context.Resources().Read(PassResourceId::ForwardDepth);
+    const GLuint sceneColor = context.Resources().Texture(PassResourceId::SceneHdrColor);
 
     const GLboolean depthTestEnabled = glIsEnabled(GL_DEPTH_TEST);
     const GLboolean blendEnabled = glIsEnabled(GL_BLEND);
@@ -61,11 +60,11 @@ void SSAOPass::Execute(RenderPassContext& context)
     glDisable(GL_BLEND);
 
     const cy::Matrix4f inverseProjection = context.mainView.projection.GetInverse();
-    const float invW = 1.0f / static_cast<float>(m_ForwardPass.GetTargetWidth());
-    const float invH = 1.0f / static_cast<float>(m_ForwardPass.GetTargetHeight());
+    const float invW = 1.0f / static_cast<float>(depth.width);
+    const float invH = 1.0f / static_cast<float>(depth.height);
 
     m_Raw.Bind(); glClear(GL_COLOR_BUFFER_BIT); m_OcclusionShader.Bind();
-    BindTexture(m_ForwardPass.GetDepthTexture(), 0);
+    BindTexture(depth.texture, 0);
     m_OcclusionShader.SetInt("depthTexture", 0);
     m_OcclusionShader.SetMatrix4("inverseProjection", &inverseProjection.cell[0]);
     m_OcclusionShader.SetVec3("depthTexelSize", invW, invH, 0.0f);
@@ -73,19 +72,19 @@ void SSAOPass::Execute(RenderPassContext& context)
     m_OcclusionShader.SetFloat("bias", context.postProcess.ssaoBias);
     context.presentMesh.Draw(); m_Raw.Unbind();
 
-    m_Filtered.Bind(); glClear(GL_COLOR_BUFFER_BIT); m_BlurShader.Bind();
-    BindTexture(m_Raw.GetColorTexture(), 0); BindTexture(m_ForwardPass.GetDepthTexture(), 1);
+    context.Resources().BeginTarget(PassResourceId::SsaoAO); m_BlurShader.Bind();
+    BindTexture(m_Raw.GetColorTexture(), 0); BindTexture(depth.texture, 1);
     m_BlurShader.SetInt("aoTexture", 0); m_BlurShader.SetInt("depthTexture", 1);
     m_BlurShader.SetVec3("depthTexelSize", invW, invH, 0.0f);
-    context.presentMesh.Draw(); m_Filtered.Unbind();
+    context.presentMesh.Draw(); context.Resources().EndTarget(PassResourceId::SsaoAO);
 
-    m_Composite.Bind(); glClear(GL_COLOR_BUFFER_BIT); m_CompositeShader.Bind();
-    BindTexture(m_ForwardPass.GetColorTexture(), 0); BindTexture(m_Filtered.GetColorTexture(), 1);
+    context.Resources().BeginTarget(PassResourceId::SsaoColor); m_CompositeShader.Bind();
+    BindTexture(sceneColor, 0); BindTexture(m_Filtered.GetColorTexture(), 1);
     m_CompositeShader.SetInt("sceneTexture", 0); m_CompositeShader.SetInt("aoTexture", 1);
     m_CompositeShader.SetFloat("intensity", context.postProcess.ssaoIntensity);
-    context.presentMesh.Draw(); m_Composite.Unbind();
-    context.sceneColorTexture = m_Composite.GetColorTexture();
-    context.ssaoTexture = m_Filtered.GetColorTexture();
+    context.presentMesh.Draw(); context.Resources().EndTarget(PassResourceId::SsaoColor);
+    context.Resources().Publish(PassResourceId::SsaoAO);
+    context.Resources().Publish(PassResourceId::SsaoColor);
     if (depthTestEnabled) glEnable(GL_DEPTH_TEST);
     if (blendEnabled) glEnable(GL_BLEND);
 }

@@ -6,9 +6,10 @@
 
 void TranslucencyPass::Execute(RenderPassContext& context)
 {
-    m_ForwardPass.BindColorTarget();
+    context.Resources().BeginTarget(PassResourceId::SceneHdrColor);
     RenderToBoundTarget(context, context.mainView);
-    m_ForwardPass.UnbindColorTarget();
+    context.Resources().EndTarget(PassResourceId::SceneHdrColor);
+    context.Resources().Publish(PassResourceId::SceneHdrColor);
 }
 
 void TranslucencyPass::RenderToBoundTarget(

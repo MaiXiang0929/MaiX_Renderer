@@ -27,6 +27,7 @@ public:
     void Execute(RenderPassContext& context) override;
 
     GLuint GetDepthTexture() const { return m_ShadowMap.GetDepthTexture(); }
+    const ShadowMap& GetTarget() const { return m_ShadowMap; }
 
 private:
     Shader m_StandardShader;

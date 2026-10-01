@@ -18,6 +18,7 @@
 #include "Editor/EditableLight.h"
 #include "Editor/EditableModel.h"
 #include "Editor/EditorSelection.h"
+#include "Editor/EditorMaterialSelection.h"
 #include "Renderer/Resources/RenderResourceHandle.h"
 
 struct GLFWwindow;
@@ -102,6 +103,7 @@ private:
     std::uint64_t m_NextModelId = 1;
     ModelId m_DefaultModelId;
     EditorSelection m_EditorSelection;
+    EditorMaterialSelection m_MaterialSelection;
     std::vector<EditableLight> m_EditableLights;
 
 private:
