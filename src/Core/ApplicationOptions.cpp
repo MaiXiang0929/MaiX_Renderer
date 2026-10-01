@@ -52,6 +52,16 @@ bool ParseApplicationOptions(
             }
             continue;
         }
+        if (argument == "--material-instance-lab")
+        {
+            if (options.materialInstanceLab)
+            {
+                errorMessage = "--material-instance-lab may only be specified once.";
+                return false;
+            }
+            options.materialInstanceLab = true;
+            continue;
+        }
         if (argument == "--material-lab")
         {
             if (options.materialLab)
@@ -114,6 +124,12 @@ bool ParseApplicationOptions(
         errorMessage = "Expected at most a normal map and a displacement map.";
         return false;
     }
+    if (options.materialInstanceLab && (options.materialLab || options.instanceGridSize != 0 ||
+        options.translucencyTest || !options.faceShadowDemoModelPath.empty()))
+    {
+        errorMessage = "--material-instance-lab cannot be combined with other test scenes.";
+        return false;
+    }
     if (options.materialLab && options.instanceGridSize != 0)
     {
         errorMessage =
@@ -140,12 +156,13 @@ const char* GetApplicationUsage()
 {
     return
         "Usage: MaiX_Renderer [normal.png] [displacement.png] "
-        "[--instance-grid N] [--material-lab] [--translucency-test] "
+        "[--instance-grid N] [--material-lab] [--material-instance-lab] [--translucency-test] "
         "[--face-shadow-demo model.fbx face-map.png material]\n"
         "  --instance-grid N  Submit an N x N shared-resource benchmark grid "
         "(1-32).\n"
         "  --material-lab     Show four PBR reference materials using shared "
         "geometry.\n"
+        "  --material-instance-lab  Show a parent material and two instances.\n"
         "  --translucency-test  Add the three-plane transparency test scene.\n"
         "  --face-shadow-demo   Import an FBX at startup and bind a linear "
         "Face Shadow map to the named material.";

@@ -131,6 +131,27 @@ bool RenderScene::HasMaterialReference(RenderResourceId materialId) const
         });
 }
 
+bool RenderScene::ReplacePrimitiveMaterials(const std::vector<PrimitiveId>& ids,
+    RenderResourceId expected, RenderResourceId replacement, const Material* material, BlendMode blend)
+{
+    if (ids.empty() || !material || replacement == InvalidRenderResourceId) return false;
+    // 全部验证完成后才提交；不存在的 Primitive 或旧绑定不匹配不会造成部分替换。
+    for (auto id : ids)
+    {
+        const auto found = std::find_if(m_Primitives.begin(), m_Primitives.end(),
+            [id](const auto& proxy) { return proxy.id == id; });
+        if (found == m_Primitives.end() || found->materialId != expected) return false;
+    }
+    for (auto& proxy : m_Primitives)
+        if (std::find(ids.begin(), ids.end(), proxy.id) != ids.end())
+        {
+            proxy.material = material;
+            proxy.materialId = replacement;
+            proxy.blendMode = blend;
+        }
+    return true;
+}
+
 bool RenderScene::UpdatePrimitiveTransform(
     PrimitiveId id,
     const cy::Matrix4f& localToWorld)

@@ -50,7 +50,8 @@ public:
         bool translucencyTest = false,
         std::string faceShadowDemoModelPath = {},
         std::string faceShadowDemoTexturePath = {},
-        std::string faceShadowDemoMaterialName = {});
+        std::string faceShadowDemoMaterialName = {},
+        bool materialInstanceLab = false);
 
 	/// @brief 析构函数，自动调用 Shutdown 释放资源
     ~Application();
@@ -83,6 +84,7 @@ private:
     std::string m_DisplacementMapPath;
     std::uint32_t m_InstanceGridSize = 0;
     bool m_MaterialLab = false;
+    bool m_MaterialInstanceLab = false;
     bool m_TranslucencyTest = false;
     std::string m_FaceShadowDemoModelPath;
     std::string m_FaceShadowDemoTexturePath;
@@ -121,6 +123,7 @@ private:
     bool LoadStartupFaceShadowDemo();
     void DestroyModelResources(EditableModel& model);
     bool RemoveModel(ModelId id);
+    void ApplyMaterialEditRequest(const struct MaterialEditRequest& request);
     EditableLight* FindEditableLight(std::uint32_t id);
     const EditableLight* FindEditableLight(std::uint32_t id) const;
     

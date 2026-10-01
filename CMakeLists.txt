@@ -109,6 +109,8 @@ set(SOURCES
     src/Renderer/Resources/Mesh.cpp
     src/Renderer/Resources/Texture2D.cpp
     src/Renderer/Resources/Material.cpp
+    src/Renderer/Resources/MaterialInstance.cpp
+    src/Renderer/Resources/MaterialResourceStore.cpp
     src/Renderer/Resources/CubemapTexture.cpp
     src/Renderer/Resources/Framebuffer.cpp
     src/Renderer/Resources/InstanceBuffer.cpp
@@ -393,6 +395,24 @@ if(BUILD_TESTING)
     )
 
     add_test(NAME MaterialTypesTests COMMAND MaterialTypesTests)
+
+    # 使用真正的 Renderer 与资源表验证实例依赖和替换，不复制生产实现。
+    set(MATERIAL_INSTANCE_TEST_SOURCES ${SOURCES})
+    list(FILTER MATERIAL_INSTANCE_TEST_SOURCES INCLUDE REGEX "^src/Renderer/")
+    add_executable(MaterialInstanceTests
+        tests/Renderer/Resources/MaterialInstanceTests.cpp
+        ${MATERIAL_INSTANCE_TEST_SOURCES}
+        ThirdParty/glad/src/glad.c
+        ThirdParty/lodepng/lodepng.cpp)
+    target_include_directories(MaterialInstanceTests PRIVATE
+        ${SRC_DIR} ${THIRD_PARTY_DIR}/cyCodeBase
+        ${THIRD_PARTY_DIR}/glad/include ${THIRD_PARTY_DIR}/glfw/include
+        ${THIRD_PARTY_DIR}/lodepng)
+    target_link_directories(MaterialInstanceTests PRIVATE ${THIRD_PARTY_DIR}/glfw/lib-vc2022)
+    target_link_libraries(MaterialInstanceTests PRIVATE glfw3.lib opengl32.lib)
+    target_compile_options(MaterialInstanceTests PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
+    target_link_options(MaterialInstanceTests PRIVATE $<$<CONFIG:Debug>:LINKER:/NODEFAULTLIB:MSVCRT>)
+    add_test(NAME MaterialInstanceTests COMMAND MaterialInstanceTests)
 
     add_executable(
         RenderPassContractTests

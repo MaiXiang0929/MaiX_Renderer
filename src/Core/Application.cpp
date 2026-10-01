@@ -87,7 +87,8 @@ Application::Application(
     bool translucencyTest,
     std::string faceShadowDemoModelPath,
     std::string faceShadowDemoTexturePath,
-    std::string faceShadowDemoMaterialName)
+    std::string faceShadowDemoMaterialName,
+    bool materialInstanceLab)
     :
     m_Camera(
         cy::Vec3f(0, 0, 0),
@@ -97,6 +98,7 @@ Application::Application(
     m_DisplacementMapPath(std::move(displacementMapPath)),
     m_InstanceGridSize(instanceGridSize),
     m_MaterialLab(materialLab),
+    m_MaterialInstanceLab(materialInstanceLab),
     m_TranslucencyTest(translucencyTest),
     m_FaceShadowDemoModelPath(std::move(faceShadowDemoModelPath)),
     m_FaceShadowDemoTexturePath(std::move(faceShadowDemoTexturePath)),
@@ -425,7 +427,7 @@ bool Application::Init() {
     PrimitiveBounds bounds;
     bounds.center = m_ObjCenter;
     bounds.radius = m_ModelDiameter * 0.5f;
-    const std::uint32_t effectiveGridSize = m_MaterialLab
+    const std::uint32_t effectiveGridSize = (m_MaterialLab || m_MaterialInstanceLab)
         ? 2
         : (m_InstanceGridSize == 0 ? 1 : m_InstanceGridSize);
     const float instanceSpacing = std::max(m_ModelDiameter * 1.25f, 0.001f);
@@ -449,7 +451,8 @@ bool Application::Init() {
     EditableModel& defaultModel = m_Models.back();
     defaultModel.id = ModelId{m_NextModelId++};
     m_DefaultModelId = defaultModel.id;
-    defaultModel.name = m_MaterialLab ? "Material Lab" : "Teapot";
+    defaultModel.name = m_MaterialInstanceLab ? "Material Instance Lab" :
+        (m_MaterialLab ? "Material Lab" : "Teapot");
 
     const MeshHandle instanceMesh = m_Renderer->CreateMesh(vertices);
     if (!instanceMesh.IsValid())
@@ -461,7 +464,44 @@ bool Application::Init() {
     defaultModel.meshes.push_back(instanceMesh);
     MaterialHandle instanceMaterial;
 
-    if (m_MaterialLab)
+    if (m_MaterialInstanceLab)
+    {
+        // 三个分段共享 Mesh，使用一个基础材质和两个实例；资源全部由此模型跟踪清理。
+        mainMaterial.SetName("Parent Surface");
+        mainMaterial.SetAlbedoMap(nullptr);
+        mainMaterial.SetSpecularMap(nullptr);
+        mainMaterial.SetOcclusionRoughnessMetallicMap(nullptr);
+        mainMaterial.GetProperties().baseColor = cy::Vec3f(0.7f, 0.7f, 0.7f);
+        mainMaterial.GetProperties().roughness = 0.35f;
+        const MaterialHandle parent = m_Renderer->CreateMaterial(std::move(mainMaterial));
+        if (!parent.IsValid()) return false;
+        defaultModel.materials.push_back(parent);
+        for (int i = 0; i < 2; ++i)
+        {
+            const MaterialHandle child = m_Renderer->CreateMaterialInstance(parent,
+                i == 0 ? "Instance A" : "Instance B");
+            if (!child.IsValid()) return false;
+            defaultModel.materials.push_back(child);
+        }
+        Renderer::MaterialSnapshot inherited;
+        m_Renderer->GetMaterialSnapshot(parent, inherited);
+        inherited.properties.baseColor = cy::Vec3f(0.85f, 0.12f, 0.08f);
+        m_Renderer->UpdateMaterialOverride(defaultModel.materials[1],
+            MaterialParameter::BaseColor, inherited.properties);
+        for (std::size_t i = 0; i < 3; ++i)
+        {
+            const auto material = defaultModel.materials[i];
+            const auto localToWorld = cy::Matrix4f::Translation(instanceOffsets[i]) *
+                cy::Matrix4f::Translation(-m_ObjCenter);
+            const auto primitive = m_Renderer->AddPrimitive(instanceMesh, material, localToWorld, bounds);
+            if (primitive == InvalidPrimitiveId) return false;
+            defaultModel.sections.push_back({primitive, localToWorld, bounds, material,
+                i == 0 ? "Parent" : i == 1 ? "Instance A" : "Instance B"});
+        }
+        std::cout << "[MaterialInstanceLab] mesh=1 parent=1 instances=2; A overrides Base Color"
+                  << std::endl;
+    }
+    else if (m_MaterialLab)
     {
         struct LabMaterialDescription
         {
@@ -1132,11 +1172,61 @@ void Application::DestroyModelResources(EditableModel& model)
         m_Renderer->RemovePrimitive(section.primitiveId);
     for (const MeshHandle mesh : model.meshes)
         m_Renderer->DestroyMesh(mesh);
-    for (const MaterialHandle material : model.materials)
-        m_Renderer->DestroyMaterial(material);
+    // 模型可能先记录父材质后记录实例；按依赖顺序销毁，不能依赖数组顺序。
+    for (int instances = 1; instances >= 0; --instances)
+        for (const MaterialHandle material : model.materials)
+        {
+            if (m_Renderer->IsMaterialInstance(material) == (instances != 0))
+                m_Renderer->DestroyMaterial(material);
+        }
     model.sections.clear();
     model.meshes.clear();
     model.materials.clear();
+}
+
+void Application::ApplyMaterialEditRequest(const MaterialEditRequest& request)
+{
+    if (request.action == MaterialEditAction::None) return;
+    EditableModel* model = FindEditableModel(m_Models, request.model);
+    Renderer::MaterialSnapshot snapshot;
+    if (!model || !m_Renderer->GetMaterialSnapshot(request.material, snapshot)) return;
+    std::vector<PrimitiveId> ids;
+    for (const auto& section : model->sections)
+        if (section.material.id == request.material.id) ids.push_back(section.primitiveId);
+    if (ids.empty()) return;
+    MaterialHandle created;
+    try
+    {
+        MaterialHandle replacement = snapshot.parent;
+        if (request.action == MaterialEditAction::CreateInstance)
+        {
+            if (snapshot.isInstance) return;
+            // 所有可能分配的跟踪容器先准备，避免成功替换后无法记录新资源。
+            model->materials.reserve(model->materials.size() + 1);
+            created = m_Renderer->CreateMaterialInstance(request.material);
+            replacement = created;
+        }
+        else if (!snapshot.isInstance) return;
+        if (!replacement.IsValid() ||
+            !m_Renderer->ReplacePrimitiveMaterials(ids, request.material, replacement))
+        {
+            if (created.IsValid()) m_Renderer->DestroyMaterial(created);
+            std::cerr << "[MaterialInstance] Model binding rejected." << std::endl;
+            return;
+        }
+        for (auto& section : model->sections)
+            if (section.material.id == request.material.id) section.material = replacement;
+        if (created.IsValid()) model->materials.push_back(created);
+        m_MaterialSelection.Select(model->id, replacement);
+        if (snapshot.isInstance && m_Renderer->DestroyMaterial(request.material))
+            model->materials.erase(std::remove_if(model->materials.begin(), model->materials.end(),
+                [&](MaterialHandle h) { return h.id == request.material.id; }), model->materials.end());
+    }
+    catch (const std::exception& error)
+    {
+        if (created.IsValid()) m_Renderer->DestroyMaterial(created);
+        std::cerr << "[MaterialInstance] " << error.what() << std::endl;
+    }
 }
 
 bool Application::RemoveModel(ModelId id)
@@ -1349,9 +1439,11 @@ void Application::Render() {
     {
         // NextWindow 设置必须紧邻材质面板 Begin，避免被其它窗口消费。
         m_Workspace->PrepareMaterialEditor();
+        MaterialEditRequest request;
         m_MaterialEditorPanel->Draw(
-            *m_Renderer, m_EditorSelection, m_Models, m_MaterialSelection,
+            *m_Renderer, m_EditorSelection, m_Models, m_MaterialSelection, request,
             nativeWindowHandle);
+        ApplyMaterialEditRequest(request);
     }
     m_Workspace->DrawBottomPanels(*m_AssetImportPanel, nativeWindowHandle);
     ImGui::Render();

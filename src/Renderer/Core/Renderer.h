@@ -15,7 +15,7 @@
 
 #include "Renderer/Resources/CubemapTexture.h"
 #include "Renderer/Diagnostics/RenderSubmissionStats.h"
-#include "Renderer/Resources/Material.h"
+#include "Renderer/Resources/MaterialResourceStore.h"
 #include "Renderer/Resources/Mesh.h"
 #include "Renderer/Pipeline/RenderPipeline.h"
 #include "Renderer/Pipeline/RenderSettings.h"
@@ -29,6 +29,11 @@ public:
     struct MaterialSnapshot
     {
         MaterialHandle handle;
+        bool isInstance = false;
+        MaterialHandle parent;
+        std::string parentName;
+        MaterialOverrideMask overrides;
+        std::array<TextureOverrideMode, MaterialTextureSlotCount> textureModes{};
         std::string name;
         MaterialProperties properties;
         BlendMode blendMode = BlendMode::Opaque;
@@ -67,8 +72,18 @@ public:
     /// @brief 若任一 Primitive 仍引用资源，则拒绝销毁并返回 false。
     bool DestroyMesh(MeshHandle handle);
     MaterialHandle CreateMaterial(Material material);
-    /// @brief 若任一 Primitive 仍引用资源，则拒绝销毁并返回 false。
+    /// 单层实例共享父资源；实例参数只通过逐项覆盖接口修改。
+    MaterialHandle CreateMaterialInstance(MaterialHandle parent, std::string name = {});
+    bool UpdateMaterialOverride(MaterialHandle handle, MaterialParameter parameter,
+                                const MaterialProperties& values, bool enabled = true);
+    bool ResetMaterialOverrides(MaterialHandle handle);
+    bool ResetMaterialTexture(MaterialHandle handle, MaterialTextureSlot slot);
+    bool ReplacePrimitiveMaterials(const std::vector<PrimitiveId>& primitives,
+                                   MaterialHandle expected, MaterialHandle replacement);
+    /// @brief Primitive 或子实例仍引用资源时拒绝销毁，包含不可见对象。
     bool DestroyMaterial(MaterialHandle handle);
+    /// 无分配查询用于依赖顺序清理，避免析构过程中构造编辑器快照。
+    bool IsMaterialInstance(MaterialHandle handle) const;
     bool GetMaterialSnapshot(
         MaterialHandle handle,
         MaterialSnapshot& snapshot) const;
@@ -207,7 +222,7 @@ private:
 
     // Renderer 唯一拥有场景 GPU 资源；Scene Proxy 只缓存解析后的非 owning 指针。
     std::vector<std::unique_ptr<Mesh>> m_MeshResources;
-    std::vector<std::unique_ptr<Material>> m_MaterialResources;
+    MaterialResourceStore m_MaterialResources;
     RenderScene m_RenderScene;
     CubemapTexture m_Cubemap;
     RenderPipeline m_RenderPipeline;

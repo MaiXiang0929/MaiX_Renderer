@@ -15,6 +15,9 @@ public:
     bool RemovePrimitive(PrimitiveId id);
     bool HasMeshReference(RenderResourceId meshId) const;
     bool HasMaterialReference(RenderResourceId materialId) const;
+    bool ReplacePrimitiveMaterials(const std::vector<PrimitiveId>& ids,
+        RenderResourceId expected, RenderResourceId replacement, const Material* material,
+        BlendMode blendMode);
     bool UpdatePrimitiveTransform(
         PrimitiveId id,
         const cy::Matrix4f& localToWorld);

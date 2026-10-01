@@ -15,33 +15,6 @@
 
 #include "Renderer/View/RenderView.h"
 
-namespace
-{
-constexpr float MinimumFaceAxisLength = 1.0e-5f;
-
-void NormalizeFaceFrame(MaterialProperties& properties)
-{
-    cy::Vec3f forward = properties.faceForwardLocal;
-    if (forward.Length() <= MinimumFaceAxisLength)
-        forward = cy::Vec3f(0.0f, 0.0f, 1.0f);
-    forward.Normalize();
-
-    cy::Vec3f right = properties.faceRightLocal;
-    right = right - forward * right.Dot(forward);
-    if (right.Length() <= MinimumFaceAxisLength)
-    {
-        right = std::abs(forward.x) < 0.9f
-            ? cy::Vec3f(1.0f, 0.0f, 0.0f)
-            : cy::Vec3f(0.0f, 1.0f, 0.0f);
-        right = right - forward * right.Dot(forward);
-    }
-    right.Normalize();
-
-    properties.faceForwardLocal = forward;
-    properties.faceRightLocal = right;
-}
-}
-
 Renderer::Renderer() = default;
 Renderer::~Renderer() = default;
 
@@ -147,159 +120,104 @@ bool Renderer::DestroyMesh(MeshHandle handle)
 
 MaterialHandle Renderer::CreateMaterial(Material material)
 {
-    if (m_MaterialResources.size() >= InvalidRenderResourceId)
-    {
-        std::cerr << "[Renderer] Material resource handle space exhausted."
-                  << std::endl;
-        return {};
-    }
-
-    const MaterialHandle handle{
-        static_cast<RenderResourceId>(m_MaterialResources.size())
-    };
-    if (material.GetName().empty())
-        material.SetName("Material " + std::to_string(handle.id));
-    m_MaterialResources.push_back(
-        std::make_unique<Material>(std::move(material)));
-    return handle;
+    return m_MaterialResources.Create(std::move(material));
 }
-
+MaterialHandle Renderer::CreateMaterialInstance(MaterialHandle parent, std::string name)
+{
+    return m_MaterialResources.CreateInstance(parent, std::move(name));
+}
 bool Renderer::DestroyMaterial(MaterialHandle handle)
 {
-    if (!handle.IsValid() || handle.id >= m_MaterialResources.size() ||
-        !m_MaterialResources[handle.id])
-        return false;
-
-    if (m_RenderScene.HasMaterialReference(handle.id))
-    {
-        std::cerr << "[Renderer] DestroyMaterial rejected: material " << handle.id
-                  << " is still referenced by a primitive." << std::endl;
-        return false;
-    }
-
-    m_MaterialResources[handle.id].reset();
-    return true;
+    if (m_RenderScene.HasMaterialReference(handle.id)) return false;
+    return m_MaterialResources.Destroy(handle);
 }
-
-bool Renderer::GetMaterialSnapshot(
-    MaterialHandle handle,
-    MaterialSnapshot& snapshot) const
+bool Renderer::IsMaterialInstance(MaterialHandle handle) const
 {
-    if (!handle.IsValid() || handle.id >= m_MaterialResources.size() ||
-        !m_MaterialResources[handle.id])
-        return false;
-
-    const Material& material = *m_MaterialResources[handle.id];
+    const auto* entry = m_MaterialResources.Get(handle);
+    return entry && entry->instance.has_value();
+}
+bool Renderer::GetMaterialSnapshot(MaterialHandle handle, MaterialSnapshot& snapshot) const
+{
+    const auto* entry = m_MaterialResources.Get(handle);
+    if (!entry) return false;
+    snapshot = {};
+    const Material& material = entry->effective;
     snapshot.handle = handle;
     snapshot.name = material.GetName();
     snapshot.properties = material.GetProperties();
     snapshot.blendMode = material.GetBlendMode();
-    for (std::size_t index = 0; index < MaterialTextureSlotCount; ++index)
+    snapshot.isInstance = entry->instance.has_value();
+    if (entry->instance)
     {
-        const MaterialTextureSlot slot =
-            static_cast<MaterialTextureSlot>(index);
-        const std::shared_ptr<Texture2D>& texture = material.GetTexture(slot);
-        snapshot.hasTextures[index] = static_cast<bool>(texture);
-        snapshot.textureIds[index] = texture ? texture->GetID() : 0;
-        snapshot.textureSources[index] = material.GetTextureSource(slot);
+        snapshot.parent = entry->instance->parent;
+        snapshot.overrides = entry->instance->overrides;
+        const auto* base = m_MaterialResources.Get(snapshot.parent);
+        if (base) snapshot.parentName = base->effective.GetName();
+    }
+    for (std::size_t i = 0; i < MaterialTextureSlotCount; ++i)
+    {
+        const auto slot = static_cast<MaterialTextureSlot>(i);
+        const auto& texture = material.GetTexture(slot);
+        snapshot.hasTextures[i] = static_cast<bool>(texture);
+        snapshot.textureIds[i] = texture ? texture->GetID() : 0;
+        snapshot.textureSources[i] = material.GetTextureSource(slot);
+        if (entry->instance) snapshot.textureModes[i] = entry->instance->textures[i].mode;
     }
     return true;
 }
-
 MaterialHandle Renderer::GetMaterialHandle(std::size_t index) const
 {
-    if (index >= m_MaterialResources.size() || !m_MaterialResources[index])
-        return {};
-    return MaterialHandle{ static_cast<RenderResourceId>(index) };
+    if (index >= InvalidRenderResourceId) return {};
+    MaterialHandle handle{static_cast<RenderResourceId>(index)};
+    return m_MaterialResources.Get(handle) ? handle : MaterialHandle{};
 }
-
 std::vector<MaterialHandle> Renderer::GetMaterialHandles() const
 {
-    std::vector<MaterialHandle> handles;
-    handles.reserve(GetMaterialResourceCount());
-    for (std::size_t index = 0; index < m_MaterialResources.size(); ++index)
-    {
-        if (m_MaterialResources[index])
-        {
-            handles.push_back(MaterialHandle{
-                static_cast<RenderResourceId>(index)
-            });
-        }
-    }
-    return handles;
+    return m_MaterialResources.Handles();
 }
-
-bool Renderer::UpdateMaterial(
-    MaterialHandle handle,
-    const MaterialProperties& properties,
-    BlendMode blendMode)
+bool Renderer::UpdateMaterial(MaterialHandle handle, const MaterialProperties& properties, BlendMode blendMode)
 {
-    if (!handle.IsValid() || handle.id >= m_MaterialResources.size() ||
-        !m_MaterialResources[handle.id])
-        return false;
-
-    MaterialProperties clamped = properties;
-    clamped.metallic = std::clamp(clamped.metallic, 0.0f, 1.0f);
-    clamped.roughness = std::clamp(clamped.roughness, 0.045f, 1.0f);
-    clamped.ambientOcclusion = std::clamp(clamped.ambientOcclusion, 0.0f, 1.0f);
-    clamped.normalScale = std::clamp(clamped.normalScale, 0.0f, 4.0f);
-    clamped.opacity = std::clamp(clamped.opacity, 0.0f, 1.0f);
-    clamped.toonThreshold = std::clamp(clamped.toonThreshold, 0.0f, 1.0f);
-    clamped.toonShadowStrength = std::clamp(clamped.toonShadowStrength, 0.0f, 1.0f);
-    clamped.rimLightStrength = std::clamp(clamped.rimLightStrength, 0.0f, 4.0f);
-    clamped.faceShadowSoftness = std::clamp(
-        clamped.faceShadowSoftness,
-        MinimumFaceShadowSoftness,
-        MaximumFaceShadowSoftness);
-    NormalizeFaceFrame(clamped);
-    clamped.outlineThickness = ClampOutlineThickness(clamped.outlineThickness);
-    clamped.baseColor.x = std::clamp(clamped.baseColor.x, 0.0f, 1.0f);
-    clamped.baseColor.y = std::clamp(clamped.baseColor.y, 0.0f, 1.0f);
-    clamped.baseColor.z = std::clamp(clamped.baseColor.z, 0.0f, 1.0f);
-    clamped.toonShadowColor.x = std::clamp(clamped.toonShadowColor.x, 0.0f, 1.0f);
-    clamped.toonShadowColor.y = std::clamp(clamped.toonShadowColor.y, 0.0f, 1.0f);
-    clamped.toonShadowColor.z = std::clamp(clamped.toonShadowColor.z, 0.0f, 1.0f);
-    clamped.rimLightColor.x = std::clamp(clamped.rimLightColor.x, 0.0f, 1.0f);
-    clamped.rimLightColor.y = std::clamp(clamped.rimLightColor.y, 0.0f, 1.0f);
-    clamped.rimLightColor.z = std::clamp(clamped.rimLightColor.z, 0.0f, 1.0f);
-    clamped.outlineColor.x = std::clamp(clamped.outlineColor.x, 0.0f, 1.0f);
-    clamped.outlineColor.y = std::clamp(clamped.outlineColor.y, 0.0f, 1.0f);
-    clamped.outlineColor.z = std::clamp(clamped.outlineColor.z, 0.0f, 1.0f);
-
-    Material& material = *m_MaterialResources[handle.id];
-    material.GetProperties() = clamped;
-    material.SetBlendMode(blendMode);
-    m_RenderScene.UpdateMaterialBlendMode(handle.id, blendMode);
+    auto affected = m_MaterialResources.Handles();
+    affected.erase(std::remove_if(affected.begin(), affected.end(), [&](MaterialHandle material) {
+        const auto* entry = m_MaterialResources.Get(material);
+        return material.id != handle.id && (!entry->instance || entry->instance->parent.id != handle.id);
+    }), affected.end());
+    if (!m_MaterialResources.UpdateBase(handle, properties, blendMode)) return false;
+    // 跟踪列表在提交前分配完成；只同步父材质及其子实例，包含不可见 Primitive。
+    for (const auto material : affected)
+        m_RenderScene.UpdateMaterialBlendMode(material.id,
+            m_MaterialResources.Get(material)->effective.GetBlendMode());
     return true;
 }
-
-bool Renderer::UpdateMaterialTexture(
-    MaterialHandle handle,
-    MaterialTextureSlot slot,
-    std::shared_ptr<Texture2D> texture,
-    std::string sourceLabel)
+bool Renderer::UpdateMaterialOverride(MaterialHandle handle, MaterialParameter parameter,
+                                      const MaterialProperties& values, bool enabled)
 {
-    if (!handle.IsValid() || handle.id >= m_MaterialResources.size() ||
-        !m_MaterialResources[handle.id] || !texture || !texture->IsValid())
-    {
-        return false;
-    }
-
-    return m_MaterialResources[handle.id]->SetTexture(
-        slot, std::move(texture), std::move(sourceLabel));
+    return m_MaterialResources.UpdateOverride(handle, parameter, values, enabled);
 }
-
-bool Renderer::ClearMaterialTexture(
-    MaterialHandle handle,
-    MaterialTextureSlot slot)
+bool Renderer::ResetMaterialOverrides(MaterialHandle handle)
 {
-    if (!handle.IsValid() || handle.id >= m_MaterialResources.size() ||
-        !m_MaterialResources[handle.id])
-    {
-        return false;
-    }
-
-    return m_MaterialResources[handle.id]->ClearTexture(slot);
+    return m_MaterialResources.ResetOverrides(handle);
+}
+bool Renderer::UpdateMaterialTexture(MaterialHandle handle, MaterialTextureSlot slot,
+                                     std::shared_ptr<Texture2D> texture, std::string sourceLabel)
+{
+    return m_MaterialResources.UpdateTexture(handle, slot, std::move(texture), std::move(sourceLabel));
+}
+bool Renderer::ClearMaterialTexture(MaterialHandle handle, MaterialTextureSlot slot)
+{
+    return m_MaterialResources.ClearTexture(handle, slot);
+}
+bool Renderer::ResetMaterialTexture(MaterialHandle handle, MaterialTextureSlot slot)
+{
+    return m_MaterialResources.ResetTexture(handle, slot);
+}
+bool Renderer::ReplacePrimitiveMaterials(const std::vector<PrimitiveId>& primitives,
+                                         MaterialHandle expected, MaterialHandle replacement)
+{
+    const auto* entry = m_MaterialResources.Get(replacement);
+    if (!entry || !m_MaterialResources.Get(expected)) return false;
+    return m_RenderScene.ReplacePrimitiveMaterials(primitives, expected.id, replacement.id,
+        &entry->effective, entry->effective.GetBlendMode());
 }
 
 PrimitiveId Renderer::AddPrimitive(
@@ -311,9 +229,8 @@ PrimitiveId Renderer::AddPrimitive(
 {
     if (!mesh.IsValid() || !material.IsValid() ||
         mesh.id >= m_MeshResources.size() ||
-        material.id >= m_MaterialResources.size() ||
-        !m_MeshResources[mesh.id] ||
-        !m_MaterialResources[material.id])
+        !m_MaterialResources.Get(material) ||
+        !m_MeshResources[mesh.id])
     {
         std::cerr << "[Renderer] AddPrimitive rejected invalid resource handle."
                   << std::endl;
@@ -322,7 +239,7 @@ PrimitiveId Renderer::AddPrimitive(
 
     PrimitiveSceneProxy proxy;
     proxy.mesh = m_MeshResources[mesh.id].get();
-    proxy.material = m_MaterialResources[material.id].get();
+    proxy.material = &m_MaterialResources.Get(material)->effective;
     proxy.shaderId = DefaultSurfaceShaderId;
     proxy.materialId = material.id;
     proxy.meshId = mesh.id;
@@ -397,13 +314,7 @@ std::size_t Renderer::GetMeshResourceCount() const
 
 std::size_t Renderer::GetMaterialResourceCount() const
 {
-    return static_cast<std::size_t>(std::count_if(
-        m_MaterialResources.begin(),
-        m_MaterialResources.end(),
-        [](const std::unique_ptr<Material>& resource)
-        {
-            return resource != nullptr;
-        }));
+    return m_MaterialResources.Count();
 }
 
 LightId Renderer::AddLight(LightSceneProxy light)

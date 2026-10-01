@@ -21,7 +21,7 @@ struct EditableModelSection
     PrimitiveId primitiveId = InvalidPrimitiveId;
     cy::Matrix4f localTransform = cy::Matrix4f::Identity();
     PrimitiveBounds localBounds;
-    // 记录分段实际使用的材质，不拥有 GPU 资源，也不支持在此重新分配材质。
+    // 记录实际材质绑定；替换由 Renderer 事务接口提交后同步此句柄，不拥有 GPU 对象。
     MaterialHandle material;
     std::string name;
 };
