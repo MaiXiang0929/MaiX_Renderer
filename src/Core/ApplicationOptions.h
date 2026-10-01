@@ -16,6 +16,7 @@ struct ApplicationOptions
     std::string faceShadowDemoMaterialName;
     std::uint32_t instanceGridSize = 0;
     bool materialLab = false;
+    bool materialInstanceLab = false;
     bool translucencyTest = false;
     bool showHelp = false;
 };

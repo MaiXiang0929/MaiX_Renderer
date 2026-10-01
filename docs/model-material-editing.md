@@ -2,6 +2,8 @@
 
 ## 使用方式
 
+本文记录模型与材质选择的基础联动。后续第四轮已加入创建 Material Instance、逐项覆盖和恢复父材质；具体操作及资源依赖见 [Material Instance](material-instances.md)。
+
 在 Scene 或视口中选中模型，Inspector 的 Materials 区域会列出该模型实际使用的材质，并在各材质下显示使用它的分段名称。共享同一材质的多个分段在列表中合并为一项。
 
 点击材质条目会打开并激活 Material Editor 标签，与 Inspector 共用最右侧停靠区域；点击 Inspector 标签可返回模型或灯光属性。`View > Material Editor` 也可以关闭或打开材质面板，打开时激活标签。默认范围为当前模型，面板顶部显示模型名称；Material 下拉框可以切换该模型的其他材质。切换模型会选择新模型的第一个有效材质，但保持当前标签，不抢占视口输入。选择灯光或取消模型选择会清空模型范围的材质选择。

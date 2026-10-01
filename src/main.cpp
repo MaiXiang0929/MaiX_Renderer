@@ -44,7 +44,8 @@ int main(int argc, char** argv)
         options.translucencyTest,
         options.faceShadowDemoModelPath,
         options.faceShadowDemoTexturePath,
-        options.faceShadowDemoMaterialName);
+        options.faceShadowDemoMaterialName,
+        options.materialInstanceLab);
     app.Run();
     return 0;
 }

@@ -11,7 +11,7 @@ struct RenderItem
 {
     PrimitiveId primitiveId = InvalidPrimitiveId;
     Mesh* mesh = nullptr;
-    Material* material = nullptr;
+    const Material* material = nullptr;
     RenderResourceId shaderId = DefaultSurfaceShaderId;
     RenderResourceId materialId = InvalidRenderResourceId;
     RenderResourceId meshId = InvalidRenderResourceId;

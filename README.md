@@ -134,6 +134,8 @@ ctest --test-dir out/build/windows-ninja-debug --output-on-failure
 
 Material Editor 默认跟随所选模型，显示所属模型名称和材质列表。`All materials (debug)` 可查看全部场景材质；点击 Inspector 中的材质会返回模型范围。删除正在编辑的模型后会清理材质选择。详见[模型与材质编辑联动](docs/model-material-editing.md)。
 
+基础材质可通过 `Create Instance` 创建并绑定到当前模型分段。实例支持参数 Override、纹理继承/替换/禁用、重置覆盖和 `Edit Parent`；`Use Parent Material` 恢复基础材质。使用 `--material-instance-lab` 启动父材质与两个实例的共享 Mesh 验收场景，详见[Material Instance](docs/material-instances.md)。
+
 ## 项目结构
 
 ```text
@@ -162,6 +164,7 @@ ThirdParty/              项目使用的第三方依赖
 | 主题 | 文档 |
 | --- | --- |
 | PBR 材质与纹理约定 | [PBR Material Workflow](docs/pbr-material-workflow.md) |
+| 材质实例与参数继承 | [Material Instance](docs/material-instances.md) |
 | Toon、Face Shadow、Outline | [Toon Shading](docs/npr-toon.md) · [Face Shadow](docs/npr-face-shadow.md) · [Outline](docs/npr-outline.md) |
 | 透明渲染 | [Translucency Pass](docs/translucency-pass.md) |
 | 多 Pass 资源与附件语义 | [Pass Resource Contracts](docs/pass-resource-contracts.md) |

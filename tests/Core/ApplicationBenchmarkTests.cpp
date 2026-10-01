@@ -182,6 +182,16 @@ void TestSceneRadius()
 int main()
 {
     TestDefaultOptions();
+    {
+        ApplicationOptions options;
+        std::string error;
+        Require(ParseApplicationOptions({"--material-instance-lab"}, options, error) && options.materialInstanceLab,
+            "Material instance lab option must enable its scene.");
+        Require(!ParseApplicationOptions({"--material-instance-lab", "--material-lab"}, options, error) &&
+                !ParseApplicationOptions({"--material-instance-lab", "--instance-grid", "2"}, options, error) &&
+                !ParseApplicationOptions({"--material-instance-lab", "--translucency-test"}, options, error),
+            "Instance lab must reject conflicting benchmark scenes.");
+    }
     TestGridAndMaterialMapOptions();
     TestMaterialLabOptions();
     TestTranslucencyTestOption();

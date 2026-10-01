@@ -134,6 +134,7 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 - [x] Toon Shading Model 已接入 Forward PBR Shader，支持分段漫反射、阴影色和 Rim Light，并由 Material Editor 实时调节
 - [x] 独立 `OutlinePass` 已使用 Inverted Hull 写入 Forward HDR Scene Color；仅处理主视图不透明 Toon 材质，并复用 Forward 深度
 - [x] Material Editor 已支持材质选择、PBR/Toon 切换、Toon Outline 参数和 Renderer-owned Material 更新边界
+- [x] 单层 Material Instance 已接入统一 MaterialHandle、21 组显式参数覆盖、纹理 Inherit/Replace/Disabled、稳定地址的有效材质和父子销毁保护；模型分段可创建实例或恢复父材质，编辑器提供逐项/全部重置与显式 Edit Parent；Shading Model/Blend Mode 由父材质继承并同步队列；`--material-instance-lab` 提供共享 Mesh 的父材质/A/B 三对象验收场景；构建、15 项测试（含真实 OpenGL 纹理及 Renderer 生命周期/分类检查）和五种场景启动通过，视觉与交互已由用户于 2026-10-01 确认验收通过，见 `docs/material-instances.md`
 - [x] 模型分段已记录实际 MaterialHandle 与分段名称；Inspector 材质列表与 Material Editor 共用稳定句柄选择，切换模型选择首个有效材质、同一范围内失效时清空，保留全部材质调试入口；构建、14 项测试与默认/Material Lab/Instancing/透明测试场景启动通过，画面与交互待用户验收，见 `docs/model-material-editing.md`
 - [x] Material Editor 已与 Inspector 共用最右侧停靠节点，通过标签切换；材质点击与 View 打开仅请求一次激活，切换模型保持当前标签；参数与纹理槽位改为适应窄栏的纵向排列，首次打开只迁移材质窗口，沿用原工作区 ID 与其他分区比例；构建、14 项测试及默认/Material Lab 启动通过，标签切换、布局恢复与显示效果待用户验收，见 `docs/editor-docking-layout.md`
 - [x] 最小 Toon Face Shadow 已接入线性 SDF 纹理、角色局部 Face Forward/Right、左右自动镜像与独立 Key Light；`--face-shadow-demo` 已成功导入目标 Lumine FBX，并将连续 FaceLightmap 以 Linear 数据绑定到 `Lumine Face`；Standard/Instanced/Tessellation 共用 Forward 路径，视觉效果待用户验收
@@ -236,7 +237,7 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 ## 7. 当前技术债与约束
 
 - OpenGL 资源仍由各 Resource 类直接管理，尚未抽象成跨 API RHI。
-- Renderer 通过只增槽位、不复用 ID 的资源表和强类型 Handle 拥有 Mesh/Material；销毁会拒绝仍被 Primitive 引用的资源，旧 Handle 指向空槽时会被拒绝。Scene Proxy 与 `RenderItem` 仍缓存非 owning 裸指针，视图只供当帧同步使用；空槽复用、generation 校验和更完整的 Primitive/Light 移除边界留待明确需求。
+- Renderer 通过只增槽位、不复用 ID 的资源表和强类型 Handle 拥有 Mesh/Material；材质表同时保存基础材质和单层实例，销毁检查所有 Primitive 与父子依赖，旧 Handle 指向空槽时会被拒绝。Scene Proxy 与 `RenderItem` 缓存非 owning Mesh 指针和只读有效 Material 指针，视图只供当帧同步使用；空槽复用、generation 校验和更完整的 Primitive/Light 移除边界留待明确需求。实例更新仍是当前规模下的 CPU 线性解析，不含嵌套、持久化或 GPU 参数缓冲。
 - `ModelId` 仅标识本次运行中的场景模型，不跨会话持久化；模型导入每次建立独立 GPU 资源，尚无跨模型 Mesh/Material 去重。场景层级、保存/加载与通用 GUID 留待出现明确需求。
 - `RenderPassContext` 保留视图、绘制资源和设置，跨 Pass 纹理通过本帧绑定表与受限访问器按显式契约传递；Reflection/Translucency 仍引用 Forward 的绘制辅助方法。各 Pass 继续拥有目标，内部 Ping/Pong 不纳入契约；当前检查不拦截任意 OpenGL 调用，也不实现完整 Render Graph、自动排序、资源池或 GPU 同步抽象。
 - 当前裁剪只使用世界空间包围球，非均匀缩放取最大轴形成保守半径；细长物体可能产生误保留，但不会错误剔除。遮挡裁剪与距离裁剪尚未实现。
