@@ -126,19 +126,19 @@ float CalculateSpotAttenuation(
     return smoothstep(outerConeCos, innerConeCos, coneCos);
 }
 
-float CalculateShadowVisibility(vec4 lightSpacePos, vec3 normal, vec3 lightDir)
+float CalculateShadowVisibility(vec4 lightSpacePos, vec3 normal, vec3 lightDir, int lightType)
 {
     if (!shadowsEnabled)
         return 1.0;
     if (lightSpacePos.w <= 0.0)
-        return 0.0;
+        return lightType == LIGHT_TYPE_DIRECTIONAL ? 1.0 : 0.0;
 
     vec3 projected = lightSpacePos.xyz / lightSpacePos.w;
     projected = projected * 0.5 + 0.5;
     if (projected.x < 0.0 || projected.x > 1.0 ||
         projected.y < 0.0 || projected.y > 1.0 ||
         projected.z < 0.0 || projected.z > 1.0)
-        return 0.0;
+        return lightType == LIGHT_TYPE_DIRECTIONAL ? 1.0 : 0.0;
 
     float bias = max(0.0025 * (1.0 - dot(normal, lightDir)), 0.0005);
     vec2 texelSize = 1.0 / vec2(textureSize(shadowMap, 0));
@@ -236,7 +236,7 @@ void main()
             }
             float nDotL = max(dot(N, L), 0.0) * attenuation;
             float visibility = lightIndex == shadowLightIndex
-                ? CalculateShadowVisibility(fragLightSpacePos, N, L) : 1.0;
+                ? CalculateShadowVisibility(fragLightSpacePos, N, L, lightType) : 1.0;
             float lightBand = step(clamp(material.toonThreshold, 0.0, 1.0), nDotL);
             if (lightIndex == keyLightIndex &&
                 material.faceShadowEnabled &&
@@ -317,7 +317,7 @@ void main()
             max(4.0 * nDotV * nDotL, 0.0001);
         vec3 diffuseWeight = (vec3(1.0) - fresnel) * (1.0 - metallic);
         float visibility = lightIndex == shadowLightIndex
-            ? CalculateShadowVisibility(fragLightSpacePos, N, L)
+            ? CalculateShadowVisibility(fragLightSpacePos, N, L, lightType)
             : 1.0;
         vec3 radiance = light.colorAndIntensity.rgb *
             light.colorAndIntensity.w * attenuation;

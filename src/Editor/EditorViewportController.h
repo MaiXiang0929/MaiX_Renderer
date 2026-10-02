@@ -46,7 +46,7 @@ public:
         Camera& camera,
         const EditorSelection& selection,
         const std::vector<EditableModel>& models,
-        const std::vector<EditableLight>& lights) const;
+        const std::vector<EditableLight>& lights, const EditableCamera* sceneCamera = nullptr) const;
 
     bool IsLeftDown() const { return m_LeftDown; }
     bool HasPointerButtonDown() const { return m_LeftDown || m_MiddleDown || m_RightDown; }
@@ -59,7 +59,7 @@ public:
         std::vector<EditableModel>& models,
         std::vector<EditableLight>& lights,
         Renderer& renderer,
-        const EditorViewportRegion& viewport);
+        const EditorViewportRegion& viewport, EditableCamera* sceneCamera = nullptr, bool cameraView = false);
 
 private:
     bool m_LeftDown = false;

@@ -2,6 +2,8 @@
 
 实现入口：[反射阶段](../../src/Renderer/Passes/ReflectionPass.cpp)、[透明阶段](../../src/Renderer/Passes/TranslucencyPass.cpp)、[反射地面着色器](../../assets/shaders/reflection/ground.frag)。
 
+默认启动场景关闭反射地面，显式材质、透明、实例和 Face Shadow 测试场景保留此路径。关闭时 ReflectionPass 仍清空并发布有效目标，Forward 跳过地面绘制，固定 Pass 资源契约不变。
+
 ## 平面反射的实现
 
 Application（应用编排类）根据地面高度构造镜像矩阵：

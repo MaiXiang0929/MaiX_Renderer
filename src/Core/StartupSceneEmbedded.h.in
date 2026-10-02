@@ -1,0 +1,3 @@
+// Generated from the external scene; one authoritative definition.
+#pragma once
+inline constexpr const char* EmbeddedStartupScene=R"MAIX_SCENE(@STARTUP_SCENE_JSON@)MAIX_SCENE";

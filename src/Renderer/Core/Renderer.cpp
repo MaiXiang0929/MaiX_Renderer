@@ -338,7 +338,7 @@ void Renderer::LoadCubemap(const std::string& directoryPath)
 
 void Renderer::ExecutePipeline(RenderFrameData& frame)
 {
-    frame.shadowsEnabled = m_ShadowsEnabled;
+    frame.shadowsEnabled = frame.shadowsEnabled && m_ShadowsEnabled && frame.shadowLightId != InvalidLightId;
     frame.editorPrimitivesEnabled = m_EditorPrimitivesEnabled;
 
     RenderView mainView;

@@ -26,11 +26,13 @@ void ReflectionPass::Execute(RenderPassContext& context)
 {
     context.Resources().BeginTarget(PassResourceId::ReflectionColor);
 
-    m_ForwardPass.RenderSkybox(context, context.frame.reflectionView);
-    m_ForwardPass.RenderSurface(context, context.reflectionView);
-    m_TranslucencyPass.RenderToBoundTarget(
-        context, context.reflectionView);
-
+    if (context.frame.reflectionGroundEnabled)
+    {
+        m_ForwardPass.RenderSkybox(context, context.frame.reflectionView);
+        m_ForwardPass.RenderSurface(context, context.reflectionView);
+        m_TranslucencyPass.RenderToBoundTarget(
+            context, context.reflectionView);
+    }
     context.Resources().EndTarget(PassResourceId::ReflectionColor);
     context.Resources().Publish(PassResourceId::ReflectionColor);
 }

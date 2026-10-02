@@ -141,17 +141,19 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 - [x] Outline Pass 已接入 CPU/GPU 提交统计、GPU Timer Query、Shader Reload 和独立 NPR Shader 资源
 - [x] SSAO 已使用 Forward 可采样深度重建观察空间位置与法线，完成半分辨率 R8 遮蔽/滤波与全分辨率 HDR 合成
 - [x] FBX 静态模型导入已接通多 Mesh、多材质分段、索引绘制、Base Color 纹理、异步 CPU 解析与事务式资源追加；失败时回滚本次创建的 Primitive/Mesh/Material
-- [x] 2026-10-02 完成 FBX 尺度诊断与一次性自动聚焦：保留米制导入，显示当前源单位和米制尺寸；内置茶壶通过根 Scale=0.01 应用项目单位约定，局部几何/边界/实例间距保持原值；相机按实际视口聚焦并根据主/反射几何、地面和灯光工具拟合裁剪范围；默认场景长度参数同步换算，茶壶单模型地面跟随根变换；构建、15 项测试、真实角色 FBX 导入及六种场景启动通过。远距离辅助分段可能影响通用模型整体聚焦，画面与交互待用户验收，详见 `docs/assets/model-import.md`、`docs/editor/workflows.md`；本轮未修改法线贴图采样/绑定。
+- [x] 2026-10-02 完成 FBX 尺度诊断与一次性自动聚焦：保留米制导入，显示当前源单位和米制尺寸，按实际视口聚焦并拟合编辑器裁剪范围；构建、15 项测试、真实角色 FBX 导入及六种场景启动通过。远距离辅助分段可能影响整体聚焦，画面与交互待用户验收，见 `docs/assets/model-import.md`。默认资产的旧尺度补偿已由下述米制启动场景替代。
 - [x] Scene 已支持多个独立模型及会话内稳定 `ModelId`；导入后自动选中，Scene/Inspector/Gizmo/拾取/聚焦/移除按模型 ID 操作，移除时先注销 Primitive 再销毁 Mesh/Material；同名导入使用 `_001` 等可用后缀，Scene 只显示模型名称；构建、14 项测试及默认/Material Lab/Instancing 启动检查通过，双 FBX 画面与交互待用户验收，见 `docs/editor/workflows.md`
 - [x] 编辑器视口已接入相机 Orbit/Pan/Dolly、模型/灯光互斥拾取、ImGuizmo Transform 与选中对象聚焦
 - [x] 最小 Scene Window / Inspector 已接入共享选择状态、模型 Transform 与类型相关灯光参数
 - [x] CMake 构建时清理并复制最新 assets
-- [x] 默认场景 `teapot.obj` 与当前 VS2022 构建所需 `glfw3.lib` 已纳入 Git 跟踪，避免新克隆缺少运行或链接输入
+- [x] 当前 VS2022 构建所需 `glfw3.lib` 已纳入 Git 跟踪；默认网格由程序化几何生成，启动场景 JSON 纳入 Git 跟踪。
 - [x] CMake 配置、编译、链接与 14 项测试通过；Material Lab、默认/Instancing/Tessellation 路径及全部 Shader 初始化检查完成
 - [x] 根目录 README 已按项目简介、核心能力、渲染架构、快速开始、编辑器操作与延伸文档重组，运行示例使用可替换的外部资产路径
 
 - [x] RenderDoc 历史基准与 GPU Pass 统计实现说明已整理，见 `docs/diagnostics/benchmarks.md` 与 `docs/diagnostics/profiling-and-instancing.md`；后续场景的新捕获仍按实际需求执行
 - [x] 2026-10-01 完成实现文档重整：删除原 27 份文档，新增 15 份统一导航、架构及主要子系统中文说明；核实数据流、坐标空间、所有权与当前限制，历史性能测量单独保留，README 与本文引用同步迁移；构建、15 项测试和默认/材质/材质实例/透明/256 实例场景短时启动通过，129 个本地链接检查通过，本轮不重新判定视觉与交互验收状态，见 `docs/README.md` 和 `docs/documentation-review.md`
+
+- [x] 2026-10-03 完成默认启动场景：外部 JSON 优先、由同一文件生成的内嵌回退；默认 Cube 边长 2 米、中心原点、Scale=1，默认 PBR 无贴图；仅一盏方向光，Rotation 驱动方向，单张正交阴影贴图；独立场景 Camera 接通选择、Inspector、移动/旋转、预览与视图切换，编辑器导航不改变场景相机；默认反射地面关闭，显式测试场景保留。移除旧默认模型及其贴图依赖。构建、16 项测试和六种场景启动通过，画面与交互待用户验收，见 `docs/editor/startup-scene.md`。
 
 ### 部分完成
 

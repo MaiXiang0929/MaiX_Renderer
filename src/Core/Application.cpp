@@ -36,7 +36,9 @@
 #include "Editor/SceneHierarchyPanel.h"
 #include "Editor/EditorWorkspace.h"
 
-#include "cyTriMesh.h"
+#include "Assets/Geometry/CubeGeometry.h"
+#include "StartupScene.h"
+#include "DirectionalShadow.h"
 
 #include <algorithm>
 #include <array>
@@ -53,8 +55,6 @@
 
 namespace
 {
-// The bundled OBJ has no unit metadata. This is a project asset convention.
-constexpr float BundledModelMetersPerUnit = 0.01f;
 std::shared_ptr<Texture2D> CreateOrmCheckerTexture(
     unsigned char roughnessLow,
     unsigned char roughnessHigh,
@@ -118,7 +118,10 @@ Application::~Application() {
 /// @brief 运行应用程序
 void Application::Run() {
     // 初始化引擎，如果失败直接退出
-    if (!Init()) {
+    bool initialized = false;
+    try { initialized = Init(); }
+    catch (const std::exception& error) { std::cerr << "[Error] " << error.what() << std::endl; }
+    if (!initialized) {
 		Shutdown();
         std::cerr << "[Error] Engine initialization failed!" << std::endl;
         return;
@@ -283,143 +286,22 @@ bool Application::Init() {
         std::cerr << "[Error] Renderer initialization failed." << std::endl;
         return false;
     }
-    // ==========================================
-    // 第一阶段妥协：在 App 层临时加载网格和纹理
-    // ==========================================
-    cy::TriMesh mesh;
-    if (!mesh.LoadFromFileObj(m_ObjPath.c_str())) {
-        std::cerr << "[Error] Failed to load OBJ: " << m_ObjPath << std::endl;
-        return false;
-    }
+    std::string diagnostic;
+    const auto scene = LoadStartupScene("assets/scenes/startup.json", diagnostic);
+    std::cout << "[StartupScene] " << diagnostic << std::endl;
+    return CreateStartupScene(scene);
+}
 
-    mesh.ComputeBoundingBox();
-    if (!mesh.HasNormals()) {
-        // OBJ 未提供法线时由 cyTriMesh 自动生成，保证光照着色可用。
-        mesh.ComputeNormals();
-    }
-    m_ObjCenter = (mesh.GetBoundMax() + mesh.GetBoundMin()) * 0.5f;
-
-    // 根据包围盒自动调整观察距离，使不同尺寸的模型都能进入离屏画面。
-    const float rawDiameter = (mesh.GetBoundMax() - mesh.GetBoundMin()).Length();
-    const float modelDiameter = rawDiameter * BundledModelMetersPerUnit;
+bool Application::CreateStartupScene(const StartupSceneDefinition& scene)
+{
+    const CubeGeometry cube = CreateCubeGeometry(scene.cubeEdgeLength);
+    const auto& vertices = cube.vertices;
+    m_ObjCenter = cy::Vec3f(0.0f);
+    const float rawDiameter = scene.cubeEdgeLength * std::sqrt(3.0f);
+    const float modelDiameter = rawDiameter;
     m_ModelDiameter = modelDiameter;
-
-    std::vector<Vertex> vertices;
-    vertices.reserve(static_cast<size_t>(mesh.NF()) * 3);
-    bool hasTexCoords = mesh.HasTextureVertices();
-    for (int i = 0; i < mesh.NF(); ++i) {
-        const cy::TriMesh::TriFace face = mesh.F(i);
-        const cy::TriMesh::TriFace faceNormal = mesh.FN(i);
-        const cy::TriMesh::TriFace faceTex = hasTexCoords
-            ? mesh.FT(i)
-            : cy::TriMesh::TriFace();
-
-        cy::Vec3f positions[3];
-        cy::Vec3f normals[3];
-        cy::Vec2f uvs[3];
-        for (int j = 0; j < 3; ++j) {
-            positions[j] = mesh.V(face.v[j]);
-            normals[j] = mesh.VN(faceNormal.v[j]);
-            if (hasTexCoords) {
-                const cy::Vec3f uv = mesh.VT(faceTex.v[j]);
-                uvs[j] = cy::Vec2f(uv.x, 1.0f - uv.y);
-            }
-            else {
-                uvs[j] = cy::Vec2f(0.0f, 0.0f);
-            }
-        }
-
-        const cy::Vec3f edge1 = positions[1] - positions[0];
-        const cy::Vec3f edge2 = positions[2] - positions[0];
-        const cy::Vec2f deltaUv1 = uvs[1] - uvs[0];
-        const cy::Vec2f deltaUv2 = uvs[2] - uvs[0];
-        const float determinant =
-            deltaUv1.x * deltaUv2.y - deltaUv1.y * deltaUv2.x;
-
-        cy::Vec3f faceTangent(1.0f, 0.0f, 0.0f);
-        cy::Vec3f faceBitangent(0.0f, 0.0f, 1.0f);
-        if (hasTexCoords && std::abs(determinant) > 1.0e-8f) {
-            const float inverseDeterminant = 1.0f / determinant;
-            faceTangent =
-                (edge1 * deltaUv2.y - edge2 * deltaUv1.y) * inverseDeterminant;
-            faceBitangent =
-                (edge2 * deltaUv1.x - edge1 * deltaUv2.x) * inverseDeterminant;
-        }
-
-        for (int j = 0; j < 3; ++j) {
-            cy::Vec3f normal = normals[j];
-            const float normalLength = normal.Length();
-            if (normalLength > 1.0e-8f)
-                normal /= normalLength;
-
-            const float tangentDotNormal =
-                faceTangent.x * normal.x +
-                faceTangent.y * normal.y +
-                faceTangent.z * normal.z;
-            cy::Vec3f tangent = faceTangent - normal * tangentDotNormal;
-            if (tangent.Length() <= 1.0e-8f) {
-                tangent = std::abs(normal.y) < 0.999f
-                    ? cy::Vec3f(normal.z, 0.0f, -normal.x)
-                    : cy::Vec3f(1.0f, 0.0f, 0.0f);
-            }
-            tangent.Normalize();
-
-            const cy::Vec3f crossNormalTangent(
-                normal.y * tangent.z - normal.z * tangent.y,
-                normal.z * tangent.x - normal.x * tangent.z,
-                normal.x * tangent.y - normal.y * tangent.x);
-            const float handednessDot =
-                crossNormalTangent.x * faceBitangent.x +
-                crossNormalTangent.y * faceBitangent.y +
-                crossNormalTangent.z * faceBitangent.z;
-
-            Vertex vertex{};
-            vertex.Position = positions[j];
-            vertex.Normal = normals[j];
-            vertex.TexCoord = uvs[j];
-            vertex.Tangent = cy::Vec4f(
-                tangent.x, tangent.y, tangent.z,
-                handednessDot < 0.0f ? -1.0f : 1.0f);
-            vertices.push_back(vertex);
-        }
-    }
-    std::filesystem::path diffusePath;
-    std::filesystem::path specularPath;
     Material mainMaterial;
-    mainMaterial.SetName("Surface");
-    const std::filesystem::path modelDirectory =
-        std::filesystem::path(m_ObjPath).parent_path();
-
-    // 当前渲染器使用一组材质纹理，因此选取 MTL 中首个有效的漫反射和高光贴图。
-    // 贴图路径以 OBJ 所在目录为基准进行解析。
-    for (unsigned int i = 0; i < mesh.NM(); ++i) {
-        const cy::TriMesh::Mtl& material = mesh.M(i);
-        if (i == 0) {
-            MaterialProperties& properties = mainMaterial.GetProperties();
-            properties.baseColor = cy::Vec3f(
-                material.Kd[0], material.Kd[1], material.Kd[2]);
-            properties.specularColor = cy::Vec3f(
-                material.Ks[0], material.Ks[1], material.Ks[2]);
-            properties.shininess = std::max(material.Ns, 1.0f);
-            properties.environmentReflectivity = std::max({
-                material.Ks[0], material.Ks[1], material.Ks[2] });
-        }
-        if (diffusePath.empty() && material.map_Kd.data != nullptr) {
-            diffusePath = modelDirectory / material.map_Kd.data;
-        }
-        if (specularPath.empty() && material.map_Ks.data != nullptr) {
-            specularPath = modelDirectory / material.map_Ks.data;
-        }
-    }
-
-    if (!diffusePath.empty()) {
-        mainMaterial.SetAlbedoMap(Texture2D::Load(
-            diffusePath.lexically_normal().string(), TextureColorSpace::SRGB));
-    }
-    if (!specularPath.empty()) {
-        mainMaterial.SetSpecularMap(Texture2D::Load(
-            specularPath.lexically_normal().string(), TextureColorSpace::Linear));
-    }
+    mainMaterial.SetName("Default Material");
     if (!m_NormalMapPath.empty()) {
         mainMaterial.SetNormalMap(Texture2D::Load(
             m_NormalMapPath, TextureColorSpace::Linear));
@@ -438,13 +320,13 @@ bool Application::Init() {
     const std::vector<cy::Vec3f> instanceOffsets = BuildInstanceGridOffsets(
         effectiveGridSize, instanceSpacing);
     m_SceneRadius = CalculateInstanceGridSceneRadius(
-        effectiveGridSize, instanceSpacing, bounds.radius) * BundledModelMetersPerUnit;
+        effectiveGridSize, instanceSpacing, bounds.radius);
     const float gridHalfSpan =
         static_cast<float>(effectiveGridSize - 1) * instanceSpacing * 0.5f;
-    m_DefaultBoundsMin = mesh.GetBoundMin() - m_ObjCenter - cy::Vec3f(gridHalfSpan, gridHalfSpan, 0.0f);
-    m_DefaultBoundsMax = mesh.GetBoundMax() - m_ObjCenter + cy::Vec3f(gridHalfSpan, gridHalfSpan, 0.0f);
-    m_GroundY = (mesh.GetBoundMin().y - m_ObjCenter.y - gridHalfSpan -
-        rawDiameter * 0.02f) * BundledModelMetersPerUnit;
+    m_DefaultBoundsMin = cy::Vec3f(-scene.cubeEdgeLength * 0.5f) - m_ObjCenter - cy::Vec3f(gridHalfSpan, gridHalfSpan, 0.0f);
+    m_DefaultBoundsMax = cy::Vec3f(scene.cubeEdgeLength * 0.5f) - m_ObjCenter + cy::Vec3f(gridHalfSpan, gridHalfSpan, 0.0f);
+    m_GroundY = (cy::Vec3f(-scene.cubeEdgeLength * 0.5f).y - m_ObjCenter.y - gridHalfSpan -
+        rawDiameter * 0.02f);
     const float cameraDistance = modelDiameter > 0.0f
         ? std::max(modelDiameter * 1.25f, m_SceneRadius * 2.5f)
         : 5.0f;
@@ -455,18 +337,16 @@ bool Application::Init() {
 
     m_Models.emplace_back();
     EditableModel& defaultModel = m_Models.back();
-    defaultModel.transform.scale = cy::Vec3f(BundledModelMetersPerUnit);
-    defaultModel.usesBundledCentimeterScale = true;
+    defaultModel.transform = scene.cubeTransform;
     const cy::Matrix4f defaultRoot = defaultModel.transform.ToMatrix();
-    mainMaterial.GetProperties().outlineThickness *= BundledModelMetersPerUnit;
-    m_Renderer->SetSsaoRadius(0.005f);
-    m_Renderer->SetSsaoBias(0.00025f);
+    m_Renderer->SetSsaoRadius(0.5f);
+    m_Renderer->SetSsaoBias(0.025f);
     defaultModel.id = ModelId{m_NextModelId++};
     m_DefaultModelId = defaultModel.id;
     defaultModel.name = m_MaterialInstanceLab ? "Material Instance Lab" :
-        (m_MaterialLab ? "Material Lab" : "Teapot");
+        (m_MaterialLab ? "Material Lab" : scene.cubeName);
 
-    const MeshHandle instanceMesh = m_Renderer->CreateMesh(vertices);
+    const MeshHandle instanceMesh = m_Renderer->CreateMesh(vertices, cube.indices);
     if (!instanceMesh.IsValid())
     {
         std::cerr << "[Error] Failed to create the shared surface mesh."
@@ -640,60 +520,31 @@ bool Application::Init() {
     if (m_TranslucencyTest)
         CreateTranslucencyTestScene();
 
-    // Adding translucent models may have reallocated m_Models. Resolve by ID.
-    const PrimitiveBounds sceneBounds = FindEditableModel(m_Models, m_DefaultModelId)->GetWorldBounds();
-    const cy::Vec3f sceneCenter = sceneBounds.radius > 0.0f
-        ? sceneBounds.center
-        : cy::Vec3f(0.0f);
-    const float lightDistance = std::max(
-        std::sqrt(500.0f) * BundledModelMetersPerUnit,
-        std::max(sceneBounds.radius, BundledModelMetersPerUnit) * 2.5f);
-    LightSceneProxy mainLight;
-    mainLight.type = LightType::Spot;
-    mainLight.position = sceneCenter + cy::Vec3f(
-        0.0f,
-        lightDistance / std::sqrt(5.0f),
-        lightDistance * 2.0f / std::sqrt(5.0f));
-    mainLight.direction = sceneCenter - mainLight.position;
-    mainLight.direction.Normalize();
-    mainLight.color = cy::Vec3f(1.0f, 0.95f, 0.85f);
-    mainLight.intensity = 5.0f;
-    mainLight.range = 30.0f * BundledModelMetersPerUnit;
-    mainLight.outerConeAngle = 30.0f * 3.14159265358979323846f / 180.0f;
-    m_MainLightId = m_Renderer->AddLight(mainLight);
-    mainLight.id = m_MainLightId;
-    EditableLight editableMainLight;
-    editableMainLight.name = "Main Spot Light";
-    editableMainLight.transform.position = mainLight.position;
-    editableMainLight.proxy = mainLight;
-    m_EditableLights.push_back(editableMainLight);
-
-    LightSceneProxy directionalFill;
-    directionalFill.type = LightType::Directional;
-    directionalFill.direction = cy::Vec3f(-0.35f, -1.0f, -0.2f);
-    directionalFill.direction.Normalize();
-    directionalFill.color = cy::Vec3f(0.35f, 0.5f, 1.0f);
-    directionalFill.intensity = 0.35f;
-    directionalFill.castsShadow = false;
-    directionalFill.id = m_Renderer->AddLight(directionalFill);
-    EditableLight editableDirectionalFill;
-    editableDirectionalFill.name = "Directional Fill Light";
-    editableDirectionalFill.proxy = directionalFill;
-    m_EditableLights.push_back(editableDirectionalFill);
-
-    LightSceneProxy pointFill;
-    pointFill.type = LightType::Point;
-    pointFill.position = cy::Vec3f(-8.0f, 4.0f, 5.0f) * BundledModelMetersPerUnit;
-    pointFill.color = cy::Vec3f(1.0f, 0.2f, 0.08f);
-    pointFill.intensity = 0.9f;
-    pointFill.range = 18.0f * BundledModelMetersPerUnit;
-    pointFill.castsShadow = false;
-    pointFill.id = m_Renderer->AddLight(pointFill);
-    EditableLight editablePointFill;
-    editablePointFill.name = "Point Fill Light";
-    editablePointFill.transform.position = pointFill.position;
-    editablePointFill.proxy = pointFill;
-    m_EditableLights.push_back(editablePointFill);
+    // Initialization is committed before the event loop. Shutdown rolls back all
+    // tracked resources on any failure, while the GL context is still alive.
+    EditableLight light;
+    light.name = scene.lightName;
+    light.transform.rotationDegrees = scene.lightRotation;
+    light.proxy.type = LightType::Directional;
+    light.proxy.color = scene.lightColor;
+    light.proxy.intensity = scene.lightIntensity;
+    light.proxy.castsShadow = scene.castsShadow;
+    light.proxy.id = m_Renderer->AddLight(light.proxy);
+    if (!light.IsValid()) return false;
+    m_MainLightId = light.proxy.id;
+    m_EditableLights.push_back(light);
+    ApplyEditableLightTransform(m_EditableLights.back(), *m_Renderer);
+    m_SceneCamera = scene.camera;
+    m_SceneCamera.id = CameraId{1};
+    m_ReflectionGroundEnabled = m_MaterialLab || m_MaterialInstanceLab ||
+        m_TranslucencyTest || m_InstanceGridSize > 0 || !m_FaceShadowDemoModelPath.empty();
+    m_EditorSelection.SelectModel(m_DefaultModelId);
+    if (scene.selectedObject == "directionalLight") m_EditorSelection.SelectLight(m_MainLightId);
+    if (scene.selectedObject == "camera") m_EditorSelection.SelectCamera(m_SceneCamera.id);
+    m_Camera.ProcessMouseOrbit(78.5398f, 45.0f);
+    m_PendingFocusSelection.SelectModel(m_DefaultModelId);
+    std::cout << "[StartupScene] Cube edge=" << scene.cubeEdgeLength
+        << " m; Directional Light; Camera; 1 unit=1 m" << std::endl;
 
     if (!LoadStartupFaceShadowDemo())
         return false;
@@ -1293,6 +1144,7 @@ void Application::Update() {
     if (CommitImportedModel(completedImport->model, error, importedId))
     {
         m_EditorSelection.SelectModel(importedId);
+        m_SceneCameraView = false;
         m_PendingFocusSelection = m_EditorSelection;
         m_AssetImportPanel->ReportCommitSuccess(
             completedImport->model,
@@ -1326,14 +1178,14 @@ void Application::Render() {
         if (m_PendingFocusSelection.type != EditorSelectionType::None)
         {
             m_ViewportController->FocusSelection(m_Camera, m_PendingFocusSelection,
-                m_Models, m_EditableLights);
+                m_Models, m_EditableLights, &m_SceneCamera);
             m_PendingFocusSelection.Clear();
         }
     }
 
     // 共用矩阵
     cy::Matrix4f projMatrix = m_Camera.GetProjectionMatrix();
-    cy::Matrix4f viewMatrix = m_Camera.GetViewMatrix();
+    cy::Matrix4f viewMatrix = m_SceneCameraView ? m_SceneCamera.GetViewMatrix() : m_Camera.GetViewMatrix();
 
     const PrimitiveBounds sceneBounds = GetSceneWorldBounds(m_Models);
     const cy::Vec3f sceneCenter = sceneBounds.radius > 0.0f
@@ -1343,44 +1195,19 @@ void Application::Render() {
         std::max(m_SceneRadius, sceneBounds.radius), 0.001f);
 
     EditableLight* editableMainLight = FindEditableLight(m_MainLightId);
-    const cy::Vec3f lightWorldPosition = editableMainLight
-        ? editableMainLight->transform.position
-        : sceneCenter + cy::Vec3f(0.0f, 0.1f, 0.2f);
-    const cy::Vec3f lightOffsetWorld = lightWorldPosition - sceneCenter;
-    const float rawLightDistance = lightOffsetWorld.Length();
-    const float lightDistance = std::max(rawLightDistance, 0.001f);
-    const cy::Vec3f lightViewTarget = rawLightDistance > 1.0e-4f
-        ? sceneCenter
-        : lightWorldPosition + (editableMainLight
-            ? editableMainLight->proxy.direction
-            : cy::Vec3f(0.0f, -1.0f, 0.0f));
-
-    // 聚光灯始终朝向模型中心；位置仍由 Ctrl + 左键独立于相机旋转。
-    // 当光线方向接近竖直方向时切换 up 向量，避免 View 矩阵基向量退化。
-    const cy::Vec3f lightViewDirection = lightViewTarget - lightWorldPosition;
-    const bool nearVertical =
-        std::abs(lightViewDirection.x) + std::abs(lightViewDirection.z) < 0.001f;
-    const cy::Vec3f lightUp = nearVertical
-        ? cy::Vec3f(0.0f, 0.0f, 1.0f)
-        : cy::Vec3f(0.0f, 1.0f, 0.0f);
-    const cy::Matrix4f lightView = cy::Matrix4f::View(
-        lightWorldPosition, lightViewTarget, lightUp);
-
-    // 根据模型包围球自动拟合聚光灯锥体，兼容不同尺寸的命令行 OBJ。
-    constexpr float Pi = 3.14159265358979323846f;
-    const float shadowLightDistance = lightDistance;
-    const float angularRadius = std::asin(
-        std::min(sceneRadius / shadowLightDistance, 0.95f));
-    const float lightFov = std::clamp(
-        angularRadius * 2.0f + 10.0f * Pi / 180.0f,
-        60.0f * Pi / 180.0f,
-        150.0f * Pi / 180.0f);
-    const float lightNear = std::max(
-        0.001f, shadowLightDistance - sceneRadius * 1.25f);
-    const float lightFar = shadowLightDistance + sceneRadius * 2.0f;
-    const cy::Matrix4f lightProjection = cy::Matrix4f::Perspective(
-        lightFov, 1.0f, lightNear, lightFar);
-    const cy::Matrix4f lightVP = lightProjection * lightView;
+    float shadowPadding = 0;
+    if (m_Renderer->IsTessellationEnabled())
+        for (const auto& model : m_Models)
+            for (const auto& section : model.sections)
+            {
+                PrimitiveBounds displacementBounds;
+                displacementBounds.radius = m_Renderer->GetDisplacementScale();
+                shadowPadding = std::max(shadowPadding, TransformBounds(displacementBounds,
+                    model.transform.ToMatrix()*section.localTransform).radius);
+            }
+    const cy::Matrix4f lightVP = FitDirectionalShadow(sceneBounds,
+        editableMainLight ? editableMainLight->proxy.direction : cy::Vec3f(0,-1,0),
+        shadowPadding);
     // 反射视图仍由 Application 根据场景地面位置计算，Pass 只消费结果。
     float groundY = m_GroundY;
     if (m_Models.size() == 1 && m_Models.front().id == m_DefaultModelId)
@@ -1397,7 +1224,7 @@ void Application::Render() {
                 }
         const float maxScale = std::max({std::abs(model.transform.scale.x),
             std::abs(model.transform.scale.y), std::abs(model.transform.scale.z)});
-        groundY -= (m_ModelDiameter / BundledModelMetersPerUnit) * 0.02f * maxScale;
+        groundY -= m_ModelDiameter * 0.02f * maxScale;
     }
     else
     {
@@ -1419,7 +1246,7 @@ void Application::Render() {
     const cy::Matrix4f reflectView = viewMatrix * reflectMatrix;
 
     // 相机世界位置（用于地面着色器视线方向计算）
-    const cy::Vec3f cameraWorldPos = m_Camera.GetPosition();
+    const cy::Vec3f cameraWorldPos = m_SceneCameraView ? m_SceneCamera.transform.position : m_Camera.GetPosition();
 
     const float groundSize = std::max(
         m_ModelDiameter * 2.0f, sceneRadius * 2.0f);
@@ -1427,14 +1254,6 @@ void Application::Render() {
     const cy::Matrix4f groundModel =
         cy::Matrix4f::Translation(groundCenter) *
         cy::Matrix4f::Scale(groundSize, 1.0f, groundSize);
-
-    if (editableMainLight)
-    {
-        const cy::Vec3f direction = sceneCenter - lightWorldPosition;
-        if (direction.Length() > 1.0e-6f)
-            editableMainLight->proxy.direction = direction.GetNormalized();
-        ApplyEditableLightTransform(*editableMainLight, *m_Renderer);
-    }
 
     // Main and reflection share a projection. Fit both depth ranges before
     // creating it, including the ground quad and the editor's light cones.
@@ -1451,13 +1270,16 @@ void Application::Render() {
                 localBounds.radius += m_Renderer->GetDisplacementScale();
             const PrimitiveBounds bounds = TransformBounds(localBounds, root * section.localTransform);
             clipRange.IncludeSphere(viewMatrix, bounds.center, bounds.radius);
-            clipRange.IncludeSphere(reflectView, bounds.center, bounds.radius);
+            if (m_ReflectionGroundEnabled) clipRange.IncludeSphere(reflectView, bounds.center, bounds.radius);
         }
     }
-    for (float x : {-1.0f, 1.0f})
-        for (float z : {-1.0f, 1.0f})
-            clipRange.IncludeSphere(viewMatrix,
-                groundCenter + cy::Vec3f(x * groundSize, 0.0f, z * groundSize), 0.0f);
+    if (m_ReflectionGroundEnabled)
+    {
+        for (float x : {-1.0f, 1.0f})
+            for (float z : {-1.0f, 1.0f})
+                clipRange.IncludeSphere(viewMatrix,
+                    groundCenter + cy::Vec3f(x * groundSize, 0.0f, z * groundSize), 0.0f);
+    }
     for (const EditableLight& light : m_EditableLights)
     {
         if (light.proxy.type == LightType::Directional)
@@ -1472,8 +1294,16 @@ void Application::Render() {
                 light.proxy.direction * (range * 0.5f), radius);
         }
     }
-    m_Camera.SetClipPlanes(clipRange.Near(), clipRange.Far());
-    projMatrix = m_Camera.GetProjectionMatrix();
+    if (!m_SceneCameraView && m_Renderer->AreEditorPrimitivesEnabled())
+    {
+        const float previewHeight = std::tan(m_SceneCamera.fovDegrees * 3.14159265358979323846f / 360);
+        const float previewAspect = viewport.pixelWidth > 0 && viewport.pixelHeight > 0 ? static_cast<float>(viewport.pixelWidth)/viewport.pixelHeight : 1;
+        clipRange.IncludeSphere(viewMatrix, m_SceneCamera.transform.position,
+            std::sqrt(1 + previewHeight*previewHeight*(1+previewAspect*previewAspect)));
+    }
+    if (!m_SceneCameraView) m_Camera.SetClipPlanes(clipRange.Near(), clipRange.Far());
+    const float aspect = viewport.pixelWidth > 0 && viewport.pixelHeight > 0 ? static_cast<float>(viewport.pixelWidth)/viewport.pixelHeight : 1.0f;
+    projMatrix = m_SceneCameraView ? m_SceneCamera.GetProjectionMatrix(aspect) : m_Camera.GetProjectionMatrix();
 
     // Application 只提交强类型帧数据，不再创建任何 Pass callback。
     RenderFrameData frame;
@@ -1482,7 +1312,9 @@ void Application::Render() {
     frame.projection = projMatrix;
     frame.view = viewMatrix;
     frame.lightVP = lightVP;
-    frame.shadowLightId = m_MainLightId;
+    frame.shadowsEnabled = editableMainLight && editableMainLight->proxy.castsShadow && sceneBounds.radius > 0;
+    frame.reflectionGroundEnabled = m_ReflectionGroundEnabled;
+    frame.shadowLightId = frame.shadowsEnabled ? m_MainLightId : InvalidLightId;
     frame.keyLightId = m_MainLightId;
     frame.reflectionView = reflectView;
     frame.groundModel = groundModel;
@@ -1497,21 +1329,21 @@ void Application::Render() {
     if (viewport.visible)
         m_ViewportController->Draw(
             m_Camera, m_EditorSelection, m_Models,
-            m_EditableLights, *m_Renderer, viewport);
+            m_EditableLights, *m_Renderer, viewport, &m_SceneCamera, m_SceneCameraView);
     m_Workspace->EndViewport();
 
     m_AssetImportPanel->Draw(nativeWindowHandle);
     if (m_Workspace->ShowStatistics())
         m_StatisticsPanel->Draw(*m_Renderer);
     const ModelId removedModel = m_SceneHierarchyPanel->Draw(
-        m_EditorSelection, m_Models, m_EditableLights);
+        m_EditorSelection, m_Models, m_EditableLights, &m_SceneCamera);
     if (removedModel.IsValid())
         RemoveModel(removedModel);
     // 先应用场景选择/删除，再同步材质身份；即使材质面板关闭也清理失效选择。
     m_MaterialSelection.Synchronize(
         m_EditorSelection, m_Models, m_Renderer->GetMaterialHandles());
     if (m_InspectorPanel->Draw(
-            m_EditorSelection, m_Models, m_EditableLights, *m_Renderer,
+            m_EditorSelection, m_Models, m_EditableLights, m_SceneCamera, m_SceneCameraView, *m_Renderer,
             m_MaterialSelection))
         m_Workspace->OpenMaterialEditor();
     if (m_Workspace->ShowMaterialEditor())
@@ -1651,7 +1483,7 @@ void Application::CursorPositionCallback(
     app->m_ViewportController->ProcessPointerMove(
         xpos,
         ypos,
-        altDown && (inViewport || scenePointerActive),
+        altDown && !app->m_SceneCameraView && (inViewport || scenePointerActive),
         viewport.size.y,
         app->m_Camera,
         &deltaX,
@@ -1664,18 +1496,9 @@ void Application::CursorPositionCallback(
         EditableLight* mainLight = app->FindEditableLight(app->m_MainLightId);
         if (mainLight)
         {
-            const PrimitiveBounds bounds = GetSceneWorldBounds(app->m_Models);
-            const cy::Vec3f center = bounds.radius > 0.0f
-                ? bounds.center
-                : cy::Vec3f(0.0f);
-            const cy::Vec3f offset = mainLight->transform.position - center;
-            const cy::Matrix4f rotation =
-                cy::Matrix4f::RotationX(deltaY * 0.01f) *
-                cy::Matrix4f::RotationY(deltaX * 0.01f);
-            const cy::Vec4f rotated = rotation *
-                cy::Vec4f(offset.x, offset.y, offset.z, 0.0f);
-            mainLight->transform.position = center +
-                cy::Vec3f(rotated.x, rotated.y, rotated.z);
+            mainLight->transform.rotationDegrees.x += deltaY * 0.5f;
+            mainLight->transform.rotationDegrees.y += deltaX * 0.5f;
+            ApplyEditableLightTransform(*mainLight, *app->m_Renderer);
         }
     }
 }
@@ -1696,6 +1519,7 @@ void Application::ScrollCallback(
     const EditorViewportRegion& viewport = app->m_Workspace->GetViewportRegion();
     if (!viewport.hovered || !viewport.Contains(x, y))
         return;
+    if (app->m_SceneCameraView) return;
     app->m_ViewportController->ProcessScroll(
         static_cast<float>(yoffset), app->m_Camera);
 }
@@ -1733,7 +1557,10 @@ void Application::KeyCallback(GLFWwindow* window, int key, int scancode, int act
         else if (key == GLFW_KEY_Q)
             app->m_ViewportController->ToggleSpace();
         else if (key == GLFW_KEY_F)
+        {
+            app->m_SceneCameraView = false;
             app->m_PendingFocusSelection = app->m_EditorSelection;
+        }
     }
     // 着色器重载（F6）
     if (key == GLFW_KEY_F6 && action == GLFW_PRESS) {
@@ -1745,7 +1572,11 @@ void Application::KeyCallback(GLFWwindow* window, int key, int scancode, int act
     }
 
     // 投影模式切换（P）
-    if (key == GLFW_KEY_P && action == GLFW_PRESS) {
+    if (key == GLFW_KEY_KP_0 && action == GLFW_PRESS) {
+        app->m_SceneCameraView = !app->m_SceneCameraView;
+        app->m_ViewportController->CancelPointerInput();
+    }
+    if (key == GLFW_KEY_P && action == GLFW_PRESS && !app->m_SceneCameraView) {
         app->m_Camera.ToggleProjectionMode();
     }
 
@@ -1768,7 +1599,7 @@ void Application::KeyCallback(GLFWwindow* window, int key, int scancode, int act
     if (key == GLFW_KEY_T && action == GLFW_PRESS) {
         const bool enabled = !app->m_Renderer->IsTessellationEnabled();
         app->m_Renderer->SetTessellationEnabled(enabled);
-        std::cout << "[Renderer] Teapot Tessellation: "
+        std::cout << "[Renderer] Mesh Tessellation: "
             << (enabled ? "ON" : "OFF")
             << std::endl;
     }

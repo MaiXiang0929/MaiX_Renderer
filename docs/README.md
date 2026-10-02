@@ -18,6 +18,7 @@
 | [卡通、轮廓与面部阴影](rendering/npr.md) | 分段光照、反向外壳、面部坐标与阈值贴图 |
 | [高动态范围与后处理](rendering/postprocessing.md) | 遮蔽重建、光晕双缓冲、曝光、输出与编辑叠加 |
 | [静态模型与图片导入](assets/model-import.md) | 异步解析、几何烘焙、贴图搜索和资源回滚 |
+| [启动场景与相机](editor/startup-scene.md) | 默认米制正方体、方向光、独立相机与加载回退 |
 | [编辑器工作流](editor/workflows.md) | 停靠、视口坐标、模型身份、拾取与材质选择 |
 | [实例绘制与诊断](diagnostics/profiling-and-instancing.md) | 实例缓冲、状态缓存、提交口径和异步计时 |
 | [历史性能基准](diagnostics/benchmarks.md) | 原测量环境、前后提交数据和本地捕获说明 |

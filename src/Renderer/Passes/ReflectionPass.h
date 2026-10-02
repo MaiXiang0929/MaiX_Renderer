@@ -7,7 +7,7 @@
 class ForwardPass;
 class TranslucencyPass;
 
-/// @brief 反射 Pass：用镜像视图重绘天空盒和 teapot 到独立纹理。
+/// @brief 反射 Pass：用镜像视图重绘天空盒和场景模型 到独立纹理。
 class ReflectionPass final : public RenderPass
 {
 public:

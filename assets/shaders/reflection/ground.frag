@@ -12,6 +12,7 @@ uniform vec3 cameraWorldPos;
 uniform mat4 lightVP;
 uniform sampler2DShadow shadowMap;
 uniform bool shadowsEnabled;
+uniform bool shadowIsDirectional;
 
 float CalculateShadowVisibility(vec4 lightSpacePos)
 {
@@ -21,17 +22,17 @@ float CalculateShadowVisibility(vec4 lightSpacePos)
     }
 
     if (lightSpacePos.w <= 0.0) {
-        return 0.0;
+        return shadowIsDirectional ? 1.0 : 0.0;
     }
 
     vec3 projected = lightSpacePos.xyz / lightSpacePos.w;
     projected = projected * 0.5 + 0.5;
 
-    // 光锥以外没有聚光灯直射，因此返回完全遮蔽。
+    // 方向光在阴影图外保留直射；聚光灯沿用光锥外遮蔽约定。
     if (projected.x < 0.0 || projected.x > 1.0 ||
         projected.y < 0.0 || projected.y > 1.0 ||
         projected.z < 0.0 || projected.z > 1.0) {
-        return 0.0;
+        return shadowIsDirectional ? 1.0 : 0.0;
     }
 
     vec2 texelSize = 1.0 / vec2(textureSize(shadowMap, 0));
@@ -74,7 +75,7 @@ void main()
         result = texture(cubemap, R).rgb;
     }
 
-    // 地面不写入 shadow map，只在此处接收 OBJ 投下的阴影。
+    // 地面不写入 shadow map，只在此处接收 场景模型投下的阴影。
     float visibility = CalculateShadowVisibility(lightVP * vec4(worldPos, 1.0));
     result *= mix(0.35, 1.0, visibility);
 

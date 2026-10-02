@@ -149,32 +149,39 @@ void ForwardPass::Execute(RenderPassContext& context)
 
     RenderSkybox(context, context.frame.view);
 
-    m_GroundShader.Bind();
-    m_GroundShader.SetMatrix4("mvp", &context.frame.groundMvp.cell[0]);
-    m_GroundShader.SetMatrix4("model", &context.frame.groundModel.cell[0]);
-    m_GroundShader.SetMatrix4(
-        "reflectionVP", &context.frame.reflectionVP.cell[0]);
-    m_GroundShader.SetMatrix4("lightVP", &context.frame.lightVP.cell[0]);
-    m_GroundShader.SetVec3(
-        "cameraWorldPos",
-        context.frame.cameraWorldPosition.x,
-        context.frame.cameraWorldPosition.y,
-        context.frame.cameraWorldPosition.z);
-    BindEnvironment(context, 0);
-    m_GroundShader.SetInt("cubemap", 0);
-    glActiveTexture(GL_TEXTURE1);
-    RenderSubmissionStats::Get().RecordTextureBind(
-        GL_TEXTURE_2D, 1, reflectionTexture);
-    glBindTexture(GL_TEXTURE_2D, reflectionTexture);
-    m_GroundShader.SetInt("reflectionTex", 1);
-    glActiveTexture(GL_TEXTURE2);
-    RenderSubmissionStats::Get().RecordTextureBind(
-        GL_TEXTURE_2D, 2, shadowTexture);
-    glBindTexture(GL_TEXTURE_2D, shadowTexture);
-    m_GroundShader.SetInt("shadowMap", 2);
-    m_GroundShader.SetInt(
-        "shadowsEnabled", context.frame.shadowsEnabled ? 1 : 0);
-    context.groundMesh.Draw();
+    if (context.frame.reflectionGroundEnabled)
+    {
+        m_GroundShader.Bind();
+        m_GroundShader.SetMatrix4("mvp", &context.frame.groundMvp.cell[0]);
+        m_GroundShader.SetMatrix4("model", &context.frame.groundModel.cell[0]);
+        m_GroundShader.SetMatrix4(
+            "reflectionVP", &context.frame.reflectionVP.cell[0]);
+        m_GroundShader.SetMatrix4("lightVP", &context.frame.lightVP.cell[0]);
+        m_GroundShader.SetVec3(
+            "cameraWorldPos",
+            context.frame.cameraWorldPosition.x,
+            context.frame.cameraWorldPosition.y,
+            context.frame.cameraWorldPosition.z);
+        BindEnvironment(context, 0);
+        m_GroundShader.SetInt("cubemap", 0);
+        glActiveTexture(GL_TEXTURE1);
+        RenderSubmissionStats::Get().RecordTextureBind(
+            GL_TEXTURE_2D, 1, reflectionTexture);
+        glBindTexture(GL_TEXTURE_2D, reflectionTexture);
+        m_GroundShader.SetInt("reflectionTex", 1);
+        glActiveTexture(GL_TEXTURE2);
+        RenderSubmissionStats::Get().RecordTextureBind(
+            GL_TEXTURE_2D, 2, shadowTexture);
+        glBindTexture(GL_TEXTURE_2D, shadowTexture);
+        m_GroundShader.SetInt("shadowMap", 2);
+        m_GroundShader.SetInt(
+            "shadowsEnabled", context.frame.shadowsEnabled ? 1 : 0);
+        const auto shadowLight = std::find_if(context.mainView.lights.begin(), context.mainView.lights.end(),
+            [&](const LightSceneProxy& light) { return light.id == context.frame.shadowLightId; });
+        m_GroundShader.SetInt("shadowIsDirectional", shadowLight != context.mainView.lights.end() &&
+            shadowLight->type == LightType::Directional ? 1 : 0);
+        context.groundMesh.Draw();
+    }
 
     RenderSurface(context, context.mainView);
 

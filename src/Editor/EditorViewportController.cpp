@@ -109,7 +109,7 @@ void EditorViewportController::FocusSelection(
     Camera& camera,
     const EditorSelection& selection,
     const std::vector<EditableModel>& models,
-    const std::vector<EditableLight>& lights) const
+    const std::vector<EditableLight>& lights, const EditableCamera* sceneCamera) const
 {
     if (selection.type == EditorSelectionType::Model)
     {
@@ -120,6 +120,8 @@ void EditorViewportController::FocusSelection(
             camera.FocusBounds(bounds.center, bounds.radius);
         }
     }
+    else if (sceneCamera && selection.IsCameraSelected(sceneCamera->id))
+        camera.FocusBounds(sceneCamera->transform.position, 1.0f);
     else if (selection.type == EditorSelectionType::Light)
     {
         const EditableLight* light = FindEditableLight(lights, selection.lightId);
@@ -134,8 +136,13 @@ void EditorViewportController::Draw(
     std::vector<EditableModel>& models,
     std::vector<EditableLight>& lights,
     Renderer& renderer,
-    const EditorViewportRegion& viewport)
+    const EditorViewportRegion& viewport, EditableCamera* sceneCamera, bool cameraView)
 {
+    if (viewport.pixelWidth == 0 || viewport.pixelHeight == 0 || viewport.size.x <= 0 || viewport.size.y <= 0)
+        return;
+    if (cameraView)
+        ImGui::GetWindowDrawList()->AddText(ImVec2(viewport.min.x+12,viewport.min.y+12),
+            IM_COL32(255,230,160,255), "Camera View - Numpad 0: Editor View");
     bool transformChanged = false;
     EditableLight* selectedLight = selection.type == EditorSelectionType::Light
         ? FindEditableLight(lights, selection.lightId)
@@ -150,8 +157,12 @@ void EditorViewportController::Draw(
     if (selection.type == EditorSelectionType::Model && !selectedModel)
         selection.Clear();
     const bool modelSelected = selectedModel != nullptr;
+    EditableCamera* selectedCamera = sceneCamera && selection.IsCameraSelected(sceneCamera->id) ? sceneCamera : nullptr;
+    const float aspect = static_cast<float>(viewport.pixelWidth) / std::max(viewport.pixelHeight, 1u);
+    const auto view = cameraView && sceneCamera ? sceneCamera->GetViewMatrix() : camera.GetViewMatrix();
+    const auto projection = cameraView && sceneCamera ? sceneCamera->GetProjectionMatrix(aspect) : camera.GetProjectionMatrix();
 
-    ImGuizmo::SetOrthographic(!camera.IsPerspective());
+    ImGuizmo::SetOrthographic(!cameraView && !camera.IsPerspective());
     ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
     ImGuizmo::SetRect(
         viewport.min.x,
@@ -161,18 +172,19 @@ void EditorViewportController::Draw(
 
     const bool lightHasPosition = selectedLight &&
         selectedLight->proxy.type != LightType::Directional;
-    if (modelSelected || lightHasPosition)
+    if (modelSelected || (selectedCamera && !cameraView) || selectedLight)
     {
         Transform& activeTransform = modelSelected
             ? selectedModel->transform
-            : selectedLight->transform;
+            : selectedCamera ? selectedCamera->transform : selectedLight->transform;
         cy::Matrix4f matrix = activeTransform.ToMatrix();
-        const cy::Matrix4f view = camera.GetViewMatrix();
-        const cy::Matrix4f projection = camera.GetProjectionMatrix();
+        const auto operation = modelSelected ? m_Operation :
+            selectedCamera ? (m_Operation == ImGuizmo::SCALE ? ImGuizmo::TRANSLATE : m_Operation) :
+            lightHasPosition ? ImGuizmo::TRANSLATE : ImGuizmo::ROTATE;
         if (ImGuizmo::Manipulate(
                 view.cell,
                 projection.cell,
-                modelSelected ? m_Operation : ImGuizmo::TRANSLATE,
+                operation,
                 m_Mode,
                 matrix.cell))
         {
@@ -183,6 +195,8 @@ void EditorViewportController::Draw(
                 matrix.cell, translation, rotation, scale);
             activeTransform.position = cy::Vec3f(
                 translation[0], translation[1], translation[2]);
+            if (selectedCamera || selectedLight)
+                activeTransform.rotationDegrees = cy::Vec3f(rotation[0],rotation[1],rotation[2]);
             if (modelSelected)
             {
                 activeTransform.rotationDegrees = cy::Vec3f(
@@ -193,6 +207,37 @@ void EditorViewportController::Draw(
                     std::clamp(std::abs(scale[2]), 0.001f, 1000.0f));
             }
             transformChanged = true;
+        }
+    }
+
+    if (sceneCamera && !cameraView && renderer.AreEditorPrimitivesEnabled())
+    {
+        const auto rigid = sceneCamera->GetViewMatrix().GetInverse();
+        const auto vp = projection * view;
+        auto project = [&](cy::Vec3f p, ImVec2& screen)
+        {
+            const auto world = rigid * cy::Vec4f(p.x,p.y,p.z,1);
+            const auto clip = vp * world;
+            if (clip.w <= 0 || clip.z < -clip.w || clip.z > clip.w) return false;
+            screen = ImVec2(viewport.min.x + (clip.x/clip.w+1)*0.5f*viewport.size.x,
+                viewport.min.y + (1-clip.y/clip.w)*0.5f*viewport.size.y);
+            return true;
+        };
+        const auto color = selection.IsCameraSelected(sceneCamera->id) ? IM_COL32(255,190,50,255) : IM_COL32(170,210,255,255);
+        const float height = std::tan(sceneCamera->fovDegrees*3.14159265358979323846f/360);
+        const float width = height * aspect;
+        const cy::Vec3f corners[] = {{-width,-height,-1},{width,-height,-1},{width,height,-1},{-width,height,-1}};
+        ImVec2 origin;
+        if (project({0,0,0},origin))
+        {
+            ImGui::GetWindowDrawList()->AddCircle(origin,8,color);
+            ImGui::GetWindowDrawList()->AddText(ImVec2(origin.x+10,origin.y),color,sceneCamera->name.c_str());
+        }
+        for (int i=0;i<4;++i)
+        {
+            ImVec2 a,b;
+            if (project({0,0,0},a) && project(corners[i],b)) ImGui::GetWindowDrawList()->AddLine(a,b,color);
+            if (project(corners[i],a) && project(corners[(i+1)%4],b)) ImGui::GetWindowDrawList()->AddLine(a,b,color);
         }
     }
 
@@ -214,11 +259,16 @@ void EditorViewportController::Draw(
                 framebufferY,
                 static_cast<float>(viewport.pixelWidth),
                 static_cast<float>(viewport.pixelHeight),
-                camera.GetProjectionMatrix(),
-                camera.GetViewMatrix(),
+                projection,
+                view,
                 models,
                 lights);
-            if (pick.type == EditorSelectionType::Light)
+            float cameraDepth;
+            if (sceneCamera && !cameraView && renderer.AreEditorPrimitivesEnabled() &&
+                HitTestLightIcon(framebufferX,framebufferY,static_cast<float>(viewport.pixelWidth),
+                    static_cast<float>(viewport.pixelHeight),projection*view,sceneCamera->transform.position,12,cameraDepth))
+                selection.SelectCamera(sceneCamera->id);
+            else if (pick.type == EditorSelectionType::Light)
             {
                 selection.SelectLight(pick.lightId);
             }
