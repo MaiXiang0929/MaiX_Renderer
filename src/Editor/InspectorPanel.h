@@ -17,6 +17,7 @@ public:
         EditorSelection& selection,
         std::vector<EditableModel>& models,
         std::vector<EditableLight>& lights,
+        EditableCamera& camera, bool& cameraView,
         Renderer& renderer,
         EditorMaterialSelection& materialSelection);
 };

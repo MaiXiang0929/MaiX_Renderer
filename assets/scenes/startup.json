@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "cube": {"name": "Cube", "edgeLength": 2.0,
+    "position": [0, 0, 0], "rotation": [0, 0, 0], "scale": [1, 1, 1]},
+  "directionalLight": {"name": "Directional Light", "rotation": [-54.73561, 45, 0],
+    "color": [1, 1, 1], "intensity": 1.0, "castsShadow": true},
+  "camera": {"name": "Camera", "position": [6, 4, 6], "rotation": [-25.2394, 45, 0],
+    "fovDegrees": 50, "nearPlane": 0.1, "farPlane": 1000},
+  "selectedObject": "cube"
+}

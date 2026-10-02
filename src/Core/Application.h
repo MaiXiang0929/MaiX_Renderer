@@ -15,6 +15,7 @@
 #include "cyVector.h"
 
 #include "Camera.h"
+#include "Editor/EditableCamera.h"
 #include "Editor/EditableLight.h"
 #include "Editor/EditableModel.h"
 #include "Editor/EditorSelection.h"
@@ -79,7 +80,9 @@ private:
 
 	Camera m_Camera;                            ///< 编辑器场景视口所使用的摄像机
 
-	std::string m_ObjPath = "assets/models/teapot.obj";
+    EditableCamera m_SceneCamera;
+    bool m_SceneCameraView = false;
+    bool m_ReflectionGroundEnabled = false;
 	std::string m_NormalMapPath;
     std::string m_DisplacementMapPath;
     std::uint32_t m_InstanceGridSize = 0;
@@ -116,6 +119,7 @@ private:
     /// @brief 初始化应用程序
     /// @return 初始化成功返回 true，否则返回 false
     bool Init();
+    bool CreateStartupScene(const struct StartupSceneDefinition& scene);
 
     /// @brief 创建用于验收透明排序、混合和深度遮挡的最小场景。
     void CreateTranslucencyTestScene();

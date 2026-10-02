@@ -27,15 +27,6 @@ int main(int argc, char** argv)
         return 0;
     }
 
-    if (options.normalMapPath.empty()) {
-        std::cout << "No material maps supplied; loading the bundled teapot maps."
-                  << std::endl;
-        if (std::filesystem::exists("assets/models/teapot_normal.png"))
-            options.normalMapPath = "assets/models/teapot_normal.png";
-        if (std::filesystem::exists("assets/models/teapot_disp.png"))
-            options.displacementMapPath = "assets/models/teapot_disp.png";
-    }
-
     Application app(
         options.normalMapPath,
         options.displacementMapPath,

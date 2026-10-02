@@ -37,6 +37,10 @@ set(ASSET_DIR
 # Source Files
 # ============================
 
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${ASSET_DIR}/scenes/startup.json")
+file(READ "${ASSET_DIR}/scenes/startup.json" STARTUP_SCENE_JSON)
+configure_file(src/Core/StartupSceneEmbedded.h.in generated/StartupSceneEmbedded.h @ONLY)
+
 set(SOURCES
 
     # 程序入口
@@ -45,6 +49,7 @@ set(SOURCES
     # Core
     src/Core/Application.cpp
     src/Core/ApplicationOptions.cpp
+    src/Core/StartupScene.cpp
     src/Core/Camera.cpp
     src/Core/InstanceGrid.cpp
     src/Core/Transform.cpp
@@ -152,6 +157,8 @@ target_compile_options(${PROJECT_NAME} PRIVATE
 # ============================
 # Include Path
 # ============================
+target_include_directories(MaiX_Renderer PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated" "${THIRD_PARTY_DIR}")
+
 target_include_directories(
     ${PROJECT_NAME}
 
@@ -251,6 +258,12 @@ source_group(
 )
 
 if(BUILD_TESTING)
+    add_executable(StartupSceneTests tests/Core/StartupSceneTests.cpp
+        src/Core/StartupScene.cpp src/Core/Transform.cpp src/Core/Camera.cpp)
+    target_include_directories(StartupSceneTests PRIVATE ${SRC_DIR} ${THIRD_PARTY_DIR} "${CMAKE_CURRENT_BINARY_DIR}/generated"
+        ${THIRD_PARTY_DIR}/cyCodeBase ${THIRD_PARTY_DIR}/glad/include)
+    add_test(NAME StartupSceneTests COMMAND StartupSceneTests)
+
     add_executable(
         FrustumTests
         tests/Renderer/View/FrustumTests.cpp

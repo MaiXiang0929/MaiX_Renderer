@@ -27,7 +27,7 @@ void SetEditorPanelPosition(float width, float offset)
 ModelId SceneHierarchyPanel::Draw(
     EditorSelection& selection,
     const std::vector<EditableModel>& models,
-    const std::vector<EditableLight>& lights)
+    const std::vector<EditableLight>& lights, const EditableCamera* camera)
 {
     SetEditorPanelPosition(300.0f, 380.0f);
     ImGui::SetNextWindowSize(ImVec2(300.0f, 360.0f), ImGuiCond_FirstUseEver);
@@ -98,6 +98,8 @@ ModelId SceneHierarchyPanel::Draw(
         ImGui::TreePop();
     }
 
+    if (camera && ImGui::Selectable(camera->name.c_str(), selection.IsCameraSelected(camera->id)))
+        selection.SelectCamera(camera->id);
     ImGui::End();
     return removedModel;
 }

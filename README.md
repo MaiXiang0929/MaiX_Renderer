@@ -75,6 +75,8 @@ cmake --build --preset windows-ninja-debug
 .\out\build\windows-ninja-debug\MaiX_Renderer.exe
 ```
 
+无参数启动会载入 Cube、Directional Light、Camera：1 单位=1 米，正方体边长 2 米，中心位于原点，默认材质不绑定贴图。启动数据、内嵌回退及相机操作见 [启动场景](docs/editor/startup-scene.md)。
+
 构建产物位于 `out/build/windows-ninja-debug/`；构建时会将最新的 `assets/` 复制到可执行文件目录。
 
 ## 编辑器操作
@@ -83,14 +85,15 @@ cmake --build --preset windows-ninja-debug
 
 | 操作 | 用途 |
 | --- | --- |
-| 鼠标左键点选 | 选择模型或可见灯光 Gizmo |
+| 鼠标左键点选 | 选择模型、可见灯光或相机图标 |
 | Scene 中点选模型 | 按模型独立选择；Inspector 和 Gizmo 只修改当前模型 |
 | Inspector 中点击材质 | 激活同一区域的 Material Editor 标签，编辑该模型实际使用的材质 |
 | Scene 中 `Remove selected model` | 移除选中模型及其 Primitive、Mesh、Material 资源 |
 | `Alt` + 左键拖动 | Orbit 相机 |
 | `Alt` + 中键拖动 | Pan 相机 |
 | `Alt` + 右键拖动或滚轮 | Dolly 相机 |
-| `Ctrl` + 左键拖动 | 旋转主 Spot Light |
+| `Ctrl` + 左键拖动 | 旋转主方向光 |
+| 小键盘 `0` | 切换场景 Camera / 编辑器视图 |
 | `F` | 聚焦当前选中对象 |
 | `W` / `E` / `R` | ImGuizmo 移动 / 旋转 / 缩放 |
 | `Q` | 切换世界/局部 Transform 空间 |

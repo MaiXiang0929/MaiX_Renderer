@@ -34,6 +34,7 @@ struct RenderFrameData
     cy::Matrix4f reflectionVP;
     cy::Vec3f cameraWorldPosition;
 
+    bool reflectionGroundEnabled = true;
     bool shadowsEnabled = true;
     bool editorPrimitivesEnabled = true;
 };

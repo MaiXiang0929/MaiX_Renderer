@@ -15,5 +15,5 @@ public:
     ModelId Draw(
         EditorSelection& selection,
         const std::vector<EditableModel>& models,
-        const std::vector<EditableLight>& lights);
+        const std::vector<EditableLight>& lights, const EditableCamera* camera);
 };

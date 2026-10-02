@@ -45,6 +45,7 @@ bool InspectorPanel::Draw(
     EditorSelection& selection,
     std::vector<EditableModel>& models,
     std::vector<EditableLight>& lights,
+        EditableCamera& camera, bool& cameraView,
     Renderer& renderer,
     EditorMaterialSelection& materialSelection)
 {
@@ -85,8 +86,6 @@ bool InspectorPanel::Draw(
                 ImGui::TextUnformatted("Reported source unit: unknown");
             ImGui::TextDisabled("Imported size excludes current root Transform.");
         }
-        if (model->usesBundledCentimeterScale)
-            ImGui::TextWrapped("Bundled OBJ: project scale 0.01 m/unit. Root Scale applies it once.");
         ImGui::SeparatorText("Transform");
         bool changed = false;
         changed |= ImGui::DragFloat3(
@@ -140,6 +139,30 @@ bool InspectorPanel::Draw(
         return openMaterialEditor;
     }
 
+    if (selection.IsCameraSelected(camera.id))
+    {
+        const auto previousCamera = camera;
+        ImGui::TextUnformatted(camera.name.c_str());
+        ImGui::DragFloat3("Position (m)", &camera.transform.position.x, 0.05f);
+        ImGui::DragFloat3("Rotation", &camera.transform.rotationDegrees.x, 0.5f);
+        ImGui::DragFloat("Vertical FOV", &camera.fovDegrees, 0.5f, 1, 150, "%.1f deg");
+        ImGui::DragFloat("Near (m)", &camera.nearPlane, 0.01f, 0.0001f, 1000, "%.4f");
+        ImGui::DragFloat("Far (m)", &camera.farPlane, 1, 0.001f, 100000);
+        auto finiteVector = [](const cy::Vec3f& value) {
+            return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+        };
+        if (!finiteVector(camera.transform.position) || !finiteVector(camera.transform.rotationDegrees) ||
+            !std::isfinite(camera.fovDegrees) || !std::isfinite(camera.nearPlane) || !std::isfinite(camera.farPlane))
+            camera = previousCamera;
+        camera.fovDegrees = std::clamp(camera.fovDegrees, 1.0f, 150.0f);
+        camera.nearPlane = std::clamp(camera.nearPlane, 0.0001f, 1000.0f);
+        camera.farPlane = std::clamp(camera.farPlane, camera.nearPlane + 0.001f, 100000.0f);
+        if (ImGui::Button(cameraView ? "Return to Editor View" : "View through Camera"))
+            cameraView = !cameraView;
+        ImGui::TextWrapped("Numpad 0 toggles camera view. Editor navigation keeps this camera fixed.");
+        ImGui::End(); return false;
+    }
+
     EditableLight* light = FindEditableLight(lights, selection.lightId);
     if (light == nullptr)
     {
@@ -161,9 +184,13 @@ bool InspectorPanel::Draw(
     }
     else
     {
+        const auto previousRotation = light->transform.rotationDegrees;
         changed |= ImGui::DragFloat3(
-            "Direction", &light->proxy.direction.x, 0.01f, -1.0f, 1.0f);
-        EditorValueConstraints::SanitizeDirection(light->proxy.direction);
+            "Rotation", &light->transform.rotationDegrees.x, 0.5f);
+        const auto rotation = light->transform.rotationDegrees;
+        if (!std::isfinite(rotation.x) || !std::isfinite(rotation.y) || !std::isfinite(rotation.z))
+            light->transform.rotationDegrees = previousRotation;
+        ImGui::TextDisabled("Position does not affect directional lighting.");
     }
 
     changed |= ImGui::ColorEdit3("Color", &light->proxy.color.x);
@@ -191,9 +218,10 @@ bool InspectorPanel::Draw(
             innerDegrees, outerDegrees);
         light->proxy.innerConeAngle = innerDegrees * Pi / 180.0f;
         light->proxy.outerConeAngle = outerDegrees * Pi / 180.0f;
-        ImGui::TextDisabled("Spot direction targets the scene center.");
+        ImGui::TextDisabled("Cone follows the light direction.");
     }
 
+    changed |= ImGui::Checkbox("Cast Shadow", &light->proxy.castsShadow);
     if (changed)
         ApplyEditableLightTransform(*light, renderer);
 
