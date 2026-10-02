@@ -97,6 +97,8 @@ private:
     unsigned int m_Height       = 1080;         ///< 窗口高度
 
     cy::Vec3f m_ObjCenter;                     ///< 模型包围盒中心
+    cy::Vec3f m_DefaultBoundsMin;
+    cy::Vec3f m_DefaultBoundsMax;
     float m_GroundY         = 0.0f;            ///< 反射地面 Y 坐标（模型包围盒底部）
     float m_ModelDiameter   = 0.0f;            ///< 模型包围盒直径，用于缩放地面
     std::uint32_t m_MainLightId = std::numeric_limits<std::uint32_t>::max();
@@ -105,6 +107,8 @@ private:
     std::uint64_t m_NextModelId = 1;
     ModelId m_DefaultModelId;
     EditorSelection m_EditorSelection;
+    // IDs survive model-vector reallocation; resolved once when the viewport is valid.
+    EditorSelection m_PendingFocusSelection;
     EditorMaterialSelection m_MaterialSelection;
     std::vector<EditableLight> m_EditableLights;
 

@@ -100,19 +100,19 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 - [x] Renderer 目录按 Core / Pipeline / Passes / Resources / Scene / View 拆分
 - [x] Shader 目录按渲染用途拆分
 - [x] `RenderPipeline` 按固定顺序执行 Shadow、Reflection、Forward、Outline、Translucency、SSAO、Bloom、PostProcess、EditorPrimitive、Present
-- [x] 固定管线已接入显式 Pass 资源契约：声明输入/输出、附件 Clear/Preserve、受限访问与本帧发布；Forward/Outline/Translucency 使用共享附件的不同内容阶段，SSAO/Bloom 按开关显式选择输入；校验生产者、格式、尺寸、附件与采样反馈，失败帧停止后续 Pass 并返回空最终纹理；构建、14 项测试、实际 OpenGL Clear/Preserve 测试及默认/Material Lab/透明/Instancing 启动通过，本轮视觉效果已由用户于 2026-10-01 确认验收通过，见 `docs/pass-resource-contracts.md`
+- [x] 固定管线已接入显式 Pass 资源契约：声明输入/输出、附件 Clear/Preserve、受限访问与本帧发布；Forward/Outline/Translucency 使用共享附件的不同内容阶段，SSAO/Bloom 按开关显式选择输入；校验生产者、格式、尺寸、附件与采样反馈，失败帧停止后续 Pass 并返回空最终纹理；构建、14 项测试、实际 OpenGL Clear/Preserve 测试及默认/Material Lab/透明/Instancing 启动通过，本轮视觉效果已由用户于 2026-10-01 确认验收通过，见 `docs/rendering/pipeline-and-resources.md`
 - [x] `RenderScene`、`PrimitiveSceneProxy`、`LightSceneProxy` 已建立
 - [x] `RenderView`、`RenderItem` 已建立，支持 opaque/translucent 分类
 - [x] Renderer 持有 Primitive 的 Mesh 与 Material，Scene Proxy 使用非 owning 指针
 - [x] Primitive Proxy 已具备局部空间包围球，并能根据 `localToWorld` 计算保守的世界空间包围球
 - [x] `BuildRenderView` 已对主视图、反射视图和阴影视图执行包围球视锥体裁剪，并记录源对象、可见对象和被裁剪对象数量
-- [x] 视锥平面提取、球体相交和变换后包围球已有独立 `FrustumTests`，并在 `docs/frustum-culling.md` 记录数据流与限制
+- [x] 视锥平面提取、球体相交和变换后包围球已有独立 `FrustumTests`，并在 `docs/rendering/scene-and-views.md` 记录数据流与限制
 - [x] Primitive/RenderItem 已具备稳定 Shader、Material、Mesh 排序 ID；主/反射视图按 Shader / Material / Mesh 排序，阴影视图按 Shader / Mesh / Material 排序
-- [x] 不透明排序已有多 Primitive 的 `RenderSceneTests`，主视图运行时输出 Draw 与资源分组统计，排序策略记录于 `docs/opaque-render-sorting.md`
+- [x] 不透明排序已有多 Primitive 的 `RenderSceneTests`，主视图运行时输出 Draw 与资源分组统计，排序策略记录于 `docs/rendering/scene-and-views.md`
 - [x] Forward fragment shader 从 Blinn-Phong 升级为 Cook-Torrance BRDF
 - [x] PBR metallic / roughness / AO 参数与 ORM 纹理接入 Material，ORM 使用 R=AO/G=Roughness/B=Metallic
 - [x] Base Color、Normal、ORM、Displacement 具备固定槽位与 sRGB/Linear 校验；Legacy Specular 保留兼容回退
-- [x] `--material-lab` 提供铜、塑料、陶瓷、粗糙金属四种共享 Mesh 测试材质，数据流记录于 `docs/pbr-material-workflow.md`
+- [x] `--material-lab` 提供铜、塑料、陶瓷、粗糙金属四种共享 Mesh 测试材质，数据流记录于 `docs/rendering/materials-and-pbr.md`
 - [x] 标准 PBR 与曲面细分/位移路径可切换
 - [x] Directional/Spot 阴影基础流程与 PCF
 - [x] Cubemap、反射地面、离屏 Framebuffer、Present 流程
@@ -121,10 +121,10 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 - [x] PBR 使用 std140 UBO 消费最多 16 盏 Directional/Point/Spot 灯光，并为单一 2D shadow map 记录对应灯光索引
 - [x] Renderer 已提供强类型 Mesh/Material Handle 与共享资源提交接口；透明测试场景的三张平面共享一份 Mesh
 - [x] Mesh/Material 销毁前检查所有 Primitive 引用（含不可见对象），拒绝释放仍被场景代理使用的资源；便利创建接口在失败或异常时回收已创建资源，`RenderSceneTests` 覆盖共享引用的最后一次移除
-- [x] `--instance-grid N` 已提供默认关闭的共享资源多实例基准；1/64/256 实例运行数据与 RenderDoc 捕获记录于 `docs/instance-benchmark.md`
+- [x] `--instance-grid N` 已提供默认关闭的共享资源多实例基准；1/64/256 实例运行数据与 RenderDoc 捕获记录于 `docs/diagnostics/benchmarks.md`
 - [x] 不透明标准三角形已按 Shader/Material/Mesh 批次执行 Instancing；256 实例时 Shadow/Reflection/Forward 分别降为 1/2/3 Draw，单实例与 Tessellation 保持原路径
 - [x] RenderPipeline 已加入可选 GPU Debug Group，各 Pass 具备 Draw 与 Shader/Material/Mesh/Texture 提交统计
-- [x] 基于 `TranslucencyPass mesh=3/1` 基线实现最小 VAO 状态缓存，RenderDoc 捕获流程和数据记录于 `docs/renderdoc-baseline.md`
+- [x] 基于 `TranslucencyPass mesh=3/1` 基线实现最小 VAO 状态缓存，RenderDoc 捕获流程和数据记录于 `docs/diagnostics/benchmarks.md`
 - [x] 三帧缓冲的 GPU Timer Query 已输出各 Pass last/EMA 时间，并以非阻塞方式处理尚未完成的 Query
 - [x] ImGui `Renderer Statistics` 面板已显示场景、资源、CPU/GPU Pass 统计，并提供常用渲染调试参数
 - [x] Forward 与 Reflection 离屏目标已随窗口 framebuffer 动态重建；反射保持半分辨率，最小化时跳过零尺寸渲染
@@ -134,14 +134,15 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 - [x] Toon Shading Model 已接入 Forward PBR Shader，支持分段漫反射、阴影色和 Rim Light，并由 Material Editor 实时调节
 - [x] 独立 `OutlinePass` 已使用 Inverted Hull 写入 Forward HDR Scene Color；仅处理主视图不透明 Toon 材质，并复用 Forward 深度
 - [x] Material Editor 已支持材质选择、PBR/Toon 切换、Toon Outline 参数和 Renderer-owned Material 更新边界
-- [x] 单层 Material Instance 已接入统一 MaterialHandle、21 组显式参数覆盖、纹理 Inherit/Replace/Disabled、稳定地址的有效材质和父子销毁保护；模型分段可创建实例或恢复父材质，编辑器提供逐项/全部重置与显式 Edit Parent；Shading Model/Blend Mode 由父材质继承并同步队列；`--material-instance-lab` 提供共享 Mesh 的父材质/A/B 三对象验收场景；构建、15 项测试（含真实 OpenGL 纹理及 Renderer 生命周期/分类检查）和五种场景启动通过，视觉与交互已由用户于 2026-10-01 确认验收通过，见 `docs/material-instances.md`
-- [x] 模型分段已记录实际 MaterialHandle 与分段名称；Inspector 材质列表与 Material Editor 共用稳定句柄选择，切换模型选择首个有效材质、同一范围内失效时清空，保留全部材质调试入口；构建、14 项测试与默认/Material Lab/Instancing/透明测试场景启动通过，画面与交互待用户验收，见 `docs/model-material-editing.md`
-- [x] Material Editor 已与 Inspector 共用最右侧停靠节点，通过标签切换；材质点击与 View 打开仅请求一次激活，切换模型保持当前标签；参数与纹理槽位改为适应窄栏的纵向排列，首次打开只迁移材质窗口，沿用原工作区 ID 与其他分区比例；构建、14 项测试及默认/Material Lab 启动通过，标签切换、布局恢复与显示效果待用户验收，见 `docs/editor-docking-layout.md`
+- [x] 单层 Material Instance 已接入统一 MaterialHandle、21 组显式参数覆盖、纹理 Inherit/Replace/Disabled、稳定地址的有效材质和父子销毁保护；模型分段可创建实例或恢复父材质，编辑器提供逐项/全部重置与显式 Edit Parent；Shading Model/Blend Mode 由父材质继承并同步队列；`--material-instance-lab` 提供共享 Mesh 的父材质/A/B 三对象验收场景；构建、15 项测试（含真实 OpenGL 纹理及 Renderer 生命周期/分类检查）和五种场景启动通过，视觉与交互已由用户于 2026-10-01 确认验收通过，见 `docs/rendering/material-instances.md`
+- [x] 模型分段已记录实际 MaterialHandle 与分段名称；Inspector 材质列表与 Material Editor 共用稳定句柄选择，切换模型选择首个有效材质、同一范围内失效时清空，保留全部材质调试入口；构建、14 项测试与默认/Material Lab/Instancing/透明测试场景启动通过，画面与交互待用户验收，见 `docs/editor/workflows.md`
+- [x] Material Editor 已与 Inspector 共用最右侧停靠节点，通过标签切换；材质点击与 View 打开仅请求一次激活，切换模型保持当前标签；参数与纹理槽位改为适应窄栏的纵向排列，首次打开只迁移材质窗口，沿用原工作区 ID 与其他分区比例；构建、14 项测试及默认/Material Lab 启动通过，标签切换、布局恢复与显示效果待用户验收，见 `docs/editor/workflows.md`
 - [x] 最小 Toon Face Shadow 已接入线性 SDF 纹理、角色局部 Face Forward/Right、左右自动镜像与独立 Key Light；`--face-shadow-demo` 已成功导入目标 Lumine FBX，并将连续 FaceLightmap 以 Linear 数据绑定到 `Lumine Face`；Standard/Instanced/Tessellation 共用 Forward 路径，视觉效果待用户验收
 - [x] Outline Pass 已接入 CPU/GPU 提交统计、GPU Timer Query、Shader Reload 和独立 NPR Shader 资源
 - [x] SSAO 已使用 Forward 可采样深度重建观察空间位置与法线，完成半分辨率 R8 遮蔽/滤波与全分辨率 HDR 合成
 - [x] FBX 静态模型导入已接通多 Mesh、多材质分段、索引绘制、Base Color 纹理、异步 CPU 解析与事务式资源追加；失败时回滚本次创建的 Primitive/Mesh/Material
-- [x] Scene 已支持多个独立模型及会话内稳定 `ModelId`；导入后自动选中，Scene/Inspector/Gizmo/拾取/聚焦/移除按模型 ID 操作，移除时先注销 Primitive 再销毁 Mesh/Material；同名导入使用 `_001` 等可用后缀，Scene 只显示模型名称；构建、14 项测试及默认/Material Lab/Instancing 启动检查通过，双 FBX 画面与交互待用户验收，见 `docs/multi-model-scene.md`
+- [x] 2026-10-02 完成 FBX 尺度诊断与一次性自动聚焦：保留米制导入，显示当前源单位和米制尺寸；内置茶壶通过根 Scale=0.01 应用项目单位约定，局部几何/边界/实例间距保持原值；相机按实际视口聚焦并根据主/反射几何、地面和灯光工具拟合裁剪范围；默认场景长度参数同步换算，茶壶单模型地面跟随根变换；构建、15 项测试、真实角色 FBX 导入及六种场景启动通过。远距离辅助分段可能影响通用模型整体聚焦，画面与交互待用户验收，详见 `docs/assets/model-import.md`、`docs/editor/workflows.md`；本轮未修改法线贴图采样/绑定。
+- [x] Scene 已支持多个独立模型及会话内稳定 `ModelId`；导入后自动选中，Scene/Inspector/Gizmo/拾取/聚焦/移除按模型 ID 操作，移除时先注销 Primitive 再销毁 Mesh/Material；同名导入使用 `_001` 等可用后缀，Scene 只显示模型名称；构建、14 项测试及默认/Material Lab/Instancing 启动检查通过，双 FBX 画面与交互待用户验收，见 `docs/editor/workflows.md`
 - [x] 编辑器视口已接入相机 Orbit/Pan/Dolly、模型/灯光互斥拾取、ImGuizmo Transform 与选中对象聚焦
 - [x] 最小 Scene Window / Inspector 已接入共享选择状态、模型 Transform 与类型相关灯光参数
 - [x] CMake 构建时清理并复制最新 assets
@@ -149,9 +150,12 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 - [x] CMake 配置、编译、链接与 14 项测试通过；Material Lab、默认/Instancing/Tessellation 路径及全部 Shader 初始化检查完成
 - [x] 根目录 README 已按项目简介、核心能力、渲染架构、快速开始、编辑器操作与延伸文档重组，运行示例使用可替换的外部资产路径
 
+- [x] RenderDoc 历史基准与 GPU Pass 统计实现说明已整理，见 `docs/diagnostics/benchmarks.md` 与 `docs/diagnostics/profiling-and-instancing.md`；后续场景的新捕获仍按实际需求执行
+- [x] 2026-10-01 完成实现文档重整：删除原 27 份文档，新增 15 份统一导航、架构及主要子系统中文说明；核实数据流、坐标空间、所有权与当前限制，历史性能测量单独保留，README 与本文引用同步迁移；构建、15 项测试和默认/材质/材质实例/透明/256 实例场景短时启动通过，129 个本地链接检查通过，本轮不重新判定视觉与交互验收状态，见 `docs/README.md` 和 `docs/documentation-review.md`
+
 ### 部分完成
 
-- [ ] CMake 项目与可执行文件命名为 `MaiX_Renderer`，编辑器主窗口标题为 `MaiX Engine`；已接入 ImGui Docking 默认布局，左下 Console 与 Content Browser 共用标签区，右侧 Scene 与 Inspector 并排；更名后重新配置、构建、启动与 14 项测试通过；最终画面改为 Viewport 内的 Present 纹理，拾取与 Gizmo 改用视口矩形；布局、输入和画面效果待用户视觉验收，见 `docs/editor-docking-layout.md`
+- [ ] CMake 项目与可执行文件命名为 `MaiX_Renderer`，编辑器主窗口标题为 `MaiX Engine`；已接入 ImGui Docking 默认布局，左下 Console 与 Content Browser 共用标签区，右侧 Scene 与 Inspector 并排；更名后重新配置、构建、启动与 14 项测试通过；最终画面改为 Viewport 内的 Present 纹理，拾取与 Gizmo 改用视口矩形；布局、输入和画面效果待用户视觉验收，见 `docs/editor/workflows.md`
 - [ ] HDR Scene Color、Bloom、SSAO、手动曝光与色调映射已完成；自动曝光尚未实现
 - [ ] 视锥体裁剪已完成包围球粗裁剪，但遮挡裁剪、距离裁剪和更精确的包围体尚未实现
 
@@ -162,7 +166,6 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 - [ ] Cascaded Shadow Maps（CSM）
 - [ ] NPR Anime Shader：Toon、Rim Light、Outline、最小 Face Shadow 已完成；Hair Highlight 尚未实现
 - [ ] ImGui 统计面板、Material Editor、Asset Import、视口 Transform、Scene Window 和 Inspector 已完成；更完整的 Scene Window 层级与 Inspector 尚未开始
-- [ ] RenderDoc 性能采集和 GPU Pass 统计文档
 
 ## 5. 分阶段实施计划
 
@@ -259,9 +262,22 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 
 当前阶段的完成标准不是视频时长，而是关键路径可以在实际场景中运行：导入并管理资产，编辑场景、材质和灯光，稳定生成可解释的画面，并通过构建、测试、运行日志和 RenderDoc/性能数据定位问题。视觉效果仍由用户验收。
 
-`docs/` 中保留的“60 秒 Demo”时间段属于此前任务的历史背景，不再约束新功能的优先级。
+`docs/` 已按当前主要功能的实现方法重整；旧计划文件已删除，历史性能数据独立保留。此前“60 秒 Demo”属于历史背景，不再约束新功能的优先级。
 
 ## 9. 下一步方案对齐门禁
+
+涉及代码分析、设计或修改时，优先查阅 GitHub 上相关仓库的实际源码，整理并分析其实现思路后，再结合本项目架构与当前需求提出合适的方案。用户已指定参考仓库时，优先对照这些仓库；仓库名称或链接缺失时先明确来源，不得声称已参考未实际查阅的源码。
+
+用户指定的优先参考项目（2026-10-02 按项目名称定位）：
+
+- Filament：https://github.com/google/filament
+- OGRE-Next：https://github.com/OGRECave/ogre-next
+- Canavar：https://github.com/berkbavas/CanavarGraphicsEngine
+- NPR-Studio：https://github.com/Obi-Nnamdi/NPR-Studio
+
+根据当前问题选择相关源码，不要求每次遍历全部仓库。分析时记录实际查阅的文件与提交版本；若用户提供不同的仓库地址，以用户给出的地址为准。
+
+源码分析应说明相关实现的位置、数据流、资源所有权及适用边界；提出方案时附上对应仓库和代码链接，区分参考实现与本项目的适配选择。不能只凭 README、功能列表或印象推断实现，也不能脱离本项目需求照搬参考项目的架构。
 
 每次提出或修改“下一步执行方案”前，必须重新检查第 8 节的长期目标与当前阶段目标。不能因为某个已有模块仍可继续完善，就默认深化该模块，也不能为了未来游戏引擎目标提前引入当前没有使用者的系统。
 

@@ -74,7 +74,8 @@ void Camera::SetAspectRatio(
 	float aspect
 )
 {
-	m_AspectRatio = aspect;
+	if (std::isfinite(aspect) && aspect > 0.0f)
+		m_AspectRatio = aspect;
 }
 
 
@@ -101,7 +102,8 @@ void Camera::SetDistance(
 
 void Camera::SetClipPlanes(float nearPlane, float farPlane)
 {
-	if (nearPlane <= 0.0f || farPlane <= nearPlane)
+	if (!std::isfinite(nearPlane) || !std::isfinite(farPlane) ||
+        nearPlane <= 0.0f || farPlane <= nearPlane)
 		return;
 
 	m_NearPlane = nearPlane;
@@ -110,8 +112,8 @@ void Camera::SetClipPlanes(float nearPlane, float farPlane)
 
 void Camera::FocusBounds(const cy::Vec3f& center, float radius)
 {
-	m_Target = center;
-	if (radius <= 0.0f)
+	if (!std::isfinite(radius) || radius <= 0.0f ||
+        !std::isfinite(center.x) || !std::isfinite(center.y) || !std::isfinite(center.z))
 		return;
 
 	const float halfVerticalFov = m_FovY * 0.5f;
@@ -119,9 +121,16 @@ void Camera::FocusBounds(const cy::Vec3f& center, float radius)
 		std::tan(halfVerticalFov) * m_AspectRatio);
 	const float limitingHalfFov = std::min(
 		halfVerticalFov, halfHorizontalFov);
-	m_Distance = std::max(
+	const float distance = std::max(
 		MinimumDistance,
 		radius * 1.15f / std::sin(limitingHalfFov));
+    if (!std::isfinite(distance))
+        return;
+    m_Target = center;
+    m_Distance = distance;
+    // Also make standalone focus safe before Application fits the full scene.
+    SetClipPlanes(std::clamp((distance - radius) * 0.5f, 0.0001f, 0.1f),
+        std::max(1.0f, (distance + radius) * 1.1f + 0.01f));
 }
 
 cy::Matrix4f Camera::GetViewMatrix() const

@@ -74,14 +74,27 @@ bool InspectorPanel::Draw(
             return false;
         }
         ImGui::TextUnformatted(model->name.empty() ? "Model" : model->name.c_str());
+        if (model->importedSizeMeters)
+        {
+            const cy::Vec3f& size = *model->importedSizeMeters;
+            ImGui::TextWrapped("Imported X / Y / Z: %.4g / %.4g / %.4g m",
+                size.x, size.y, size.z);
+            if (model->sourceUnitMeters)
+                ImGui::TextWrapped("Reported source unit: %.6g m/unit", *model->sourceUnitMeters);
+            else
+                ImGui::TextUnformatted("Reported source unit: unknown");
+            ImGui::TextDisabled("Imported size excludes current root Transform.");
+        }
+        if (model->usesBundledCentimeterScale)
+            ImGui::TextWrapped("Bundled OBJ: project scale 0.01 m/unit. Root Scale applies it once.");
         ImGui::SeparatorText("Transform");
         bool changed = false;
         changed |= ImGui::DragFloat3(
-            "Position", &model->transform.position.x, 0.05f);
+            "Position (m)", &model->transform.position.x, 0.005f);
         changed |= ImGui::DragFloat3(
             "Rotation", &model->transform.rotationDegrees.x, 1.0f);
         changed |= ImGui::DragFloat3(
-            "Scale", &model->transform.scale.x, 0.01f, 0.001f, 1000.0f);
+            "Scale", &model->transform.scale.x, 0.001f, 0.001f, 1000.0f, "%.4f");
         EditorValueConstraints::SanitizeScale(model->transform.scale);
         if (changed && model->IsValid())
             ApplyEditableModelTransform(*model, renderer);

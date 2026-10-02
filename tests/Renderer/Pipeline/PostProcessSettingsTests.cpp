@@ -55,6 +55,8 @@ int main()
     Require(ClampSsaoIntensity(-1.0f) == MinimumSsaoIntensity &&
         ClampSsaoIntensity(8.0f) == MaximumSsaoIntensity,
         "SSAO intensity should clamp to its supported range.");
+    Require(ClampSsaoRadius(0.005f) == 0.005f && ClampSsaoBias(0.00025f) == 0.00025f,
+        "Centimeter-scale scene defaults must survive artist parameter clamping.");
     Require(ClampSsaoBias(-1.0f) == MinimumSsaoBias &&
         ClampSsaoBias(8.0f) == MaximumSsaoBias,
         "SSAO bias should clamp to its supported range.");

@@ -112,6 +112,27 @@ void TestEditorSelectionTransitions()
         "Clearing selection should reset type and object identities.");
 }
 
+void TestCentimeterRootBoundsAndPicking()
+{
+    EditableModel model;
+    model.transform.position = cy::Vec3f(0.3f, 0.0f, 0.0f);
+    model.transform.scale = cy::Vec3f(0.01f);
+    const cy::Vec3f rawCenter(5.0f, 0.0f, 0.0f);
+    model.sections.push_back({1,
+        cy::Matrix4f::Translation(cy::Vec3f(20.0f, 0.0f, 0.0f) - rawCenter),
+        {rawCenter, 10.0f}});
+    const PrimitiveBounds bounds = model.GetWorldBounds();
+    Require(NearlyEqual(bounds.center.x, 0.5f) && NearlyEqual(bounds.radius, 0.1f),
+        "Root unit scale must convert raw grid offsets and bounds exactly once.");
+    WorldRay ray;
+    ray.origin = cy::Vec3f(0.5f, 0.0f, 1.0f);
+    ray.direction = cy::Vec3f(0.0f, 0.0f, -1.0f);
+    float distance = 0.0f;
+    Require(HitTestEditableModel(ray, model, distance), "Picking must use meter-space world bounds.");
+    ray.origin.x = 0.7f;
+    Require(!HitTestEditableModel(ray, model, distance), "Picking must not retain the raw large radius.");
+}
+
 void TestModelAndLightSelectionAreDistinct()
 {
     Camera camera(cy::Vec3f(0.0f), 10.0f);
@@ -351,6 +372,7 @@ int main()
     TestTransformComposition();
     TestCenterRayAndModelHit();
     TestMergedWorldBounds();
+    TestCentimeterRootBoundsAndPicking();
     TestEditorSelectionTransitions();
     TestModelAndLightSelectionAreDistinct();
     TestMultipleModelPickingAndBounds();

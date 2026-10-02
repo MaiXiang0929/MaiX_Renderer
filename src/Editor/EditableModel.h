@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -35,6 +36,10 @@ struct EditableModel
     // Renderer owns the GPU objects; the model records handles for ordered cleanup.
     std::vector<MeshHandle> meshes;
     std::vector<MaterialHandle> materials;
+    // Import diagnostics are values: no ownership of importer or GPU objects.
+    std::optional<cy::Vec3f> importedSizeMeters;
+    std::optional<double> sourceUnitMeters;
+    bool usesBundledCentimeterScale = false;
 
     bool IsValid() const { return !sections.empty(); }
     PrimitiveBounds GetWorldBounds() const;
