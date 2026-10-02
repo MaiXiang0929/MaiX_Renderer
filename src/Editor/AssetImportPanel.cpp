@@ -103,6 +103,13 @@ void AssetImportPanel::Draw(void* nativeWindowHandle)
 
     if (m_Status == Status::Ready)
     {
+        ImGui::SeparatorText("Size (meters)");
+        if (m_SourceUnitMeters)
+            ImGui::TextWrapped("Reported source unit: %.6g m/unit", *m_SourceUnitMeters);
+        else
+            ImGui::TextUnformatted("Reported source unit: unknown");
+        ImGui::TextWrapped("Imported X / Y / Z: %.4g / %.4g / %.4g m",
+            m_ImportedSizeMeters.x, m_ImportedSizeMeters.y, m_ImportedSizeMeters.z);
         ImGui::SeparatorText("Imported Resources");
         ImGui::Text(
             "%zu sections  %zu materials  %zu textures",
@@ -163,6 +170,8 @@ void AssetImportPanel::ReportCommitSuccess(
     m_MaterialCount = model.materials.size();
     m_TextureCount = model.textures.size();
     m_TextureCandidateCount = model.textureCandidates.size();
+    m_SourceUnitMeters = model.sourceUnitMeters;
+    m_ImportedSizeMeters = model.boundsMax - model.boundsMin;
 }
 
 void AssetImportPanel::ReportCommitFailure(std::string error)
@@ -195,6 +204,8 @@ void AssetImportPanel::BeginImport(const std::filesystem::path& path)
     m_MaterialCount = 0;
     m_TextureCount = 0;
     m_TextureCandidateCount = 0;
+    m_SourceUnitMeters.reset();
+    m_ImportedSizeMeters = cy::Vec3f(0.0f);
     m_Message = "Parsing FBX data...";
     m_Status = Status::Parsing;
     try

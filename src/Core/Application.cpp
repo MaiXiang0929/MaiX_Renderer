@@ -9,6 +9,7 @@
 #include "Editor/RendererStatisticsPanel.h"
 #include "Renderer/Core/Renderer.h"
 #include "InstanceGrid.h"
+#include "CameraClipRange.h"
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -52,6 +53,8 @@
 
 namespace
 {
+// The bundled OBJ has no unit metadata. This is a project asset convention.
+constexpr float BundledModelMetersPerUnit = 0.01f;
 std::shared_ptr<Texture2D> CreateOrmCheckerTexture(
     unsigned char roughnessLow,
     unsigned char roughnessHigh,
@@ -297,7 +300,8 @@ bool Application::Init() {
     m_ObjCenter = (mesh.GetBoundMax() + mesh.GetBoundMin()) * 0.5f;
 
     // 根据包围盒自动调整观察距离，使不同尺寸的模型都能进入离屏画面。
-    const float modelDiameter = (mesh.GetBoundMax() - mesh.GetBoundMin()).Length();
+    const float rawDiameter = (mesh.GetBoundMax() - mesh.GetBoundMin()).Length();
+    const float modelDiameter = rawDiameter * BundledModelMetersPerUnit;
     m_ModelDiameter = modelDiameter;
 
     std::vector<Vertex> vertices;
@@ -426,19 +430,21 @@ bool Application::Init() {
     }
     PrimitiveBounds bounds;
     bounds.center = m_ObjCenter;
-    bounds.radius = m_ModelDiameter * 0.5f;
+    bounds.radius = rawDiameter * 0.5f;
     const std::uint32_t effectiveGridSize = (m_MaterialLab || m_MaterialInstanceLab)
         ? 2
         : (m_InstanceGridSize == 0 ? 1 : m_InstanceGridSize);
-    const float instanceSpacing = std::max(m_ModelDiameter * 1.25f, 0.001f);
+    const float instanceSpacing = std::max(rawDiameter * 1.25f, 0.001f);
     const std::vector<cy::Vec3f> instanceOffsets = BuildInstanceGridOffsets(
         effectiveGridSize, instanceSpacing);
     m_SceneRadius = CalculateInstanceGridSceneRadius(
-        effectiveGridSize, instanceSpacing, bounds.radius);
+        effectiveGridSize, instanceSpacing, bounds.radius) * BundledModelMetersPerUnit;
     const float gridHalfSpan =
         static_cast<float>(effectiveGridSize - 1) * instanceSpacing * 0.5f;
-    m_GroundY = mesh.GetBoundMin().y - m_ObjCenter.y - gridHalfSpan -
-        modelDiameter * 0.02f;
+    m_DefaultBoundsMin = mesh.GetBoundMin() - m_ObjCenter - cy::Vec3f(gridHalfSpan, gridHalfSpan, 0.0f);
+    m_DefaultBoundsMax = mesh.GetBoundMax() - m_ObjCenter + cy::Vec3f(gridHalfSpan, gridHalfSpan, 0.0f);
+    m_GroundY = (mesh.GetBoundMin().y - m_ObjCenter.y - gridHalfSpan -
+        rawDiameter * 0.02f) * BundledModelMetersPerUnit;
     const float cameraDistance = modelDiameter > 0.0f
         ? std::max(modelDiameter * 1.25f, m_SceneRadius * 2.5f)
         : 5.0f;
@@ -449,6 +455,12 @@ bool Application::Init() {
 
     m_Models.emplace_back();
     EditableModel& defaultModel = m_Models.back();
+    defaultModel.transform.scale = cy::Vec3f(BundledModelMetersPerUnit);
+    defaultModel.usesBundledCentimeterScale = true;
+    const cy::Matrix4f defaultRoot = defaultModel.transform.ToMatrix();
+    mainMaterial.GetProperties().outlineThickness *= BundledModelMetersPerUnit;
+    m_Renderer->SetSsaoRadius(0.005f);
+    m_Renderer->SetSsaoBias(0.00025f);
     defaultModel.id = ModelId{m_NextModelId++};
     m_DefaultModelId = defaultModel.id;
     defaultModel.name = m_MaterialInstanceLab ? "Material Instance Lab" :
@@ -493,7 +505,7 @@ bool Application::Init() {
             const auto material = defaultModel.materials[i];
             const auto localToWorld = cy::Matrix4f::Translation(instanceOffsets[i]) *
                 cy::Matrix4f::Translation(-m_ObjCenter);
-            const auto primitive = m_Renderer->AddPrimitive(instanceMesh, material, localToWorld, bounds);
+            const auto primitive = m_Renderer->AddPrimitive(instanceMesh, material, defaultRoot * localToWorld, bounds);
             if (primitive == InvalidPrimitiveId) return false;
             defaultModel.sections.push_back({primitive, localToWorld, bounds, material,
                 i == 0 ? "Parent" : i == 1 ? "Instance A" : "Instance B"});
@@ -563,7 +575,7 @@ bool Application::Init() {
             const PrimitiveId primitiveId = m_Renderer->AddPrimitive(
                 instanceMesh,
                 materialHandle,
-                localToWorld,
+                defaultRoot * localToWorld,
                 bounds);
             if (primitiveId != InvalidPrimitiveId)
             {
@@ -597,7 +609,7 @@ bool Application::Init() {
             const PrimitiveId primitiveId = m_Renderer->AddPrimitive(
                 instanceMesh,
                 instanceMaterial,
-                localToWorld,
+                defaultRoot * localToWorld,
                 bounds);
             if (primitiveId != InvalidPrimitiveId)
             {
@@ -628,12 +640,14 @@ bool Application::Init() {
     if (m_TranslucencyTest)
         CreateTranslucencyTestScene();
 
-    const PrimitiveBounds sceneBounds = defaultModel.GetWorldBounds();
+    // Adding translucent models may have reallocated m_Models. Resolve by ID.
+    const PrimitiveBounds sceneBounds = FindEditableModel(m_Models, m_DefaultModelId)->GetWorldBounds();
     const cy::Vec3f sceneCenter = sceneBounds.radius > 0.0f
         ? sceneBounds.center
         : cy::Vec3f(0.0f);
     const float lightDistance = std::max(
-        std::sqrt(500.0f), std::max(sceneBounds.radius, 1.0f) * 2.5f);
+        std::sqrt(500.0f) * BundledModelMetersPerUnit,
+        std::max(sceneBounds.radius, BundledModelMetersPerUnit) * 2.5f);
     LightSceneProxy mainLight;
     mainLight.type = LightType::Spot;
     mainLight.position = sceneCenter + cy::Vec3f(
@@ -644,7 +658,7 @@ bool Application::Init() {
     mainLight.direction.Normalize();
     mainLight.color = cy::Vec3f(1.0f, 0.95f, 0.85f);
     mainLight.intensity = 5.0f;
-    mainLight.range = 30.0f;
+    mainLight.range = 30.0f * BundledModelMetersPerUnit;
     mainLight.outerConeAngle = 30.0f * 3.14159265358979323846f / 180.0f;
     m_MainLightId = m_Renderer->AddLight(mainLight);
     mainLight.id = m_MainLightId;
@@ -669,10 +683,10 @@ bool Application::Init() {
 
     LightSceneProxy pointFill;
     pointFill.type = LightType::Point;
-    pointFill.position = cy::Vec3f(-8.0f, 4.0f, 5.0f);
+    pointFill.position = cy::Vec3f(-8.0f, 4.0f, 5.0f) * BundledModelMetersPerUnit;
     pointFill.color = cy::Vec3f(1.0f, 0.2f, 0.08f);
     pointFill.intensity = 0.9f;
-    pointFill.range = 18.0f;
+    pointFill.range = 18.0f * BundledModelMetersPerUnit;
     pointFill.castsShadow = false;
     pointFill.id = m_Renderer->AddLight(pointFill);
     EditableLight editablePointFill;
@@ -784,6 +798,8 @@ bool Application::CommitImportedModel(
 
     EditableModel pendingModel;
     pendingModel.name = model.name;
+    pendingModel.importedSizeMeters = model.boundsMax - model.boundsMin;
+    pendingModel.sourceUnitMeters = model.sourceUnitMeters;
     pendingModel.meshes.reserve(model.meshes.size());
     pendingModel.materials.reserve(model.materials.size());
     pendingModel.sections.reserve(model.meshes.size());
@@ -944,6 +960,10 @@ bool Application::CommitImportedModel(
         << "' sections=" << model.meshes.size()
         << " materials=" << model.materials.size()
         << " textures=" << model.textures.size()
+        << " sourceUnitMeters=" << (model.sourceUnitMeters ? std::to_string(*model.sourceUnitMeters) : "unknown")
+        << " sizeMeters=(" << (model.boundsMax - model.boundsMin).x
+        << "," << (model.boundsMax - model.boundsMin).y
+        << "," << (model.boundsMax - model.boundsMin).z << ")"
         << std::endl;
     return true;
 }
@@ -1085,9 +1105,7 @@ bool Application::LoadStartupFaceShadowDemo()
         m_SceneRadius = demoBounds.radius;
         m_GroundY = demoBounds.center.y - demoBounds.radius;
         m_Camera.FocusBounds(demoBounds.center, demoBounds.radius);
-        m_Camera.SetClipPlanes(
-            std::max(0.1f, demoBounds.radius * 0.01f),
-            std::max(1000.0f, demoBounds.radius * 8.0f));
+        m_PendingFocusSelection.SelectModel(importedId);
 
         EditableLight* mainLight = FindEditableLight(m_MainLightId);
         if (mainLight != nullptr)
@@ -1275,6 +1293,7 @@ void Application::Update() {
     if (CommitImportedModel(completedImport->model, error, importedId))
     {
         m_EditorSelection.SelectModel(importedId);
+        m_PendingFocusSelection = m_EditorSelection;
         m_AssetImportPanel->ReportCommitSuccess(
             completedImport->model,
             FindEditableModel(m_Models, importedId)->sections.size());
@@ -1300,9 +1319,17 @@ void Application::Render() {
     void* nativeWindowHandle = GetNativeWindowHandle(m_Window);
     m_Workspace->BeginFrame(*m_AssetImportPanel, nativeWindowHandle);
     const EditorViewportRegion viewport = m_Workspace->BeginViewport();
-    if (viewport.visible && viewport.pixelHeight > 0)
+    if (viewport.visible && viewport.pixelWidth > 0 && viewport.pixelHeight > 0)
+    {
         m_Camera.SetAspectRatio(static_cast<float>(viewport.pixelWidth) /
             static_cast<float>(viewport.pixelHeight));
+        if (m_PendingFocusSelection.type != EditorSelectionType::None)
+        {
+            m_ViewportController->FocusSelection(m_Camera, m_PendingFocusSelection,
+                m_Models, m_EditableLights);
+            m_PendingFocusSelection.Clear();
+        }
+    }
 
     // 共用矩阵
     cy::Matrix4f projMatrix = m_Camera.GetProjectionMatrix();
@@ -1313,12 +1340,12 @@ void Application::Render() {
         ? sceneBounds.center
         : cy::Vec3f(0.0f, 0.0f, 0.0f);
     const float sceneRadius = std::max(
-        std::max(m_SceneRadius, sceneBounds.radius), 1.0f);
+        std::max(m_SceneRadius, sceneBounds.radius), 0.001f);
 
     EditableLight* editableMainLight = FindEditableLight(m_MainLightId);
     const cy::Vec3f lightWorldPosition = editableMainLight
         ? editableMainLight->transform.position
-        : sceneCenter + cy::Vec3f(0.0f, 10.0f, 20.0f);
+        : sceneCenter + cy::Vec3f(0.0f, 0.1f, 0.2f);
     const cy::Vec3f lightOffsetWorld = lightWorldPosition - sceneCenter;
     const float rawLightDistance = lightOffsetWorld.Length();
     const float lightDistance = std::max(rawLightDistance, 0.001f);
@@ -1349,14 +1376,30 @@ void Application::Render() {
         60.0f * Pi / 180.0f,
         150.0f * Pi / 180.0f);
     const float lightNear = std::max(
-        0.1f, shadowLightDistance - sceneRadius * 1.25f);
+        0.001f, shadowLightDistance - sceneRadius * 1.25f);
     const float lightFar = shadowLightDistance + sceneRadius * 2.0f;
     const cy::Matrix4f lightProjection = cy::Matrix4f::Perspective(
         lightFov, 1.0f, lightNear, lightFar);
     const cy::Matrix4f lightVP = lightProjection * lightView;
     // 反射视图仍由 Application 根据场景地面位置计算，Pass 只消费结果。
     float groundY = m_GroundY;
-    if (m_Models.size() != 1 || m_Models.front().id != m_DefaultModelId)
+    if (m_Models.size() == 1 && m_Models.front().id == m_DefaultModelId)
+    {
+        const EditableModel& model = m_Models.front();
+        const cy::Matrix4f root = model.transform.ToMatrix();
+        groundY = std::numeric_limits<float>::max();
+        for (float x : {m_DefaultBoundsMin.x, m_DefaultBoundsMax.x})
+            for (float y : {m_DefaultBoundsMin.y, m_DefaultBoundsMax.y})
+                for (float z : {m_DefaultBoundsMin.z, m_DefaultBoundsMax.z})
+                {
+                    const cy::Vec4f corner = root * cy::Vec4f(x, y, z, 1.0f);
+                    groundY = std::min(groundY, corner.y);
+                }
+        const float maxScale = std::max({std::abs(model.transform.scale.x),
+            std::abs(model.transform.scale.y), std::abs(model.transform.scale.z)});
+        groundY -= (m_ModelDiameter / BundledModelMetersPerUnit) * 0.02f * maxScale;
+    }
+    else
     {
         bool hasModelBounds = false;
         for (const EditableModel& model : m_Models)
@@ -1380,21 +1423,57 @@ void Application::Render() {
 
     const float groundSize = std::max(
         m_ModelDiameter * 2.0f, sceneRadius * 2.0f);
-    const bool onlyDefaultModel = m_Models.size() == 1 &&
-        m_Models.front().id == m_DefaultModelId;
-    const cy::Vec3f groundCenter = onlyDefaultModel
-        ? cy::Vec3f(-m_ObjCenter.x, groundY, -m_ObjCenter.z)
-        : cy::Vec3f(sceneCenter.x, groundY, sceneCenter.z);
+    const cy::Vec3f groundCenter(sceneCenter.x, groundY, sceneCenter.z);
     const cy::Matrix4f groundModel =
         cy::Matrix4f::Translation(groundCenter) *
         cy::Matrix4f::Scale(groundSize, 1.0f, groundSize);
+
     if (editableMainLight)
     {
-        editableMainLight->proxy.direction = sceneCenter - lightWorldPosition;
-        if (editableMainLight->proxy.direction.Length() > 1.0e-6f)
-            editableMainLight->proxy.direction.Normalize();
+        const cy::Vec3f direction = sceneCenter - lightWorldPosition;
+        if (direction.Length() > 1.0e-6f)
+            editableMainLight->proxy.direction = direction.GetNormalized();
         ApplyEditableLightTransform(*editableMainLight, *m_Renderer);
     }
+
+    // Main and reflection share a projection. Fit both depth ranges before
+    // creating it, including the ground quad and the editor's light cones.
+    CameraClipRange clipRange;
+    for (const EditableModel& model : m_Models)
+    {
+        const cy::Matrix4f root = model.transform.ToMatrix();
+        for (const EditableModelSection& section : model.sections)
+        {
+            if (section.localBounds.radius <= 0.0f)
+                continue;
+            PrimitiveBounds localBounds = section.localBounds;
+            if (m_Renderer->IsTessellationEnabled())
+                localBounds.radius += m_Renderer->GetDisplacementScale();
+            const PrimitiveBounds bounds = TransformBounds(localBounds, root * section.localTransform);
+            clipRange.IncludeSphere(viewMatrix, bounds.center, bounds.radius);
+            clipRange.IncludeSphere(reflectView, bounds.center, bounds.radius);
+        }
+    }
+    for (float x : {-1.0f, 1.0f})
+        for (float z : {-1.0f, 1.0f})
+            clipRange.IncludeSphere(viewMatrix,
+                groundCenter + cy::Vec3f(x * groundSize, 0.0f, z * groundSize), 0.0f);
+    for (const EditableLight& light : m_EditableLights)
+    {
+        if (light.proxy.type == LightType::Directional)
+            continue;
+        clipRange.IncludeSphere(viewMatrix, light.transform.position, 0.0f);
+        if (light.proxy.type == LightType::Spot)
+        {
+            const float range = light.proxy.range;
+            const float coneRadius = range * std::tan(light.proxy.outerConeAngle);
+            const float radius = std::sqrt(range * range * 0.25f + coneRadius * coneRadius);
+            clipRange.IncludeSphere(viewMatrix, light.transform.position +
+                light.proxy.direction * (range * 0.5f), radius);
+        }
+    }
+    m_Camera.SetClipPlanes(clipRange.Near(), clipRange.Far());
+    projMatrix = m_Camera.GetProjectionMatrix();
 
     // Application 只提交强类型帧数据，不再创建任何 Pass callback。
     RenderFrameData frame;
@@ -1654,11 +1733,7 @@ void Application::KeyCallback(GLFWwindow* window, int key, int scancode, int act
         else if (key == GLFW_KEY_Q)
             app->m_ViewportController->ToggleSpace();
         else if (key == GLFW_KEY_F)
-            app->m_ViewportController->FocusSelection(
-                app->m_Camera,
-                app->m_EditorSelection,
-                app->m_Models,
-                app->m_EditableLights);
+            app->m_PendingFocusSelection = app->m_EditorSelection;
     }
     // 着色器重载（F6）
     if (key == GLFW_KEY_F6 && action == GLFW_PRESS) {

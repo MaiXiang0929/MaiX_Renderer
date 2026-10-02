@@ -47,12 +47,12 @@ Renderer（GPU 资源所有者）
          Shadow → Reflection → Forward → Outline → Translucency
                → SSAO → Bloom → PostProcess → EditorPrimitive → Present
     ▼
-OpenGL GPU → 窗口
+OpenGL GPU → 最终纹理 → 编辑器 Viewport
 ```
 
 每帧由 `Application` 更新相机、模型 Transform 和灯光，`RenderScene::BuildRenderView()` 生成各视图的可见项。CPU 负责裁剪、排序、矩阵与资源绑定准备；GPU 执行顶点变换、光栅化、深度与混合测试、纹理采样、光照和像素输出。各 Pass 依次消费场景视图与前序 Pass 生成的纹理资源。
 
-固定管线通过显式资源契约声明各 Pass 的输入、输出与附件清空/保留行为；执行前校验本帧资源、尺寸和格式，输出发布后才允许后续 Pass 消费。Framebuffer 仍由各 Pass 管理，不额外复制主场景颜色。详见[Pass 资源契约](docs/pass-resource-contracts.md)。
+固定管线通过显式资源契约声明各 Pass 的输入、输出与附件清空/保留行为；执行前校验本帧资源、尺寸和格式，输出发布后才允许后续 Pass 消费。Framebuffer 仍由各 Pass 管理，不额外复制主场景颜色。详见[Pass 资源契约](docs/rendering/pipeline-and-resources.md)。
 
 ## 快速开始
 
@@ -77,39 +77,6 @@ cmake --build --preset windows-ninja-debug
 
 构建产物位于 `out/build/windows-ninja-debug/`；构建时会将最新的 `assets/` 复制到可执行文件目录。
 
-### 常用运行入口
-
-以下命令均从仓库根目录执行：
-
-```powershell
-# PBR 材质场景
-.\out\build\windows-ninja-debug\MaiX_Renderer.exe --material-lab
-
-# 透明材质场景
-.\out\build\windows-ninja-debug\MaiX_Renderer.exe --translucency-test
-
-# N×N 共享资源 Instancing 场景，N 为 1–32
-.\out\build\windows-ninja-debug\MaiX_Renderer.exe --instance-grid 16
-
-# 查看完整命令行参数
-.\out\build\windows-ninja-debug\MaiX_Renderer.exe --help
-```
-
-Face Shadow 入口需要用户提供 FBX、连续变化的面部阴影贴图，以及 FBX 中的精确材质名称；外部角色资产不包含在仓库中：
-
-```powershell
-.\out\build\windows-ninja-debug\MaiX_Renderer.exe --face-shadow-demo `
-  "<角色模型.fbx>" "<面部阴影贴图.png>" "<材质名称>"
-```
-
-运行时可使用 `File > Import FBX...` 导入静态模型。每次导入会向 Scene 追加独立模型，保留已有模型；导入完成后自动选中新模型。同名模型依次显示为 `名称`、`名称_001`、`名称_002`。CPU 解析异步进行，GPU 资源在主线程提交。
-
-### 测试
-
-```powershell
-ctest --test-dir out/build/windows-ninja-debug --output-on-failure
-```
-
 ## 编辑器操作
 
 默认工作区左侧上方是 Viewport，左下方由 Console 与 Content Browser 共用标签区，右侧是并排的 Scene 和 Inspector。Material Editor 打开后与 Inspector 共用最右侧区域，通过标签切换。`View` 菜单可打开 Material Editor、Renderer Statistics，或用 `Reset Layout` 恢复默认布局。下列场景快捷键在 Viewport 获得焦点时生效；鼠标场景操作从视口图像内开始。
@@ -130,11 +97,9 @@ ctest --test-dir out/build/windows-ninja-debug --output-on-failure
 | `F6` | 重新加载 GLSL Shader |
 | `Esc` | 退出程序 |
 
-相同 FBX 连续导入两次时，两个模型初始位置相同，画面会重叠。选中新导入的模型后，可在 Inspector 中修改 Position X，或用 `W` 和 Gizmo 将它移开。[多模型场景说明](docs/multi-model-scene.md)记录了数据流、限制与验收步骤。
+Material Editor 默认跟随所选模型，显示所属模型名称和材质列表。`All materials (debug)` 可查看全部场景材质；点击 Inspector 中的材质会返回模型范围。删除正在编辑的模型后会清理材质选择。详见[模型与材质编辑联动](docs/editor/workflows.md)。
 
-Material Editor 默认跟随所选模型，显示所属模型名称和材质列表。`All materials (debug)` 可查看全部场景材质；点击 Inspector 中的材质会返回模型范围。删除正在编辑的模型后会清理材质选择。详见[模型与材质编辑联动](docs/model-material-editing.md)。
-
-基础材质可通过 `Create Instance` 创建并绑定到当前模型分段。实例支持参数 Override、纹理继承/替换/禁用、重置覆盖和 `Edit Parent`；`Use Parent Material` 恢复基础材质。使用 `--material-instance-lab` 启动父材质与两个实例的共享 Mesh 验收场景，详见[Material Instance](docs/material-instances.md)。
+基础材质可通过 `Create Instance` 创建并绑定到当前模型分段。实例支持参数 Override、纹理继承/替换/禁用、重置覆盖和 `Edit Parent`；`Use Parent Material` 恢复基础材质。使用 `--material-instance-lab` 启动父材质与两个实例的共享 Mesh 验收场景，详见[Material Instance](docs/rendering/material-instances.md)。
 
 ## 项目结构
 
@@ -161,16 +126,20 @@ ThirdParty/              项目使用的第三方依赖
 
 ## 延伸文档
 
+完整目录与阅读顺序见[实现文档导航](docs/README.md)。文档说明主要功能的责任、数据流、算法、资源生命周期与当前限制。
+
 | 主题 | 文档 |
 | --- | --- |
-| PBR 材质与纹理约定 | [PBR Material Workflow](docs/pbr-material-workflow.md) |
-| 材质实例与参数继承 | [Material Instance](docs/material-instances.md) |
-| Toon、Face Shadow、Outline | [Toon Shading](docs/npr-toon.md) · [Face Shadow](docs/npr-face-shadow.md) · [Outline](docs/npr-outline.md) |
-| 透明渲染 | [Translucency Pass](docs/translucency-pass.md) |
-| 多 Pass 资源与附件语义 | [Pass Resource Contracts](docs/pass-resource-contracts.md) |
-| HDR、Bloom、SSAO | [HDR and Tone Mapping](docs/hdr-tone-mapping.md) · [Bloom and Post Process](docs/bloom-postprocess.md) · [SSAO](docs/ssao.md) |
-| 编辑器工作流 | [Docking Layout](docs/editor-docking-layout.md) · [Scene Window and Inspector](docs/editor-scene-inspector.md) · [Viewport Transform Controls](docs/viewport-transform-controls.md) |
-| 性能分析 | [GPU Pass Profiling](docs/gpu-pass-profiling.md) · [RenderDoc Baseline](docs/renderdoc-baseline.md) |
+| 总体架构与代码思路 | [架构分析](docs/architecture.md) |
+| 场景与多视图 | [裁剪、排序与批次](docs/rendering/scene-and-views.md) |
+| 材质与纹理 | [基于物理的着色](docs/rendering/materials-and-pbr.md) · [材质实例](docs/rendering/material-instances.md) |
+| 灯光与阴影 | [多灯光与阴影贴图](docs/rendering/lighting-and-shadows.md) |
+| 反射与透明 | [平面反射与透明渲染](docs/rendering/reflection-and-translucency.md) |
+| 卡通表现 | [卡通、轮廓与面部阴影](docs/rendering/npr.md) |
+| 管线与目标 | [资源契约与生命周期](docs/rendering/pipeline-and-resources.md) |
+| 后处理 | [高动态范围、遮蔽、光晕与曝光](docs/rendering/postprocessing.md) |
+| 资产与编辑器 | [模型导入](docs/assets/model-import.md) · [编辑器工作流](docs/editor/workflows.md) |
+| 性能与验证 | [实例绘制与诊断](docs/diagnostics/profiling-and-instancing.md) · [历史基准](docs/diagnostics/benchmarks.md) · [文档重整记录](docs/documentation-review.md) |
 
 ## 许可证与资产署名
 

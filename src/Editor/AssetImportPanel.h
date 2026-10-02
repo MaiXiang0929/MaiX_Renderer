@@ -55,4 +55,6 @@ private:
     std::size_t m_MaterialCount = 0;
     std::size_t m_TextureCount = 0;
     std::size_t m_TextureCandidateCount = 0;
+    std::optional<double> m_SourceUnitMeters;
+    cy::Vec3f m_ImportedSizeMeters{0.0f};
 };

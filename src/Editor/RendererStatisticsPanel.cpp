@@ -120,7 +120,7 @@ void RendererStatisticsPanel::Draw(Renderer& renderer)
         float radius = renderer.GetSsaoRadius();
         if (ImGui::SliderFloat(
                 "SSAO radius", &radius,
-                MinimumSsaoRadius, MaximumSsaoRadius, "%.2f"))
+                MinimumSsaoRadius, MaximumSsaoRadius, "%.4f", ImGuiSliderFlags_Logarithmic))
             renderer.SetSsaoRadius(radius);
         float intensity = renderer.GetSsaoIntensity();
         if (ImGui::SliderFloat(
@@ -130,7 +130,7 @@ void RendererStatisticsPanel::Draw(Renderer& renderer)
         float bias = renderer.GetSsaoBias();
         if (ImGui::SliderFloat(
                 "SSAO bias", &bias,
-                MinimumSsaoBias, MaximumSsaoBias, "%.3f"))
+                MinimumSsaoBias, MaximumSsaoBias, "%.5f", ImGuiSliderFlags_Logarithmic))
             renderer.SetSsaoBias(bias);
     }
     float exposure = renderer.GetExposureCompensation();

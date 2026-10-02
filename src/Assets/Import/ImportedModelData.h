@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <limits>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -56,6 +57,8 @@ struct ImportedModelData
     std::vector<std::filesystem::path> textureCandidates;
     cy::Vec3f boundsMin{ 0.0f, 0.0f, 0.0f };
     cy::Vec3f boundsMax{ 0.0f, 0.0f, 0.0f };
+    // Reported source unit, not an extra multiplier on the converted vertices.
+    std::optional<double> sourceUnitMeters;
     std::size_t sourceMeshCount = 0;
     std::size_t sourceMaterialCount = 0;
     std::size_t skinDeformerCount = 0;

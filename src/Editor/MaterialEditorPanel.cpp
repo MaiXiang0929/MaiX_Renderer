@@ -232,7 +232,7 @@ void MaterialEditorPanel::Draw(
         editField(MaterialParameter::FaceShadowSoftness, "Face Shadow Softness", [&] { return ImGui::SliderFloat("##Value", &properties.faceShadowSoftness, 0.000f, 0.250f); });
         editField(MaterialParameter::FaceShadowMirrorX, "Mirror Face Shadow X", [&] { return ImGui::Checkbox("##Value", &properties.faceShadowMirrorX); });
         editField(MaterialParameter::OutlineEnabled, "Outline", [&] { return ImGui::Checkbox("##Value", &properties.outlineEnabled); });
-        editField(MaterialParameter::OutlineThickness, "Outline Thickness", [&] { return ImGui::SliderFloat("##Value", &properties.outlineThickness, 0.000f, 0.200f); });
+        editField(MaterialParameter::OutlineThickness, "Outline Thickness", [&] { return ImGui::SliderFloat("##Value", &properties.outlineThickness, 0.000f, 0.200f, "%.5f", ImGuiSliderFlags_Logarithmic); });
         editField(MaterialParameter::OutlineColor, "Outline Color", [&] { return ImGui::ColorEdit3("##Value", &properties.outlineColor.x); });
 
     }

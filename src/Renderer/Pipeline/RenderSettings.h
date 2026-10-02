@@ -22,7 +22,7 @@ struct PostProcessSettings
     float exposureCompensation = 0.0f;
 };
 
-constexpr float MinimumSsaoRadius = 0.05f;
+constexpr float MinimumSsaoRadius = 0.001f;
 constexpr float MaximumSsaoRadius = 2.0f;
 constexpr float MinimumSsaoIntensity = 0.0f;
 constexpr float MaximumSsaoIntensity = 3.0f;

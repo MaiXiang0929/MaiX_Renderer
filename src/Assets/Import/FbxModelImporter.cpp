@@ -424,6 +424,12 @@ bool BuildMeshPart(
                     &node.geometry_to_world, position);
             }
             vertex.Position = ToVector(position);
+            if (!std::isfinite(vertex.Position.x) || !std::isfinite(vertex.Position.y) ||
+                !std::isfinite(vertex.Position.z))
+            {
+                warning = "Non-finite converted vertex position in '" + ToString(node.name) + "'.";
+                return false;
+            }
 
             ufbx_vec3 normal = normals.exists
                 ? ufbx_get_vertex_vec3(&normals, meshIndex)
@@ -497,6 +503,12 @@ bool BuildMeshPart(
         result.boundsRadius = std::max(
             result.boundsRadius,
             (vertex.Position - result.boundsCenter).Length());
+    }
+    if (!std::isfinite(result.boundsCenter.x) || !std::isfinite(result.boundsCenter.y) ||
+        !std::isfinite(result.boundsCenter.z) || !std::isfinite(result.boundsRadius))
+    {
+        warning = "Invalid converted bounds in '" + ToString(node.name) + "'.";
+        return false;
     }
     return true;
 }
@@ -611,6 +623,15 @@ ModelImportResult FbxModelImporter::Import(
     const std::unique_ptr<ufbx_scene, decltype(&ufbx_free_scene)> sceneOwner(
         scene, &ufbx_free_scene);
 
+    // unit_meters is the file's active UnitScaleFactor, used by ufbx's conversion.
+    // original_unit_meters can describe a previous authoring unit instead.
+    const double sourceUnitMeters = scene->settings.unit_meters;
+    if (ufbx_find_prop(&scene->settings.props, "UnitScaleFactor") != nullptr &&
+        std::isfinite(sourceUnitMeters) && sourceUnitMeters > 0.0)
+        result.model.sourceUnitMeters = sourceUnitMeters;
+    else
+        result.model.warnings.push_back("Source unit metadata is unavailable; ufbx default unit interpretation is used, with target meters.");
+
     result.model.sourceMeshCount = scene->meshes.count;
     result.model.sourceMaterialCount = scene->materials.count;
     result.model.skinDeformerCount = scene->skin_deformers.count;
@@ -716,7 +737,14 @@ ModelImportResult FbxModelImporter::Import(
                     options.flipUv,
                     importedMesh,
                     warning))
+            {
+                if (!warning.empty())
+                {
+                    result.error = std::move(warning);
+                    return result;
+                }
                 continue;
+            }
             if (!warning.empty())
                 result.model.warnings.push_back(std::move(warning));
             if (materialIndex < result.model.materials.size())
@@ -743,6 +771,10 @@ ModelImportResult FbxModelImporter::Import(
             "runtime skinning data was not retained.");
     }
     AppendDistantSectionWarning(result.model);
+    const cy::Vec3f size = result.model.boundsMax - result.model.boundsMin;
+    if (!std::isfinite(size.x) || !std::isfinite(size.y) || !std::isfinite(size.z) ||
+        size.x < 0.0f || size.y < 0.0f || size.z < 0.0f)
+        result.error = "The FBX produced invalid converted model dimensions.";
     if (result.model.meshes.empty())
         result.error = "The FBX contains no renderable triangle sections.";
 
