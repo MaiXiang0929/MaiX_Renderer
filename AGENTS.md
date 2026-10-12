@@ -167,6 +167,8 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 
 2026-10-12 按用户要求取消 tests 的 Git 跟踪，加入根目录忽略规则；本地 18 个测试文件保留，远程 main 的 17 个历史测试文件由 eff4688 删除。缺少本地 tests 时 CMake 跳过测试目标，新克隆配置检查通过；本地存在 tests 时仍启用原测试。此次远程提交没有包含本地 M0 架构改动。
 
+2026-10-12 按用户授权清理 M0 临时产物：删除 out/m0、out/build/m0-multi、out/build/remote-tests-check，共 741 个文件、226,617,012 字节（216.12 MiB）。清理前核对目标路径、Git 跟踪和重解析点；清理前后对源码、资产、第三方依赖、docs、tests、捕获、工具配置及当前 Ninja Debug 构建等 1,188 个保留文件的 SHA-256 校验一致，编辑器可执行文件仍存在。此轮仅清理文件，未重新构建、启动或判定视觉验收状态。
+
 - [ ] CMake 项目与可执行文件命名为 `MaiX_Renderer`，编辑器主窗口标题为 `MaiX Engine`；已接入 ImGui Docking 默认布局，左下 Console 与 Content Browser 共用标签区，右侧 Scene 与 Inspector 并排；更名后重新配置、构建、启动与 14 项测试通过；最终画面改为 Viewport 内的 Present 纹理，拾取与 Gizmo 改用视口矩形；布局、输入和画面效果待用户视觉验收，见 `docs/editor/workflows.md`
 - [ ] HDR Scene Color、Bloom、SSAO、手动曝光与色调映射已完成；自动曝光尚未实现
 - [ ] 视锥体裁剪已完成包围球粗裁剪，但遮挡裁剪、距离裁剪和更精确的包围体尚未实现
