@@ -141,7 +141,7 @@ ctest --test-dir out/build/windows-ninja-debug --output-on-failure
 
 Sandbox 使用隐藏窗口验证真实 OpenGL 像素、共享资源释放与引擎生命周期，不链接 ImGui/ImGuizmo。M0 已整理模块归属并拆出平台、引擎和编辑器职责；当前固定管线、资源句柄和效果保留。SceneState 暂时保留 CPU 渲染绑定契约，不等同于完整 World/Actor/Component；RHI 仅接通 Present 命令，完整资源抽象在 M1，Render Graph 在 M4。
 
-本地 docs 保留设计、实现说明与历史性能记录；它不随 Git 克隆或同步。构建和测试通过不代表画面与交互已验收，视觉效果由用户确认。
+本地 docs 仅保留[当前执行方案](docs/execution-plan.md)、[主要功能实现](docs/implementation.md)和[项目文件结构](docs/project-structure.md)，不随 Git 克隆或同步。方案由用户要求时更新；新增主要功能后询问是否更新实现说明；项目文件变化时同步更新结构清单。构建和测试通过不代表画面与交互已验收，视觉效果由用户确认。
 
 ## 许可证与资产署名
 
