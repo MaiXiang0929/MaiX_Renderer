@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
-#include "Assets/Geometry/CubeGeometry.h"
-#include "Core/Camera.h"
-#include "Core/DirectionalShadow.h"
-#include "Core/StartupScene.h"
-#include "Editor/EditorSelection.h"
+#include "Engine/Asset/Geometry/CubeGeometry.h"
+#include "Engine/Runtime/Component/Camera.h"
+#include "Engine/Rendering/Renderer/View/DirectionalShadow.h"
+#include "Engine/Runtime/Scene/StartupScene.h"
+#include "Editor/Session/EditorSelection.h"
 #include "StartupSceneEmbedded.h"
 #include <cmath>
 #include <cstdlib>

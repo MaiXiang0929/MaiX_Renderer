@@ -510,3 +510,8 @@ Testing/
 
 !/ThirdParty/glfw/lib-vc2022/glfw3.lib
 /docs
+
+# Debug shaders are source inputs.
+!/Shaders/debug/
+!/Shaders/debug/*.vert
+!/Shaders/debug/*.frag

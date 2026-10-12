@@ -1,0 +1,236 @@
+// SPDX-License-Identifier: MIT
+/// @file Renderer.h
+/// @brief 渲染器类的头文件
+/// @details 该文件声明了 Renderer 类，它是渲染资源的所有者和渲染管线的门面，负责准备资源上下文并启动 RenderPipeline。
+/// @author MaiX
+/// @date 2026-08-11
+
+#pragma once
+
+#include <array>
+#include <cstddef>
+#include <memory>
+#include <string>
+#include <vector>
+
+#include "Engine/Rendering/Renderer/Resources/CubemapTexture.h"
+#include "Engine/Rendering/Renderer/Diagnostics/RenderSubmissionStats.h"
+#include "Engine/Rendering/Material/MaterialResourceStore.h"
+#include "Engine/Rendering/Renderer/Resources/Mesh.h"
+#include "Engine/Rendering/Renderer/Pipeline/RenderPipeline.h"
+#include "Engine/Rendering/Renderer/Pipeline/RenderSettings.h"
+#include "Engine/Rendering/Renderer/Scene/RenderScene.h"
+
+/// @brief 渲染资源的所有者与管线门面。
+/// @details Renderer 不再实现具体 Pass，只负责准备资源上下文并启动 RenderPipeline。
+class Renderer
+{
+public:
+    struct MaterialSnapshot
+    {
+        MaterialHandle handle;
+        bool isInstance = false;
+        MaterialHandle parent;
+        std::string parentName;
+        MaterialOverrideMask overrides;
+        std::array<TextureOverrideMode, MaterialTextureSlotCount> textureModes{};
+        std::string name;
+        MaterialProperties properties;
+        BlendMode blendMode = BlendMode::Opaque;
+        std::array<bool, MaterialTextureSlotCount> hasTextures{};
+        std::array<unsigned int, MaterialTextureSlotCount> textureIds{};
+        std::array<std::string, MaterialTextureSlotCount> textureSources{};
+    };
+
+    struct StatisticsSnapshot
+    {
+        std::size_t sourcePrimitiveCount = 0;
+        std::size_t visiblePrimitiveCount = 0;
+        std::size_t culledPrimitiveCount = 0;
+        std::size_t opaqueDrawCount = 0;
+        std::size_t opaqueBatchCount = 0;
+        std::size_t translucentDrawCount = 0;
+        std::size_t shaderGroupCount = 0;
+        std::size_t materialGroupCount = 0;
+        std::size_t meshGroupCount = 0;
+        std::size_t meshResourceCount = 0;
+        std::size_t materialResourceCount = 0;
+    };
+
+    Renderer();
+    ~Renderer();
+
+    Renderer(const Renderer&) = delete;
+    Renderer& operator=(const Renderer&) = delete;
+
+    bool Init();
+
+    MeshHandle CreateMesh(const std::vector<Vertex>& vertices);
+    MeshHandle CreateMesh(
+        const std::vector<Vertex>& vertices,
+        const std::vector<std::uint32_t>& indices);
+    /// @brief 若任一 Primitive 仍引用资源，则拒绝销毁并返回 false。
+    bool DestroyMesh(MeshHandle handle);
+    MaterialHandle CreateMaterial(Material material);
+    /// 单层实例共享父资源；实例参数只通过逐项覆盖接口修改。
+    MaterialHandle CreateMaterialInstance(MaterialHandle parent, std::string name = {});
+    bool UpdateMaterialOverride(MaterialHandle handle, MaterialParameter parameter,
+                                const MaterialProperties& values, bool enabled = true);
+    bool ResetMaterialOverrides(MaterialHandle handle);
+    bool ResetMaterialTexture(MaterialHandle handle, MaterialTextureSlot slot);
+    bool ReplacePrimitiveMaterials(const std::vector<PrimitiveId>& primitives,
+                                   MaterialHandle expected, MaterialHandle replacement);
+    /// @brief Primitive 或子实例仍引用资源时拒绝销毁，包含不可见对象。
+    bool DestroyMaterial(MaterialHandle handle);
+    /// 无分配查询用于依赖顺序清理，避免析构过程中构造编辑器快照。
+    bool IsMaterialInstance(MaterialHandle handle) const;
+    bool GetMaterialSnapshot(
+        MaterialHandle handle,
+        MaterialSnapshot& snapshot) const;
+    MaterialHandle GetMaterialHandle(std::size_t index) const;
+    std::vector<MaterialHandle> GetMaterialHandles() const;
+    bool UpdateMaterial(
+        MaterialHandle handle,
+        const MaterialProperties& properties,
+        BlendMode blendMode);
+    bool UpdateMaterialTexture(
+        MaterialHandle handle,
+        MaterialTextureSlot slot,
+        std::shared_ptr<Texture2D> texture,
+        std::string sourceLabel);
+    bool ClearMaterialTexture(
+        MaterialHandle handle,
+        MaterialTextureSlot slot);
+
+    PrimitiveId AddPrimitive(
+        MeshHandle mesh,
+        MaterialHandle material,
+        const cy::Matrix4f& localToWorld,
+        PrimitiveBounds bounds = {},
+        bool castsShadow = true);
+
+    /// @brief 便利接口：创建独立 Mesh/Material 后提交一个 Primitive。
+    PrimitiveId AddPrimitive(
+        const std::vector<Vertex>& vertices,
+        Material material,
+        const cy::Matrix4f& localToWorld,
+        PrimitiveBounds bounds = {},
+        bool castsShadow = true);
+    bool UpdatePrimitiveTransform(
+        PrimitiveId id,
+        const cy::Matrix4f& localToWorld);
+    bool RemovePrimitive(PrimitiveId id);
+
+    LightId AddLight(LightSceneProxy light);
+    bool UpdateLight(LightId id, const LightSceneProxy& light);
+
+    void LoadCubemap(const std::string& directoryPath);
+
+    void ExecutePipeline(RenderFrameData& frame);
+    /// 编辑器只能在渲染目标未再次 Resize 的当前帧采样该纹理。
+    GLuint GetFinalColorTexture() const
+    {
+        return m_RenderPipeline.GetFinalColorTexture();
+    }
+    bool ReloadShaders();
+    const GpuTimingSnapshot& GetGpuTimingSnapshot() const
+    {
+        return m_RenderPipeline.GetGpuTimingSnapshot();
+    }
+    const StatisticsSnapshot& GetStatisticsSnapshot() const
+    {
+        return m_StatisticsSnapshot;
+    }
+    RenderSubmissionSnapshot GetSubmissionSnapshot() const
+    {
+        return RenderSubmissionStats::Get().GetSnapshot();
+    }
+
+    std::size_t GetMeshResourceCount() const;
+    std::size_t GetMaterialResourceCount() const;
+
+    void SetShadowsEnabled(bool enabled) { m_ShadowsEnabled = enabled; }
+    bool IsShadowsEnabled() const { return m_ShadowsEnabled; }
+
+    void SetEditorPrimitivesEnabled(bool enabled)
+    {
+        m_EditorPrimitivesEnabled = enabled;
+    }
+    bool AreEditorPrimitivesEnabled() const
+    {
+        return m_EditorPrimitivesEnabled;
+    }
+
+    void SetTessellationEnabled(bool enabled)
+    {
+        m_Tessellation.enabled = enabled;
+    }
+    bool IsTessellationEnabled() const
+    {
+        return m_Tessellation.enabled;
+    }
+    void SetTessellationLevel(float level);
+    float GetTessellationLevel() const { return m_Tessellation.level; }
+    void SetDisplacementScale(float scale);
+    float GetDisplacementScale() const
+    {
+        return m_Tessellation.displacementScale;
+    }
+    void SetTessellationWireframe(bool enabled)
+    {
+        m_Tessellation.wireframe = enabled;
+    }
+    bool IsTessellationWireframe() const
+    {
+        return m_Tessellation.wireframe;
+    }
+
+    void SetToneMappingEnabled(bool enabled)
+    {
+        m_PostProcess.toneMappingEnabled = enabled;
+    }
+    bool IsToneMappingEnabled() const
+    {
+        return m_PostProcess.toneMappingEnabled;
+    }
+    void SetExposureCompensation(float exposure);
+    float GetExposureCompensation() const
+    {
+        return m_PostProcess.exposureCompensation;
+    }
+    void SetBloomEnabled(bool enabled) { m_PostProcess.bloomEnabled = enabled; }
+    bool IsBloomEnabled() const { return m_PostProcess.bloomEnabled; }
+    void SetBloomThreshold(float threshold);
+    float GetBloomThreshold() const { return m_PostProcess.bloomThreshold; }
+    void SetBloomIntensity(float intensity);
+    float GetBloomIntensity() const { return m_PostProcess.bloomIntensity; }
+    void SetSsaoEnabled(bool enabled) { m_PostProcess.ssaoEnabled = enabled; }
+    bool IsSsaoEnabled() const { return m_PostProcess.ssaoEnabled; }
+    void SetSsaoRadius(float radius);
+    float GetSsaoRadius() const { return m_PostProcess.ssaoRadius; }
+    void SetSsaoIntensity(float intensity);
+    float GetSsaoIntensity() const { return m_PostProcess.ssaoIntensity; }
+    void SetSsaoBias(float bias);
+    float GetSsaoBias() const { return m_PostProcess.ssaoBias; }
+
+private:
+    void LogMainViewStatsIfChanged(const RenderView& view);
+
+    Mesh m_PresentMesh;
+    Mesh m_SkyboxMesh;
+    Mesh m_GroundMesh;
+
+    // Renderer 唯一拥有场景 GPU 资源；Scene Proxy 只缓存解析后的非 owning 指针。
+    std::vector<std::unique_ptr<Mesh>> m_MeshResources;
+    MaterialResourceStore m_MaterialResources;
+    RenderScene m_RenderScene;
+    CubemapTexture m_Cubemap;
+    RenderPipeline m_RenderPipeline;
+    TessellationSettings m_Tessellation;
+    PostProcessSettings m_PostProcess;
+    StatisticsSnapshot m_StatisticsSnapshot;
+    std::array<std::size_t, 10> m_LastMainViewStats{};
+    bool m_HasMainViewStats = false;
+    bool m_ShadowsEnabled = true;
+    bool m_EditorPrimitivesEnabled = true;
+};

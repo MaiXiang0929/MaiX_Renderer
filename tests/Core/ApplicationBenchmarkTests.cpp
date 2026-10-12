@@ -5,8 +5,8 @@
 #include <string>
 #include <vector>
 
-#include "Core/ApplicationOptions.h"
-#include "Core/InstanceGrid.h"
+#include "Engine/Runtime/Engine/ApplicationOptions.h"
+#include "Engine/Runtime/Scene/InstanceGrid.h"
 
 namespace
 {

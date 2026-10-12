@@ -8,7 +8,7 @@
 
 #include <imgui.h>
 
-#include "Editor/EditorFonts.h"
+#include "Editor/Session/EditorFonts.h"
 
 namespace
 {

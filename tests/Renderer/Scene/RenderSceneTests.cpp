@@ -3,8 +3,8 @@
 #include <cstdlib>
 #include <iostream>
 
-#include "Renderer/Scene/RenderScene.h"
-#include "Renderer/View/RenderView.h"
+#include "Engine/Rendering/Renderer/Scene/RenderScene.h"
+#include "Engine/Rendering/Renderer/View/RenderView.h"
 
 namespace
 {

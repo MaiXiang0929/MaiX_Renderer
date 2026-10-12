@@ -22,7 +22,7 @@ add_compile_options(
 set(PROJECT_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 
 set(SRC_DIR
-    ${PROJECT_ROOT}/src
+    ${PROJECT_ROOT}
 )
 
 set(THIRD_PARTY_DIR
@@ -39,88 +39,88 @@ set(ASSET_DIR
 
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${ASSET_DIR}/scenes/startup.json")
 file(READ "${ASSET_DIR}/scenes/startup.json" STARTUP_SCENE_JSON)
-configure_file(src/Core/StartupSceneEmbedded.h.in generated/StartupSceneEmbedded.h @ONLY)
+configure_file(Engine/Runtime/Scene/StartupSceneEmbedded.h.in generated/StartupSceneEmbedded.h @ONLY)
 
 set(SOURCES
 
     # 程序入口
-    src/main.cpp
+    Editor/EditorApp/Main.cpp
 
     # Core
-    src/Core/Application.cpp
-    src/Core/ApplicationOptions.cpp
-    src/Core/StartupScene.cpp
-    src/Core/Camera.cpp
-    src/Core/InstanceGrid.cpp
-    src/Core/Transform.cpp
+    Editor/EditorApp/Application.cpp
+    Engine/Runtime/Engine/ApplicationOptions.cpp
+    Engine/Runtime/Scene/StartupScene.cpp
+    Engine/Runtime/Component/Camera.cpp
+    Engine/Runtime/Scene/InstanceGrid.cpp
+    Engine/Core/Math/Transform.cpp
 
     # Editor
-    src/Editor/RendererStatisticsPanel.cpp
-    src/Editor/MaterialEditorPanel.cpp
-    src/Editor/AssetImportPanel.cpp
-    src/Editor/EditableLight.cpp
-    src/Editor/EditableModel.cpp
-    src/Editor/EditableModelRenderer.cpp
-    src/Editor/EditorViewportController.cpp
-    src/Editor/EditorWorkspace.cpp
-    src/Editor/EditorFonts.cpp
-    src/Editor/SceneHierarchyPanel.cpp
-    src/Editor/InspectorPanel.cpp
-    src/Editor/ViewportPicking.cpp
+    Editor/Diagnostics/RendererStatisticsPanel.cpp
+    Editor/MaterialEditor/MaterialEditorPanel.cpp
+    Editor/ContentBrowser/AssetImportPanel.cpp
+    Editor/Session/EditableLight.cpp
+    Editor/Session/EditableModel.cpp
+    Editor/Session/EditableModelRenderer.cpp
+    Editor/Viewport/EditorViewportController.cpp
+    Editor/Session/EditorWorkspace.cpp
+    Editor/Session/EditorFonts.cpp
+    Editor/SceneHierarchy/SceneHierarchyPanel.cpp
+    Editor/Inspector/InspectorPanel.cpp
+    Editor/Viewport/ViewportPicking.cpp
 
     # Platform
-    src/Platform/Windows/FileDialog.cpp
+    Engine/Core/Platform/Windows/FileDialog.cpp
 
     # Asset Import
-    src/Assets/Import/ImageLoader.cpp
-    src/Assets/Import/FbxModelImporter.cpp
+    Engine/Asset/Importer/ImageLoader.cpp
+    Engine/Asset/Importer/FbxModelImporter.cpp
 
     # Renderer Core
-    src/Renderer/Core/Renderer.cpp
-    src/Renderer/Core/OpenGLStateCache.cpp
+    Engine/Rendering/Renderer/Core/Renderer.cpp
+    Engine/Rendering/Renderer/Core/OpenGLStateCache.cpp
 
     # Renderer Diagnostics
-    src/Renderer/Diagnostics/GpuDebugScope.cpp
-    src/Renderer/Diagnostics/GpuPassProfiler.cpp
-    src/Renderer/Diagnostics/RenderSubmissionStats.cpp
+    Engine/Rendering/Renderer/Diagnostics/GpuDebugScope.cpp
+    Engine/Rendering/Renderer/Diagnostics/GpuPassProfiler.cpp
+    Engine/Rendering/Renderer/Diagnostics/RenderSubmissionStats.cpp
 
     # Renderer Pipeline
-    src/Renderer/Pipeline/RenderPipeline.cpp
-    src/Renderer/Pipeline/PassResourceContract.cpp
-    src/Renderer/Pipeline/PassResourcesGL.cpp
+    Engine/Rendering/Renderer/Pipeline/RenderPipeline.cpp
+    Engine/Rendering/Renderer/Pipeline/PassResourceContract.cpp
+    Engine/Rendering/Renderer/Pipeline/PassResourcesGL.cpp
 
     # Renderer Scene
-    src/Renderer/Scene/RenderScene.cpp
-    src/Renderer/Scene/PrimitiveSceneProxy.cpp
+    Engine/Rendering/Renderer/Scene/RenderScene.cpp
+    Engine/Rendering/Renderer/Scene/PrimitiveSceneProxy.cpp
 
     # Renderer View
-    src/Renderer/View/Frustum.cpp
-    src/Renderer/View/LightRenderData.cpp
-    src/Renderer/View/RenderBatch.cpp
+    Engine/Rendering/Renderer/View/Frustum.cpp
+    Engine/Rendering/Renderer/View/LightRenderData.cpp
+    Engine/Rendering/Renderer/View/RenderBatch.cpp
 
     # Renderer Passes
-    src/Renderer/Passes/ForwardPass.cpp
-    src/Renderer/Passes/OutlinePass.cpp
-    src/Renderer/Passes/SSAOPass.cpp
-    src/Renderer/Passes/TranslucencyPass.cpp
-    src/Renderer/Passes/EditorPrimitivePass.cpp
-    src/Renderer/Passes/ShadowPass.cpp
-    src/Renderer/Passes/ReflectionPass.cpp
-    src/Renderer/Passes/BloomPass.cpp
-    src/Renderer/Passes/PostProcessPass.cpp
-    src/Renderer/Passes/PresentPass.cpp
+    Engine/Rendering/Passes/ForwardPass.cpp
+    Engine/Rendering/Passes/OutlinePass.cpp
+    Engine/Rendering/Passes/SSAOPass.cpp
+    Engine/Rendering/Passes/TranslucencyPass.cpp
+    Engine/Rendering/Passes/EditorPrimitivePass.cpp
+    Engine/Rendering/Passes/ShadowPass.cpp
+    Engine/Rendering/Passes/ReflectionPass.cpp
+    Engine/Rendering/Passes/BloomPass.cpp
+    Engine/Rendering/Passes/PostProcessPass.cpp
+    Engine/Rendering/Passes/PresentPass.cpp
 
     # Renderer Resources
-    src/Renderer/Resources/Shader.cpp
-    src/Renderer/Resources/Mesh.cpp
-    src/Renderer/Resources/Texture2D.cpp
-    src/Renderer/Resources/Material.cpp
-    src/Renderer/Resources/MaterialInstance.cpp
-    src/Renderer/Resources/MaterialResourceStore.cpp
-    src/Renderer/Resources/CubemapTexture.cpp
-    src/Renderer/Resources/Framebuffer.cpp
-    src/Renderer/Resources/InstanceBuffer.cpp
-    src/Renderer/Resources/ShadowMap.cpp
+    Engine/Rendering/Renderer/Resources/Shader.cpp
+    Engine/Rendering/Renderer/Resources/Mesh.cpp
+    Engine/Rendering/Renderer/Resources/Texture2D.cpp
+    Engine/Rendering/Material/Material.cpp
+    Engine/Rendering/Material/MaterialInstance.cpp
+    Engine/Rendering/Material/MaterialResourceStore.cpp
+    Engine/Rendering/Renderer/Resources/CubemapTexture.cpp
+    Engine/Rendering/Renderer/Resources/Framebuffer.cpp
+    Engine/Rendering/Renderer/Resources/InstanceBuffer.cpp
+    Engine/Rendering/Renderer/Resources/ShadowMap.cpp
 
     # GLAD
     ThirdParty/glad/src/glad.c
@@ -169,10 +169,10 @@ target_include_directories(
     ${SRC_DIR}
 
     # Core
-    ${SRC_DIR}/Core
+    ${PROJECT_ROOT}/Engine/Core
 
     # Editor
-    ${SRC_DIR}/Editor
+    ${PROJECT_ROOT}/Editor
 
     # GLAD
     ${THIRD_PARTY_DIR}/glad/include
@@ -245,6 +245,10 @@ add_custom_command(
     ${ASSET_DIR}
 
     $<TARGET_FILE_DIR:${PROJECT_NAME}>/assets
+
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    ${PROJECT_ROOT}/Shaders
+    $<TARGET_FILE_DIR:${PROJECT_NAME}>/Shaders
 )
 
 # ============================
@@ -259,14 +263,14 @@ source_group(
 )
 
 if(BUILD_TESTING)
-    add_executable(EditorFontsTests tests/Editor/EditorFontsTests.cpp src/Editor/EditorFonts.cpp
+    add_executable(EditorFontsTests tests/Editor/EditorFontsTests.cpp Editor/Session/EditorFonts.cpp
         ThirdParty/imgui/imgui.cpp ThirdParty/imgui/imgui_draw.cpp
         ThirdParty/imgui/imgui_tables.cpp ThirdParty/imgui/imgui_widgets.cpp)
     target_include_directories(EditorFontsTests PRIVATE ${SRC_DIR} ${THIRD_PARTY_DIR}/imgui)
     add_test(NAME EditorFontsTests COMMAND EditorFontsTests "${ASSET_DIR}/fonts/NotoSansSC.ttf")
 
     add_executable(StartupSceneTests tests/Core/StartupSceneTests.cpp
-        src/Core/StartupScene.cpp src/Core/Transform.cpp src/Core/Camera.cpp)
+        Engine/Runtime/Scene/StartupScene.cpp Engine/Core/Math/Transform.cpp Engine/Runtime/Component/Camera.cpp)
     target_include_directories(StartupSceneTests PRIVATE ${SRC_DIR} ${THIRD_PARTY_DIR} "${CMAKE_CURRENT_BINARY_DIR}/generated"
         ${THIRD_PARTY_DIR}/cyCodeBase ${THIRD_PARTY_DIR}/glad/include)
     add_test(NAME StartupSceneTests COMMAND StartupSceneTests)
@@ -274,8 +278,8 @@ if(BUILD_TESTING)
     add_executable(
         FrustumTests
         tests/Renderer/View/FrustumTests.cpp
-        src/Renderer/View/Frustum.cpp
-        src/Renderer/Scene/PrimitiveSceneProxy.cpp
+        Engine/Rendering/Renderer/View/Frustum.cpp
+        Engine/Rendering/Renderer/Scene/PrimitiveSceneProxy.cpp
     )
 
     target_include_directories(
@@ -290,10 +294,10 @@ if(BUILD_TESTING)
     add_executable(
         RenderSceneTests
         tests/Renderer/Scene/RenderSceneTests.cpp
-        src/Renderer/Scene/RenderScene.cpp
-        src/Renderer/Scene/PrimitiveSceneProxy.cpp
-        src/Renderer/View/Frustum.cpp
-        src/Renderer/View/RenderBatch.cpp
+        Engine/Rendering/Renderer/Scene/RenderScene.cpp
+        Engine/Rendering/Renderer/Scene/PrimitiveSceneProxy.cpp
+        Engine/Rendering/Renderer/View/Frustum.cpp
+        Engine/Rendering/Renderer/View/RenderBatch.cpp
     )
 
     target_include_directories(
@@ -308,7 +312,7 @@ if(BUILD_TESTING)
     add_executable(
         LightRenderDataTests
         tests/Renderer/View/LightRenderDataTests.cpp
-        src/Renderer/View/LightRenderData.cpp
+        Engine/Rendering/Renderer/View/LightRenderData.cpp
     )
 
     target_include_directories(
@@ -336,9 +340,9 @@ if(BUILD_TESTING)
     add_executable(
         FramebufferTests
         tests/Renderer/Resources/FramebufferTests.cpp
-        src/Renderer/Resources/Framebuffer.cpp
-        src/Renderer/Pipeline/PassResourceContract.cpp
-        src/Renderer/Pipeline/PassResourcesGL.cpp
+        Engine/Rendering/Renderer/Resources/Framebuffer.cpp
+        Engine/Rendering/Renderer/Pipeline/PassResourceContract.cpp
+        Engine/Rendering/Renderer/Pipeline/PassResourcesGL.cpp
         ThirdParty/glad/src/glad.c
     )
 
@@ -375,8 +379,8 @@ if(BUILD_TESTING)
     add_executable(
         ApplicationBenchmarkTests
         tests/Core/ApplicationBenchmarkTests.cpp
-        src/Core/ApplicationOptions.cpp
-        src/Core/InstanceGrid.cpp
+        Engine/Runtime/Engine/ApplicationOptions.cpp
+        Engine/Runtime/Scene/InstanceGrid.cpp
     )
 
     target_include_directories(
@@ -391,7 +395,7 @@ if(BUILD_TESTING)
     add_executable(
         RenderBatchTests
         tests/Renderer/View/RenderBatchTests.cpp
-        src/Renderer/View/RenderBatch.cpp
+        Engine/Rendering/Renderer/View/RenderBatch.cpp
     )
 
     target_include_directories(
@@ -418,7 +422,7 @@ if(BUILD_TESTING)
 
     # 使用真正的 Renderer 与资源表验证实例依赖和替换，不复制生产实现。
     set(MATERIAL_INSTANCE_TEST_SOURCES ${SOURCES})
-    list(FILTER MATERIAL_INSTANCE_TEST_SOURCES INCLUDE REGEX "^src/Renderer/")
+    list(FILTER MATERIAL_INSTANCE_TEST_SOURCES INCLUDE REGEX "^Engine/Rendering/")
     add_executable(MaterialInstanceTests
         tests/Renderer/Resources/MaterialInstanceTests.cpp
         ${MATERIAL_INSTANCE_TEST_SOURCES}
@@ -437,7 +441,7 @@ if(BUILD_TESTING)
     add_executable(
         RenderPassContractTests
         tests/Renderer/Pipeline/RenderPassContractTests.cpp
-        src/Renderer/Pipeline/PassResourceContract.cpp
+        Engine/Rendering/Renderer/Pipeline/PassResourceContract.cpp
     )
 
     target_include_directories(
@@ -453,7 +457,7 @@ if(BUILD_TESTING)
     add_executable(
         ImageLoaderTests
         tests/Assets/Import/ImageLoaderTests.cpp
-        src/Assets/Import/ImageLoader.cpp
+        Engine/Asset/Importer/ImageLoader.cpp
     )
 
     target_include_directories(
@@ -472,8 +476,8 @@ if(BUILD_TESTING)
     add_executable(
         FbxModelImporterTests
         tests/Assets/Import/FbxModelImporterTests.cpp
-        src/Assets/Import/FbxModelImporter.cpp
-        src/Assets/Import/ImageLoader.cpp
+        Engine/Asset/Importer/FbxModelImporter.cpp
+        Engine/Asset/Importer/ImageLoader.cpp
         ThirdParty/ufbx/ufbx.c
     )
 
@@ -496,7 +500,7 @@ if(BUILD_TESTING)
     add_executable(
         CameraTests
         tests/Core/CameraTests.cpp
-        src/Core/Camera.cpp
+        Engine/Runtime/Component/Camera.cpp
     )
 
     target_include_directories(
@@ -511,11 +515,11 @@ if(BUILD_TESTING)
     add_executable(
         EditorInteractionTests
         tests/Editor/EditorInteractionTests.cpp
-        src/Core/Camera.cpp
-        src/Core/Transform.cpp
-        src/Editor/EditableModel.cpp
-        src/Editor/ViewportPicking.cpp
-        src/Renderer/Scene/PrimitiveSceneProxy.cpp
+        Engine/Runtime/Component/Camera.cpp
+        Engine/Core/Math/Transform.cpp
+        Editor/Session/EditableModel.cpp
+        Editor/Viewport/ViewportPicking.cpp
+        Engine/Rendering/Renderer/Scene/PrimitiveSceneProxy.cpp
     )
 
     target_include_directories(

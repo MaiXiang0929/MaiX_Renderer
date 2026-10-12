@@ -9,7 +9,7 @@
 #include <system_error>
 #include <vector>
 
-#include "Assets/Import/ImageLoader.h"
+#include "Engine/Asset/Importer/ImageLoader.h"
 
 namespace
 {

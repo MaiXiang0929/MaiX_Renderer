@@ -3,14 +3,14 @@
 #include <cstdlib>
 #include <iostream>
 
-#include "Core/Camera.h"
-#include "Core/Transform.h"
-#include "Editor/EditableLight.h"
-#include "Editor/EditableModel.h"
-#include "Editor/EditorSelection.h"
-#include "Editor/EditorMaterialSelection.h"
-#include "Editor/EditorValueConstraints.h"
-#include "Editor/ViewportPicking.h"
+#include "Engine/Runtime/Component/Camera.h"
+#include "Engine/Core/Math/Transform.h"
+#include "Editor/Session/EditableLight.h"
+#include "Editor/Session/EditableModel.h"
+#include "Editor/Session/EditorSelection.h"
+#include "Editor/Session/EditorMaterialSelection.h"
+#include "Editor/Session/EditorValueConstraints.h"
+#include "Editor/Viewport/ViewportPicking.h"
 
 namespace
 {

@@ -1,0 +1,256 @@
+// SPDX-License-Identifier: MIT
+/// @file Material.cpp
+/// @brief Material 类的实现文件
+/// @details 该文件实现了 Material 类的成员函数，用于绑定材质属性和纹理到着色器。
+/// @author MaiX
+/// @date 2026-08-11
+
+
+#include "Engine/Rendering/Material/Material.h"
+
+#include <iostream>
+#include <utility>
+
+#include "Engine/Rendering/Renderer/Resources/Shader.h"
+#include "Engine/Rendering/Renderer/Diagnostics/RenderSubmissionStats.h"
+
+namespace
+{
+const std::shared_ptr<Texture2D>& GetEmptyTexture()
+{
+    static const std::shared_ptr<Texture2D> empty;
+    return empty;
+}
+
+const std::string& GetEmptyString()
+{
+    static const std::string empty;
+    return empty;
+}
+
+const char* GetSlotName(MaterialTextureSlot slot)
+{
+    switch (slot)
+    {
+    case MaterialTextureSlot::BaseColor: return "BaseColor";
+    case MaterialTextureSlot::Normal: return "Normal";
+    case MaterialTextureSlot::OcclusionRoughnessMetallic: return "ORM";
+    case MaterialTextureSlot::Displacement: return "Displacement";
+    case MaterialTextureSlot::LegacySpecular: return "LegacySpecular";
+    case MaterialTextureSlot::FaceShadow: return "FaceShadow";
+    case MaterialTextureSlot::Count: break;
+    }
+    return "Invalid";
+}
+}
+
+void Material::SetName(std::string name)
+{
+    m_Name = std::move(name);
+}
+
+void Material::Bind(Shader& shader, unsigned int firstTextureUnit) const
+{
+    RenderSubmissionStats::Get().RecordMaterialBind(this);
+    shader.SetVec3(
+        "material.baseColor",
+        m_Properties.baseColor.x,
+        m_Properties.baseColor.y,
+        m_Properties.baseColor.z);
+    shader.SetVec3(
+        "material.specularColor",
+        m_Properties.specularColor.x,
+        m_Properties.specularColor.y,
+        m_Properties.specularColor.z);
+    shader.SetFloat("material.shininess", m_Properties.shininess);
+    shader.SetFloat(
+        "material.environmentReflectivity",
+        m_Properties.environmentReflectivity);
+    shader.SetFloat("material.metallic", m_Properties.metallic);
+    shader.SetFloat("material.roughness", m_Properties.roughness);
+    shader.SetFloat("material.ambientOcclusion", m_Properties.ambientOcclusion);
+    shader.SetFloat("material.normalScale", m_Properties.normalScale);
+    shader.SetFloat("material.opacity", m_Properties.opacity);
+    shader.SetInt("material.shadingModel",
+        m_Properties.shadingModel == ShadingModel::Toon ? 1 : 0);
+    shader.SetFloat("material.toonThreshold", m_Properties.toonThreshold);
+    shader.SetFloat("material.toonShadowStrength", m_Properties.toonShadowStrength);
+    shader.SetVec3("material.toonShadowColor", m_Properties.toonShadowColor.x,
+        m_Properties.toonShadowColor.y, m_Properties.toonShadowColor.z);
+    shader.SetFloat("material.rimLightStrength", m_Properties.rimLightStrength);
+    shader.SetVec3("material.rimLightColor", m_Properties.rimLightColor.x,
+        m_Properties.rimLightColor.y, m_Properties.rimLightColor.z);
+    shader.SetInt(
+        "material.faceShadowEnabled",
+        m_Properties.faceShadowEnabled ? 1 : 0);
+    shader.SetFloat(
+        "material.faceShadowSoftness",
+        m_Properties.faceShadowSoftness);
+    shader.SetInt(
+        "material.faceShadowMirrorX",
+        m_Properties.faceShadowMirrorX ? 1 : 0);
+    shader.SetVec3(
+        "faceForwardLocal",
+        m_Properties.faceForwardLocal.x,
+        m_Properties.faceForwardLocal.y,
+        m_Properties.faceForwardLocal.z);
+    shader.SetVec3(
+        "faceRightLocal",
+        m_Properties.faceRightLocal.x,
+        m_Properties.faceRightLocal.y,
+        m_Properties.faceRightLocal.z);
+
+    const unsigned int albedoUnit = firstTextureUnit +
+        GetMaterialTextureUnitOffset(MaterialTextureSlot::BaseColor);
+    const unsigned int packedDataUnit = firstTextureUnit +
+        GetMaterialTextureUnitOffset(
+            MaterialTextureSlot::OcclusionRoughnessMetallic);
+    const unsigned int normalUnit = firstTextureUnit +
+        GetMaterialTextureUnitOffset(MaterialTextureSlot::Normal);
+    const unsigned int displacementUnit = firstTextureUnit +
+        GetMaterialTextureUnitOffset(MaterialTextureSlot::Displacement);
+
+    const auto& albedoMap =
+        m_Textures[ToIndex(MaterialTextureSlot::BaseColor)];
+    const auto& normalMap =
+        m_Textures[ToIndex(MaterialTextureSlot::Normal)];
+    const auto& ormMap = m_Textures[
+        ToIndex(MaterialTextureSlot::OcclusionRoughnessMetallic)];
+    const auto& displacementMap =
+        m_Textures[ToIndex(MaterialTextureSlot::Displacement)];
+    const auto& specularMap =
+        m_Textures[ToIndex(MaterialTextureSlot::LegacySpecular)];
+    const auto& faceShadowMap =
+        m_Textures[ToIndex(MaterialTextureSlot::FaceShadow)];
+
+    shader.SetInt("material.hasAlbedoMap", albedoMap ? 1 : 0);
+    if (albedoMap)
+    {
+        albedoMap->Bind(albedoUnit);
+        shader.SetInt("material.albedoMap", static_cast<int>(albedoUnit));
+    }
+
+    shader.SetInt("material.hasOrmMap", ormMap ? 1 : 0);
+    shader.SetInt(
+        "material.hasSpecularMap", !ormMap && specularMap ? 1 : 0);
+    if (ormMap)
+    {
+        ormMap->Bind(packedDataUnit);
+        shader.SetInt("material.ormMap", static_cast<int>(packedDataUnit));
+    }
+    else if (specularMap)
+    {
+        specularMap->Bind(packedDataUnit);
+        shader.SetInt(
+            "material.specularMap", static_cast<int>(packedDataUnit));
+    }
+
+    shader.SetInt("material.hasNormalMap", normalMap ? 1 : 0);
+    if (normalMap)
+    {
+        normalMap->Bind(normalUnit);
+        shader.SetInt("material.normalMap", static_cast<int>(normalUnit));
+    }
+
+    const unsigned int faceShadowUnit = firstTextureUnit +
+        GetMaterialTextureUnitOffset(MaterialTextureSlot::FaceShadow);
+    shader.SetInt("material.hasFaceShadowMap", faceShadowMap ? 1 : 0);
+    if (faceShadowMap)
+    {
+        faceShadowMap->Bind(faceShadowUnit);
+        shader.SetInt(
+            "material.faceShadowMap",
+            static_cast<int>(faceShadowUnit));
+    }
+
+    BindDisplacement(shader, displacementUnit);
+}
+
+bool Material::SetTexture(
+    MaterialTextureSlot slot,
+    std::shared_ptr<Texture2D> texture,
+    std::string sourceLabel)
+{
+    const std::size_t slotIndex = ToIndex(slot);
+    if (slotIndex >= MaterialTextureSlotCount)
+        return false;
+    if (texture && texture->GetColorSpace() !=
+        GetRequiredMaterialTextureColorSpace(slot))
+    {
+        std::cerr
+            << "[Material] Rejected " << GetSlotName(slot)
+            << " texture with incompatible color space."
+            << std::endl;
+        return false;
+    }
+
+    if (!texture)
+        sourceLabel.clear();
+
+    m_Textures[slotIndex] = std::move(texture);
+    m_TextureSources[slotIndex] = std::move(sourceLabel);
+    return true;
+}
+
+const std::shared_ptr<Texture2D>& Material::GetTexture(
+    MaterialTextureSlot slot) const
+{
+    if (ToIndex(slot) >= MaterialTextureSlotCount)
+        return GetEmptyTexture();
+    return m_Textures[ToIndex(slot)];
+}
+
+const std::string& Material::GetTextureSource(MaterialTextureSlot slot) const
+{
+    if (ToIndex(slot) >= MaterialTextureSlotCount)
+        return GetEmptyString();
+    return m_TextureSources[ToIndex(slot)];
+}
+
+bool Material::ClearTexture(MaterialTextureSlot slot)
+{
+    return SetTexture(slot, nullptr, {});
+}
+
+void Material::SetAlbedoMap(std::shared_ptr<Texture2D> texture)
+{
+    SetTexture(MaterialTextureSlot::BaseColor, std::move(texture));
+}
+
+void Material::SetSpecularMap(std::shared_ptr<Texture2D> texture)
+{
+    SetTexture(MaterialTextureSlot::LegacySpecular, std::move(texture));
+}
+
+void Material::SetNormalMap(std::shared_ptr<Texture2D> texture)
+{
+    SetTexture(MaterialTextureSlot::Normal, std::move(texture));
+}
+
+void Material::SetOcclusionRoughnessMetallicMap(
+    std::shared_ptr<Texture2D> texture)
+{
+    SetTexture(
+        MaterialTextureSlot::OcclusionRoughnessMetallic,
+        std::move(texture));
+}
+
+void Material::SetDisplacementMap(std::shared_ptr<Texture2D> texture)
+{
+    SetTexture(MaterialTextureSlot::Displacement, std::move(texture));
+}
+
+void Material::BindDisplacement(Shader& shader, unsigned int textureUnit) const
+{
+    const auto& displacementMap =
+        m_Textures[ToIndex(MaterialTextureSlot::Displacement)];
+    const int hasDisplacement = displacementMap ? 1 : 0;
+    shader.SetInt("material.hasDisplacementMap", hasDisplacement);
+    shader.SetInt("hasDisplacementMap", hasDisplacement);
+    if (!displacementMap)
+        return;
+
+    displacementMap->Bind(textureUnit);
+    shader.SetInt("material.displacementMap", static_cast<int>(textureUnit));
+    shader.SetInt("displacementMap", static_cast<int>(textureUnit));
+}

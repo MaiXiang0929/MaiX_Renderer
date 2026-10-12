@@ -2,7 +2,7 @@
 #include <cstdlib>
 #include <iostream>
 
-#include "Renderer/Resources/MaterialTypes.h"
+#include "Engine/Rendering/Material/MaterialTypes.h"
 
 namespace
 {
