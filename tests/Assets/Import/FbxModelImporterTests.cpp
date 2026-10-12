@@ -23,11 +23,21 @@ std::filesystem::path MakeTemporaryFbxPath()
 {
     const auto suffix =
         std::chrono::high_resolution_clock::now().time_since_epoch().count();
-    return std::filesystem::temp_directory_path() /
+    const auto directory = std::filesystem::temp_directory_path() /
         (std::wstring(L"MaiX_InvalidFbx_") +
          L"\x4E2D\x6587_" +
-         std::to_wstring(suffix) +
-         L".fbx");
+         std::to_wstring(suffix));
+    // The importer discovers texture candidates beside the model. Isolate the
+    // fixture from unrelated/protected files in the system Temp directory.
+    std::filesystem::create_directory(directory);
+    return directory / "fixture.fbx";
+}
+
+void RemoveTemporaryFbx(const std::filesystem::path& path)
+{
+    std::error_code error;
+    std::filesystem::remove(path, error);
+    std::filesystem::remove(path.parent_path(), error);
 }
 
 void TestMissingFile()
@@ -35,6 +45,7 @@ void TestMissingFile()
     const std::filesystem::path path = MakeTemporaryFbxPath();
     const AssetImport::ModelImportResult result =
         AssetImport::FbxModelImporter::Import(path);
+    RemoveTemporaryFbx(path);
     Require(!result, "A missing FBX should fail to import.");
     Require(result.error.find("Unable to open model file") !=
             std::string::npos,
@@ -53,8 +64,7 @@ void TestInvalidFile()
 
     const AssetImport::ModelImportResult result =
         AssetImport::FbxModelImporter::Import(path);
-    std::error_code removeError;
-    std::filesystem::remove(path, removeError);
+    RemoveTemporaryFbx(path);
 
     Require(!result, "Invalid FBX bytes should fail to import.");
     Require(result.error.find("FBX parse failed") != std::string::npos,
@@ -95,8 +105,7 @@ void TestUnitConversionAndNodeTransforms()
             Require(static_cast<bool>(stream), "Unit fixture must be written completely.");
         }
         const AssetImport::ModelImportResult result = AssetImport::FbxModelImporter::Import(path);
-        std::error_code removeError;
-        std::filesystem::remove(path, removeError);
+        RemoveTemporaryFbx(path);
         if (!result) std::cerr << result.error << std::endl;
         Require(static_cast<bool>(result), "Both meter and centimeter fixtures should import.");
         Require(result.model.sourceUnitMeters.has_value() &&
@@ -113,6 +122,40 @@ void TestUnitConversionAndNodeTransforms()
         Require(result.model.meshes.size() == 1 && result.model.meshes.front().indices.size() == 3,
             "Unit conversion must preserve triangle topology.");
     }
+}
+
+void TestUtf8MaterialAndSectionNames()
+{
+    const auto path = MakeTemporaryFbxPath();
+    {
+        std::ofstream stream(path, std::ios::binary);
+        stream << u8"; FBX 7.4.0 UTF-8 name fixture\n"
+            "FBXHeaderExtension: { FBXVersion: 7400 }\n"
+            "Objects: {\n"
+            "Geometry: 100, \"Geometry::头发_mesh\", \"Mesh\" {\n"
+            "Vertices: *9 { a: 0,0,0,1,0,0,0,1,0 }\n"
+            "PolygonVertexIndex: *3 { a: 0,1,-3 }\n"
+            "LayerElementMaterial: 0 {\n"
+            "MappingInformationType: \"AllSame\"\n"
+            "ReferenceInformationType: \"IndexToDirect\"\n"
+            "Materials: *1 { a: 0 }\n}\n}\n"
+            "Model: 200, \"Model::永夜_头发_mesh\", \"Mesh\" {}\n"
+            "Material: 300, \"Material::头发_材质1+\", \"\" {\n"
+            "Version: 102\nShadingModel: \"phong\"\n}\n}\n"
+            "Connections: {\nC: \"OO\",100,200\nC: \"OO\",300,200\n"
+            "C: \"OO\",200,0\n}\n";
+        Require(static_cast<bool>(stream), "UTF-8 fixture must be written completely.");
+    }
+    const auto result = AssetImport::FbxModelImporter::Import(path);
+    RemoveTemporaryFbx(path);
+    if (!result) std::cerr << result.error << std::endl;
+    Require(static_cast<bool>(result) && result.model.materials.size() == 1 &&
+            result.model.meshes.size() == 1,
+        "UTF-8 named material and section should import.");
+    Require(result.model.materials.front().name == u8"头发_材质1+",
+        "Importer must preserve Chinese material name bytes exactly.");
+    Require(result.model.meshes.front().name == u8"永夜_头发_mesh:头发_材质1+",
+        "Importer must preserve Chinese section names and their material suffix.");
 }
 
 std::filesystem::path GetOptionalIntegrationPath()
@@ -230,6 +273,7 @@ int main()
     TestMissingFile();
     TestInvalidFile();
     TestUnitConversionAndNodeTransforms();
+    TestUtf8MaterialAndSectionNames();
     TestOptionalIntegrationAsset();
 
     std::cout << "FBX model importer tests passed." << std::endl;

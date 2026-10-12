@@ -35,6 +35,7 @@
 #include "Editor/MaterialEditorPanel.h"
 #include "Editor/SceneHierarchyPanel.h"
 #include "Editor/EditorWorkspace.h"
+#include "Editor/EditorFonts.h"
 
 #include "Assets/Geometry/CubeGeometry.h"
 #include "StartupScene.h"
@@ -248,6 +249,12 @@ bool Application::Init() {
         return false;
     }
     m_ImGuiInitialized = true;
+    std::string fontDiagnostic;
+    if (!EditorFonts::Initialize(*ImGui::GetIO().Fonts,
+            "assets/fonts/NotoSansSC.ttf", fontDiagnostic))
+        std::cerr << "[Warning] " << fontDiagnostic << std::endl;
+    else
+        std::cout << "[Editor] Chinese font atlas initialized." << std::endl;
     m_StatisticsPanel = std::make_unique<RendererStatisticsPanel>();
     m_MaterialEditorPanel = std::make_unique<MaterialEditorPanel>();
     m_AssetImportPanel = std::make_unique<AssetImportPanel>();
@@ -256,6 +263,8 @@ bool Application::Init() {
     m_InspectorPanel = std::make_unique<InspectorPanel>();
     m_Workspace = std::make_unique<EditorWorkspace>();
     m_Workspace->AddLog("MaiX Renderer initialized.");
+    if (!fontDiagnostic.empty())
+        m_Workspace->AddLog("[Warning] " + fontDiagnostic);
 
     // 主颜色目标和显示平面都跟随窗口 framebuffer 的像素宽高比。
     const float framebufferAspect =

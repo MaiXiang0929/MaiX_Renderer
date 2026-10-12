@@ -63,6 +63,7 @@ set(SOURCES
     src/Editor/EditableModelRenderer.cpp
     src/Editor/EditorViewportController.cpp
     src/Editor/EditorWorkspace.cpp
+    src/Editor/EditorFonts.cpp
     src/Editor/SceneHierarchyPanel.cpp
     src/Editor/InspectorPanel.cpp
     src/Editor/ViewportPicking.cpp
@@ -258,6 +259,12 @@ source_group(
 )
 
 if(BUILD_TESTING)
+    add_executable(EditorFontsTests tests/Editor/EditorFontsTests.cpp src/Editor/EditorFonts.cpp
+        ThirdParty/imgui/imgui.cpp ThirdParty/imgui/imgui_draw.cpp
+        ThirdParty/imgui/imgui_tables.cpp ThirdParty/imgui/imgui_widgets.cpp)
+    target_include_directories(EditorFontsTests PRIVATE ${SRC_DIR} ${THIRD_PARTY_DIR}/imgui)
+    add_test(NAME EditorFontsTests COMMAND EditorFontsTests "${ASSET_DIR}/fonts/NotoSansSC.ttf")
+
     add_executable(StartupSceneTests tests/Core/StartupSceneTests.cpp
         src/Core/StartupScene.cpp src/Core/Transform.cpp src/Core/Camera.cpp)
     target_include_directories(StartupSceneTests PRIVATE ${SRC_DIR} ${THIRD_PARTY_DIR} "${CMAKE_CURRENT_BINARY_DIR}/generated"
