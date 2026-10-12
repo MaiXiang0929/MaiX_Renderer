@@ -510,3 +510,6 @@ Testing/
 
 !/ThirdParty/glfw/lib-vc2022/glfw3.lib
 /docs
+
+# Tests are retained locally, outside version control.
+/tests/

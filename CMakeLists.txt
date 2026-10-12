@@ -258,6 +258,11 @@ source_group(
     ${SOURCES}
 )
 
+if(BUILD_TESTING AND NOT EXISTS "${PROJECT_ROOT}/tests/Core/StartupSceneTests.cpp")
+    message(STATUS "Local tests directory is absent; skipping test targets.")
+    set(BUILD_TESTING OFF)
+endif()
+
 if(BUILD_TESTING)
     add_executable(EditorFontsTests tests/Editor/EditorFontsTests.cpp src/Editor/EditorFonts.cpp
         ThirdParty/imgui/imgui.cpp ThirdParty/imgui/imgui_draw.cpp
