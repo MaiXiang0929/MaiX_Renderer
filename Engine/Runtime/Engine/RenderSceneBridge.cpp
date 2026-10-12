@@ -46,4 +46,3 @@ void ApplySceneLightTransform(
     }
     renderer.UpdateLight(light.proxy.id, light.proxy);
 }
-

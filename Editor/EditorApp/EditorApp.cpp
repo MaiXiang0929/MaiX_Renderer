@@ -109,7 +109,7 @@ EditorApp::EditorApp(
     m_FaceShadowDemoTexturePath(std::move(faceShadowDemoTexturePath)),
     m_FaceShadowDemoMaterialName(std::move(faceShadowDemoMaterialName))
 {
-    
+
 }
 
 /// @brief 析构函数，自动调用 Shutdown 释放资源
@@ -250,7 +250,7 @@ bool EditorApp::Init() {
 
     std::cout << "OpenGL Version: " << glGetString(GL_VERSION) << std::endl;
     std::cout << "GPU: " << glGetString(GL_RENDERER) << std::endl;
-    std::cout << "Vendor: " << glGetString(GL_VENDOR) << std::endl; 
+    std::cout << "Vendor: " << glGetString(GL_VENDOR) << std::endl;
 
     // OpenGL Capability
     int maxTextureSize = 0;
@@ -1191,7 +1191,7 @@ void EditorApp::Render() {
 }
 /// @brief 关闭应用程序
 void EditorApp::Shutdown() {
-	
+
     if (!m_Initialized) return;
 
     m_StatisticsPanel.reset();

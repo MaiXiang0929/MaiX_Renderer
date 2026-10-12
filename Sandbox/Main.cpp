@@ -92,6 +92,12 @@ void VerifySession()
     scene.mainLightId = light.proxy.id;
     scene.lights.push_back(light);
     ApplySceneLightTransform(scene.lights.back(), *renderer);
+    SceneLight point;
+    point.proxy.type = LightType::Point;
+    point.transform.position = cy::Vec3f(2, 1, 0);
+    point.proxy.id = renderer->AddLight(point.proxy);
+    scene.lights.push_back(point);
+    ApplySceneLightTransform(scene.lights.back(), *renderer);
     scene.camera.transform.position = cy::Vec3f(0, 0, 8);
     scene.modelDiameter = 2 * std::sqrt(3.0f);
     Camera navigation(cy::Vec3f(0.0f), 50);
@@ -101,6 +107,21 @@ void VerifySession()
         "Standalone frame consumed editor camera/overlay state");
     for (int i = 0; i < 3; ++i) engine.Render(frame);
     Require(renderer->GetFinalColorTexture() != 0, "Standalone engine produced no final texture");
+    const auto overlayIndex = static_cast<std::size_t>(RenderPassType::EditorPrimitive);
+    const auto hiddenOverlay = renderer->GetSubmissionSnapshot();
+    Require(!frame.editorPrimitivesEnabled && hiddenOverlay.valid &&
+        hiddenOverlay.passes[overlayIndex].drawCalls == 0,
+        "Standalone rendering enabled editor light overlays");
+    frame = BuildSceneFrame(scene, navigation, 64, 48, true, {false, 0, true});
+    engine.Render(frame);
+    Require(renderer->GetSubmissionSnapshot().passes[overlayIndex].drawCalls > 0,
+        "Editor overlay validation light produced no draw");
+    renderer->SetEditorPrimitivesEnabled(false);
+    frame = BuildSceneFrame(scene, navigation, 64, 48, true, {false, 0, true});
+    engine.Render(frame);
+    Require(!frame.editorPrimitivesEnabled &&
+        renderer->GetSubmissionSnapshot().passes[overlayIndex].drawCalls == 0,
+        "Renderer overlay toggle did not disable editor draws");
     // All scene bindings must go before their parent material and shared mesh.
     DestroySceneModelResources(scene.models.front(), *renderer);
     Require(!renderer->DestroyMesh(mesh) && !renderer->DestroyMaterial(child) &&

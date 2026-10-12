@@ -8,4 +8,3 @@ struct Vertex {
 	cy::Vec2f TexCoord;
 	cy::Vec4f Tangent;
 };
-
