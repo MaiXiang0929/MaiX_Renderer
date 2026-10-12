@@ -161,6 +161,8 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 
 - [x] 2026-10-12 完成 M0 目录迁移与最小职责拆分：先将 128 个源文件及 Shader 移到 Engine/Core、Runtime、Asset、Rendering、顶层 Editor/Shaders，再在新位置建立真实静态库依赖。EditorApp 保留输入、导航相机与 UI；WindowContext 持有 GLFW/GL Context；EngineSession 持有 CPU 场景状态与 Renderer；SceneFrameBuilder 准备多视图矩阵，RenderSceneBridge 同步变换并按 Primitive→Mesh→实例/父材质顺序清理。CPU Vertex 和包围体数学不再依赖 GPU Mesh。Present 经最小 RHICommandList 转入 OpenGL，其他资源/Pass 的完整 RHI 迁移留待 M1。Sandbox 不链接 ImGui/ImGuizmo。配置、构建、19 项测试及根目录/可执行目录默认、Material Lab、Material Instance Lab、透明和 256 实例启动/正常退出通过，真实合成像素与生命周期检查通过；视觉与交互待用户验收。docs 的 16 个远程文件已在 5852803 从 main 删除，本地保留并忽略，不清除 Git 历史。
 
+- [x] M0 独立审查的两项问题已修复：资源按实际配置的可执行目录部署，Ninja Multi-Config Debug 的独立运行检查通过；帧级与 Renderer 级编辑器叠加层开关取逻辑与，Sandbox 用点光源验证关闭时零叠加 Draw、开启时存在 Draw。补充检查先复现失败，再验证修复，全套仍为 19 项通过。视觉与交互待用户验收。
+
 ### 部分完成
 
 - [ ] CMake 项目与可执行文件命名为 `MaiX_Renderer`，编辑器主窗口标题为 `MaiX Engine`；已接入 ImGui Docking 默认布局，左下 Console 与 Content Browser 共用标签区，右侧 Scene 与 Inspector 并排；更名后重新配置、构建、启动与 14 项测试通过；最终画面改为 Viewport 内的 Present 纹理，拾取与 Gizmo 改用视口矩形；布局、输入和画面效果待用户视觉验收，见 `docs/editor/workflows.md`

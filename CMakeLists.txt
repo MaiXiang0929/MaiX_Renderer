@@ -1,4 +1,5 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.23)
+cmake_policy(SET CMP0112 NEW)
 project(MaiX_Renderer LANGUAGES C CXX)
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
     message(FATAL_ERROR "Use an out-of-source build directory, such as the windows-ninja-debug preset.")
@@ -126,11 +127,12 @@ target_link_options(MaiX_Renderer PRIVATE $<$<CONFIG:Debug>:LINKER:/NODEFAULTLIB
 # Deploy even when only a Shader/scene/font changes and the executable is up to date.
 set(MAIX_RUNTIME_DIR "${CMAKE_CURRENT_BINARY_DIR}")
 set_target_properties(MaiX_Renderer PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${MAIX_RUNTIME_DIR}")
+set(MAIX_DEPLOY_DIR "$<TARGET_FILE_DIR:MaiX_Renderer>")
 add_custom_target(MaiXEditorAssets ALL
-    COMMAND ${CMAKE_COMMAND} -E remove_directory ${MAIX_RUNTIME_DIR}/assets
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${ASSET_DIR} ${MAIX_RUNTIME_DIR}/assets
-    COMMAND ${CMAKE_COMMAND} -E remove_directory ${MAIX_RUNTIME_DIR}/Shaders
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${PROJECT_ROOT}/Shaders ${MAIX_RUNTIME_DIR}/Shaders)
+    COMMAND ${CMAKE_COMMAND} -E remove_directory ${MAIX_DEPLOY_DIR}/assets
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${ASSET_DIR} ${MAIX_DEPLOY_DIR}/assets
+    COMMAND ${CMAKE_COMMAND} -E remove_directory ${MAIX_DEPLOY_DIR}/Shaders
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${PROJECT_ROOT}/Shaders ${MAIX_DEPLOY_DIR}/Shaders)
 add_dependencies(MaiX_Renderer MaiXEditorAssets)
 
 add_executable(MaiX_Sandbox Sandbox/Main.cpp)
@@ -141,7 +143,7 @@ add_dependencies(MaiX_Sandbox MaiXEditorAssets)
 
 if(BUILD_TESTING)
     add_test(NAME EngineRuntimeSmoke COMMAND MaiX_Sandbox)
-    set_tests_properties(EngineRuntimeSmoke PROPERTIES WORKING_DIRECTORY "${PROJECT_ROOT}")
+    set_tests_properties(EngineRuntimeSmoke PROPERTIES WORKING_DIRECTORY "$<TARGET_FILE_DIR:MaiX_Renderer>")
     add_executable(EditorFontsTests tests/Editor/EditorFontsTests.cpp Editor/Session/EditorFonts.cpp
         ThirdParty/imgui/imgui.cpp ThirdParty/imgui/imgui_draw.cpp
         ThirdParty/imgui/imgui_tables.cpp ThirdParty/imgui/imgui_widgets.cpp)

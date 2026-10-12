@@ -12,4 +12,3 @@ struct PrimitiveBounds
 PrimitiveBounds TransformBounds(
     const PrimitiveBounds& localBounds,
     const cy::Matrix4f& localToWorld);
-

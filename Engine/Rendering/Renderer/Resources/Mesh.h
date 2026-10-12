@@ -49,7 +49,7 @@ public:
     int GetVertexCount() const;
 
     int GetIndexCount() const;
- 
+
 
 private:
 
