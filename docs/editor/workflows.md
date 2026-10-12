@@ -51,6 +51,24 @@ Inspector 与 Material Editor 共享 `EditorMaterialSelection`。切换模型时
 
 `Create Instance`（创建实例）对选中模型中所有使用当前材质的分段统一替换，而非只替换列表中的单个分段。`Use Parent Material`（使用父材质）恢复父绑定；`Edit Parent`（编辑父材质）切换到父材质。纹理替换按槽位颜色空间创建，失败不提交新绑定。
 
+## 中文资产名称显示（2026-10-11）
+
+原问题发生在 UI 字形阶段：FBX 名称以 UTF-8 传入场景分段和材质快照，Inspector 直接提交给 ImGui；默认字体缺少中文，显示时使用问号回退。渲染材质和网格句柄不由显示名称决定。
+
+实现入口为 [EditorFonts](../../src/Editor/EditorFonts.cpp) 与 `Application::Init()`。应用在 ImGui 后端初始化成功后、首帧之前读取 `assets/fonts/NotoSansSC.ttf`，检查已打包字体的大小和 FNV-1a 摘要，再合并基础汉字、扩展 A、中文/全角及相关标点。保留默认 13 像素英文字体，英文宽度不改变；范围数组具有静态生命周期，临时读取缓冲复制到 ImGui Atlas 自有数据后释放。缺失、读取失败、不完整或内容变化时建立默认图集，标准错误与 Console 显示回退原因。
+
+CPU 只在初始化时构建图集，GPU 在现有 UI 绘制阶段采样图集，不修改场景光照、后处理或材质 Shader。测试图集为 2048×2048、28,309 个字形；当前 ImGui OpenGL 后端按 RGBA 上传，对应约 16 MiB GPU 纹理，字体文件约 17.8 MB。后端关闭时释放 GPU 纹理，随后 `DestroyContext()` 释放字体数据。字体范围不覆盖 BMP 之外的扩展汉字，不提供运行时字体切换。
+
+字体来源、固定提交、SHA-256 及许可证见 [字体说明](../../assets/fonts/README.md)。现有 CMake 资产复制覆盖字体、说明和 OFL；继续沿用 `assets/` 相对路径约定，已检查从仓库根目录和可执行目录启动。
+
+实际参考源码：[Canavar ImGuiWidget.cpp](https://github.com/berkbavas/CanavarGraphicsEngine/blob/230b44d4feb3592406f78f6aed47ea54cbdb93bd/Canavar/Engine/Source/Canavar/Engine/Util/ImGuiWidget.cpp#L76)（提交 `230b44d4feb3592406f78f6aed47ea54cbdb93bd`）只用于核对 UI 初始化边界，该文件没有中文配置；[ImGui imgui_draw.cpp](https://github.com/ocornut/imgui/blob/f5befd2d29e66809cd1110a152e375a7f1981f06/imgui_draw.cpp)（v1.91.9b，提交 `f5befd2d29e66809cd1110a152e375a7f1981f06`）用于核对范围、缺字回退、MergeMode 及数据复制所有权。本项目直接适配现有 GLFW/OpenGL 后端，不引入 Qt 或新的字体系统。
+
+[EditorFontsTests](../../tests/Editor/EditorFontsTests.cpp) 使用 `FindGlyphNoFallback()` 检查简体、繁体及全角标点实际字形、英文字宽、中文文件路径，以及缺失、4 KiB 真字体截断和同尺寸内容损坏的回退。[FbxModelImporterTests](../../tests/Assets/Import/FbxModelImporterTests.cpp) 检查中文材质和分段名称字节完整性；临时 FBX 放在独立目录，避免纹理候选扫描受到系统 Temp 内受保护目录影响。
+
+验证结果：Debug 构建及 17 项测试通过；默认场景分别从仓库根目录/可执行目录启动，另检查 `--material-lab` 和 `--material-instance-lab`，字体和渲染管线初始化通过，无明显初始化、Shader 编译或链接错误。用户提供的 `SK_Evernight.fbx` 实际导入为 33 材质/33 分段，材质名为 `M_Evernight_Face` 等英文名称，分段名包含 `星穹铁道—长夜月2_mesh`；264 次非 ASCII 字符出现均有实际字形，无无效 UTF-8 或字面问号。此结果验证数据与字体覆盖，不代替视觉验收。
+
+验收步骤：从仓库根目录启动 `out/build/windows-ninja-debug/MaiX_Renderer.exe`，通过已有导入入口选择 Evernight FBX；在 Scene 选中模型，检查 Inspector 中材质及分段名称，点击材质检查 Material Editor 名称和选择同步；观察中文基线、标点、中英文混排及窄栏可读性。**显示效果与交互待用户验收。**
+
 ## 编辑器与场景叠加的边界
 
 灯光图标和聚光锥由独立 GPU 场景叠加阶段绘制，变换工具由界面绘制。前者不受曝光/光晕影响并且不测试场景深度；后者依赖界面视口矩形。统计面板消费只读快照，展示场景数量、资源数量、提交统计与 GPU 时间。

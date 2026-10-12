@@ -155,6 +155,10 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 
 - [x] 2026-10-03 完成默认启动场景：外部 JSON 优先、由同一文件生成的内嵌回退；默认 Cube 边长 2 米、中心原点、Scale=1，默认 PBR 无贴图；仅一盏方向光，Rotation 驱动方向，单张正交阴影贴图；独立场景 Camera 接通选择、Inspector、移动/旋转、预览与视图切换，编辑器导航不改变场景相机；默认反射地面关闭，显式测试场景保留。移除旧默认模型及其贴图依赖。构建、16 项测试和六种场景启动通过，画面与交互待用户验收，见 `docs/editor/startup-scene.md`。
 
+- [x] 2026-10-11 完成编辑器中文名称显示修复：随 assets 部署 Noto Sans SC TTF 与 OFL，在首帧前合并中文和相关标点至默认 ImGui 字体；保留英文字符宽度，缺失、截断或完整性检查失败时回退并输出 Console/标准错误诊断。字体数据由 ImGui Atlas 持有，GPU 图集沿用现有 OpenGL 后端生命周期。构建、17 项测试、仓库根目录/可执行目录默认启动及 Material Lab/Material Instance Lab 启动通过；实际 SK_Evernight FBX 的 33 材质/33 分段导入及名称字形检查通过，无无效 UTF-8、字面问号或缺失字形。修正 FBX 测试临时目录隔离，避免扫描系统 Temp 中无权限的邻接文件。中文显示与材质选择交互待用户验收，见 `docs/editor/workflows.md`。
+
+- [x] 2026-10-11 完成项目能力核对及非必要产物清理：删除旧构建、临时诊断目录和可重建 Visual Studio 索引/预编译缓存，共约 2.90 GiB；保留当前 Ninja Debug 构建、源码、资产、完整第三方依赖、RenderDoc 捕获、本地配置及已有未提交修改，清理前后 22 组内容摘要一致。重新配置、构建、17 项测试及默认场景启动通过，无明显初始化、Shader 编译或链接错误；画面与交互待用户验收，见 `docs/project-status-and-cleanup.md`。
+
 ### 部分完成
 
 - [ ] CMake 项目与可执行文件命名为 `MaiX_Renderer`，编辑器主窗口标题为 `MaiX Engine`；已接入 ImGui Docking 默认布局，左下 Console 与 Content Browser 共用标签区，右侧 Scene 与 Inspector 并排；更名后重新配置、构建、启动与 14 项测试通过；最终画面改为 Viewport 内的 Present 纹理，拾取与 Gizmo 改用视口矩形；布局、输入和画面效果待用户视觉验收，见 `docs/editor/workflows.md`

@@ -8,6 +8,7 @@
 
 | 主题 | 说明 |
 | --- | --- |
+| [当前能力与文件清理](project-status-and-cleanup.md) | 2026-10-11 源码功能核对、实现边界、清理范围及验证结果 |
 | [架构与代码思路](architecture.md) | 初始化、每帧执行、所有权、模块价值及维护边界 |
 | [场景、视图、裁剪与排序](rendering/scene-and-views.md) | 图元代理、多视图、包围球数学、队列与批次 |
 | [管线与资源生命周期](rendering/pipeline-and-resources.md) | 十阶段、资源契约、附件保留、尺寸重建及失败帧 |
