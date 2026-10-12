@@ -4,7 +4,7 @@ MaiX_Renderer 当前是一个基于 C++17 与 OpenGL 4.0 Core Profile 的实时�
 
 **技术栈：** C++17 · OpenGL 4.0 · GLSL · CMake · Dear ImGui · ImGuizmo
 
-[核心能力](#核心能力) · [渲染架构](#渲染架构) · [快速开始](#快速开始) · [编辑器操作](#编辑器操作) · [延伸文档](#延伸文档)
+[核心能力](#核心能力) · [渲染架构](#渲染架构) · [快速开始](#快速开始) · [编辑器操作](#编辑器操作)
 
 ## 核心能力
 
@@ -36,8 +36,10 @@ MaiX_Renderer 当前是一个基于 C++17 与 OpenGL 4.0 Core Profile 的实时�
 ## 渲染架构
 
 ```text
-Application（输入、相机、可编辑场景状态）
-    │ 提交 RenderFrameData
+EditorApp（输入、编辑器相机与面板） / Sandbox（独立验证宿主）
+    ▼
+EngineSession（场景状态与 Renderer 生命周期）
+    │ SceneFrameBuilder 准备 RenderFrameData
     ▼
 Renderer（GPU 资源所有者）
     ├─ RenderScene：Primitive / Light Scene Proxy
@@ -50,9 +52,9 @@ Renderer（GPU 资源所有者）
 OpenGL GPU → 最终纹理 → 编辑器 Viewport
 ```
 
-每帧由 `Application` 更新相机、模型 Transform 和灯光，`RenderScene::BuildRenderView()` 生成各视图的可见项。CPU 负责裁剪、排序、矩阵与资源绑定准备；GPU 执行顶点变换、光栅化、深度与混合测试、纹理采样、光照和像素输出。各 Pass 依次消费场景视图与前序 Pass 生成的纹理资源。
+每帧由 EditorApp 收集输入与编辑操作，EngineSession 持有场景数据，SceneFrameBuilder 准备多视图帧数据，`RenderScene::BuildRenderView()` 生成各视图的可见项。CPU 负责裁剪、排序、矩阵与资源绑定准备；GPU 执行顶点变换、光栅化、深度与混合测试、纹理采样、光照和像素输出。各 Pass 依次消费场景视图与前序 Pass 生成的纹理资源。
 
-固定管线通过显式资源契约声明各 Pass 的输入、输出与附件清空/保留行为；执行前校验本帧资源、尺寸和格式，输出发布后才允许后续 Pass 消费。Framebuffer 仍由各 Pass 管理，不额外复制主场景颜色。详见[Pass 资源契约](docs/rendering/pipeline-and-resources.md)。
+固定管线通过显式资源契约声明各 Pass 的输入、输出与附件清空/保留行为；执行前校验本帧资源、尺寸和格式，输出发布后才允许后续 Pass 消费。Framebuffer 仍由各 Pass 管理，不额外复制主场景颜色。Present 的纹理绑定与绘制通过最小 RHICommandList 转入 OpenGL 后端，其余资源与 Pass 的完整 RHI 迁移留待 Phase 1。
 
 ## 快速开始
 
@@ -75,9 +77,9 @@ cmake --build --preset windows-ninja-debug
 .\out\build\windows-ninja-debug\MaiX_Renderer.exe
 ```
 
-无参数启动会载入 Cube、Directional Light、Camera：1 单位=1 米，正方体边长 2 米，中心位于原点，默认材质不绑定贴图。启动数据、内嵌回退及相机操作见 [启动场景](docs/editor/startup-scene.md)。
+无参数启动会载入 Cube、Directional Light、Camera：1 单位=1 米，正方体边长 2 米，中心位于原点，默认材质不绑定贴图。启动场景 JSON 位于 assets/scenes/startup.json，加载失败时使用由同一文件生成的内嵌回退。
 
-构建产物位于 `out/build/windows-ninja-debug/`；构建时会将最新的 `assets/` 复制到可执行文件目录。
+构建产物位于 `out/build/windows-ninja-debug/`；构建时部署最新的 `assets/` 和 `Shaders/`，支持从仓库根目录或可执行文件目录启动。
 
 ## 编辑器操作
 
@@ -100,49 +102,46 @@ cmake --build --preset windows-ninja-debug
 | `F6` | 重新加载 GLSL Shader |
 | `Esc` | 退出程序 |
 
-Material Editor 默认跟随所选模型，显示所属模型名称和材质列表。`All materials (debug)` 可查看全部场景材质；点击 Inspector 中的材质会返回模型范围。删除正在编辑的模型后会清理材质选择。详见[模型与材质编辑联动](docs/editor/workflows.md)。
+Material Editor 默认跟随所选模型，显示所属模型名称和材质列表。`All materials (debug)` 可查看全部场景材质；点击 Inspector 中的材质会返回模型范围。删除正在编辑的模型后会清理材质选择。
 
-基础材质可通过 `Create Instance` 创建并绑定到当前模型分段。实例支持参数 Override、纹理继承/替换/禁用、重置覆盖和 `Edit Parent`；`Use Parent Material` 恢复基础材质。使用 `--material-instance-lab` 启动父材质与两个实例的共享 Mesh 验收场景，详见[Material Instance](docs/rendering/material-instances.md)。
+基础材质可通过 `Create Instance` 创建并绑定到当前模型分段。实例支持参数 Override、纹理继承/替换/禁用、重置覆盖和 `Edit Parent`；`Use Parent Material` 恢复基础材质。使用 `--material-instance-lab` 启动父材质与两个实例的共享 Mesh 验收场景。
 
 ## 项目结构
 
 ```text
-src/
-├─ Assets/              FBX 与图片导入
-├─ Core/                Application、Camera、Input、Frame 数据
-├─ Editor/              ImGui 面板、拾取与 Gizmo
-├─ Platform/            平台相关接口
-└─ Renderer/
-   ├─ Core/             Renderer 入口与 GPU 资源所有权
-   ├─ Diagnostics/      GPU Timer、Debug Group 与提交统计
-   ├─ Pipeline/         RenderPipeline、Pass 契约与设置
-   ├─ Passes/           阴影、前向、NPR、后处理与显示
-   ├─ Resources/        Mesh、Material、Shader、Texture、Framebuffer
-   ├─ Scene/            RenderScene 与 Scene Proxy
-   └─ View/             RenderView、RenderItem、Batch、Frustum
-
-assets/shaders/          按 PBR、NPR、阴影、后处理等用途组织的 GLSL
-docs/                    各子系统的数据流、设计与验证记录
-tests/                   数学、导入器、资源与交互测试
-ThirdParty/              项目使用的第三方依赖
+Engine/
+├─ Core/                 CPU 数学、平台窗口与文件对话框
+├─ Runtime/
+│  ├─ Component/         现有 Camera；完整组件体系留待 Phase 2
+│  ├─ Scene/             CPU 模型、灯光、场景相机、启动数据
+│  └─ Engine/            EngineSession、SceneState、RenderSceneBridge、SceneFrameBuilder
+├─ Asset/
+│  ├─ Geometry/          CPU Vertex 与程序化几何
+│  └─ Importer/          FBX/Image CPU 解析
+└─ Rendering/
+   ├─ RHI/OpenGL/        首个即时 Present 命令入口
+   ├─ Renderer/          Core、Scene、View、Pipeline、Resources、Diagnostics
+   ├─ Material/          Material、Instance 与有效材质解析
+   └─ Passes/            已有渲染算法
+Editor/                  EditorApp、Viewport、场景/属性/材质/导入面板与 UI 会话
+Sandbox/                 不链接 ImGui 的引擎/真实 OpenGL 验证宿主
+Shaders/                 按 PBR、NPR、阴影、后处理等用途组织的 GLSL
+assets/                  字体、图片、默认启动场景等非 Shader 资源
+tests/                   数学、资产、渲染、交互和架构检查
+ThirdParty/              第三方依赖
+docs/                    仅本地保留，已取消 Git 跟踪
 ```
 
-## 延伸文档
+## 验证与阶段边界
 
-完整目录与阅读顺序见[实现文档导航](docs/README.md)。文档说明主要功能的责任、数据流、算法、资源生命周期与当前限制。
+```powershell
+ctest --test-dir out/build/windows-ninja-debug --output-on-failure
+.\out\build\windows-ninja-debug\MaiX_Sandbox.exe
+```
 
-| 主题 | 文档 |
-| --- | --- |
-| 总体架构与代码思路 | [架构分析](docs/architecture.md) |
-| 场景与多视图 | [裁剪、排序与批次](docs/rendering/scene-and-views.md) |
-| 材质与纹理 | [基于物理的着色](docs/rendering/materials-and-pbr.md) · [材质实例](docs/rendering/material-instances.md) |
-| 灯光与阴影 | [多灯光与阴影贴图](docs/rendering/lighting-and-shadows.md) |
-| 反射与透明 | [平面反射与透明渲染](docs/rendering/reflection-and-translucency.md) |
-| 卡通表现 | [卡通、轮廓与面部阴影](docs/rendering/npr.md) |
-| 管线与目标 | [资源契约与生命周期](docs/rendering/pipeline-and-resources.md) |
-| 后处理 | [高动态范围、遮蔽、光晕与曝光](docs/rendering/postprocessing.md) |
-| 资产与编辑器 | [模型导入](docs/assets/model-import.md) · [编辑器工作流](docs/editor/workflows.md) |
-| 性能与验证 | [实例绘制与诊断](docs/diagnostics/profiling-and-instancing.md) · [历史基准](docs/diagnostics/benchmarks.md) · [文档重整记录](docs/documentation-review.md) |
+Sandbox 使用隐藏窗口验证真实 OpenGL 像素、共享资源释放与引擎生命周期，不链接 ImGui/ImGuizmo。M0 已整理模块归属并拆出平台、引擎和编辑器职责；当前固定管线、资源句柄和效果保留。SceneState 暂时保留 CPU 渲染绑定契约，不等同于完整 World/Actor/Component；RHI 仅接通 Present 命令，完整资源抽象在 M1，Render Graph 在 M4。
+
+本地 docs 保留设计、实现说明与历史性能记录；它不随 Git 克隆或同步。构建和测试通过不代表画面与交互已验收，视觉效果由用户确认。
 
 ## 许可证与资产署名
 

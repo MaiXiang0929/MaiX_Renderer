@@ -4,9 +4,9 @@
 #include <iostream>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
-#include "Renderer/Core/Renderer.h"
-#include "Renderer/View/RenderView.h"
-#include "Renderer/View/RenderBatch.h"
+#include "Engine/Rendering/Renderer/Core/Renderer.h"
+#include "Engine/Rendering/Renderer/View/RenderView.h"
+#include "Engine/Rendering/Renderer/View/RenderBatch.h"
 
 namespace
 {

@@ -4,8 +4,8 @@
 #include <iostream>
 #include <limits>
 
-#include "Core/Camera.h"
-#include "Core/CameraClipRange.h"
+#include "Engine/Runtime/Component/Camera.h"
+#include "Engine/Core/Math/CameraClipRange.h"
 
 namespace
 {

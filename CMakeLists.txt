@@ -1,272 +1,156 @@
 cmake_minimum_required(VERSION 3.15)
-
-project(MaiX_Renderer)
-
+project(MaiX_Renderer LANGUAGES C CXX)
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
+    message(FATAL_ERROR "Use an out-of-source build directory, such as the windows-ninja-debug preset.")
+endif()
 include(CTest)
-
-# ============================
-# C++ 标准
-# ============================
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-
-# MSVC 使用 UTF-8 编码
-add_compile_options(
-    "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
-)
-
-# ============================
-# 目录定义
-# ============================
+add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
 set(PROJECT_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
-
-set(SRC_DIR
-    ${PROJECT_ROOT}/src
-)
-
-set(THIRD_PARTY_DIR
-    ${PROJECT_ROOT}/ThirdParty
-)
-
-set(ASSET_DIR
-    ${PROJECT_ROOT}/assets
-)
-
-# ============================
-# Source Files
-# ============================
-
+set(SRC_DIR ${PROJECT_ROOT})
+set(THIRD_PARTY_DIR ${PROJECT_ROOT}/ThirdParty)
+set(ASSET_DIR ${PROJECT_ROOT}/assets)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${ASSET_DIR}/scenes/startup.json")
 file(READ "${ASSET_DIR}/scenes/startup.json" STARTUP_SCENE_JSON)
-configure_file(src/Core/StartupSceneEmbedded.h.in generated/StartupSceneEmbedded.h @ONLY)
+configure_file(Engine/Runtime/Scene/StartupSceneEmbedded.h.in generated/StartupSceneEmbedded.h @ONLY)
 
-set(SOURCES
+add_library(MaiXHeaders INTERFACE)
+target_include_directories(MaiXHeaders INTERFACE ${PROJECT_ROOT}
+    ${THIRD_PARTY_DIR} ${THIRD_PARTY_DIR}/cyCodeBase
+    "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
-    # 程序入口
-    src/main.cpp
+add_library(MaiXGL STATIC ThirdParty/glad/src/glad.c)
+target_include_directories(MaiXGL PUBLIC ${THIRD_PARTY_DIR}/glad/include)
+target_link_libraries(MaiXGL PUBLIC opengl32.lib)
+add_library(MaiXPNG STATIC ThirdParty/lodepng/lodepng.cpp)
+target_include_directories(MaiXPNG PUBLIC ${THIRD_PARTY_DIR}/lodepng)
 
-    # Core
-    src/Core/Application.cpp
-    src/Core/ApplicationOptions.cpp
-    src/Core/StartupScene.cpp
-    src/Core/Camera.cpp
-    src/Core/InstanceGrid.cpp
-    src/Core/Transform.cpp
+add_library(MaiXCore STATIC Engine/Core/Math/Transform.cpp Engine/Core/Math/Bounds.cpp)
+target_link_libraries(MaiXCore PUBLIC MaiXHeaders)
 
-    # Editor
-    src/Editor/RendererStatisticsPanel.cpp
-    src/Editor/MaterialEditorPanel.cpp
-    src/Editor/AssetImportPanel.cpp
-    src/Editor/EditableLight.cpp
-    src/Editor/EditableModel.cpp
-    src/Editor/EditableModelRenderer.cpp
-    src/Editor/EditorViewportController.cpp
-    src/Editor/EditorWorkspace.cpp
-    src/Editor/EditorFonts.cpp
-    src/Editor/SceneHierarchyPanel.cpp
-    src/Editor/InspectorPanel.cpp
-    src/Editor/ViewportPicking.cpp
+add_library(MaiXPlatform STATIC Engine/Core/Platform/Windows/FileDialog.cpp Engine/Core/Platform/WindowContext.cpp)
+target_include_directories(MaiXPlatform PUBLIC ${THIRD_PARTY_DIR}/glfw/include)
+target_link_directories(MaiXPlatform PUBLIC ${THIRD_PARTY_DIR}/glfw/lib-vc2022)
+target_link_libraries(MaiXPlatform PUBLIC MaiXCore MaiXGL glfw3.lib PRIVATE ole32.lib shell32.lib)
 
-    # Platform
-    src/Platform/Windows/FileDialog.cpp
+add_library(MaiXAsset STATIC Engine/Asset/Importer/ImageLoader.cpp
+    Engine/Asset/Importer/FbxModelImporter.cpp ThirdParty/ufbx/ufbx.c)
+target_include_directories(MaiXAsset PRIVATE ${THIRD_PARTY_DIR}/stb ${THIRD_PARTY_DIR}/ufbx)
+target_compile_options(MaiXAsset PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
+target_link_libraries(MaiXAsset PUBLIC MaiXCore)
 
-    # Asset Import
-    src/Assets/Import/ImageLoader.cpp
-    src/Assets/Import/FbxModelImporter.cpp
+# Transitional CPU records keep value-only proxy/handle contracts, not Renderer implementation.
+add_library(MaiXRuntime STATIC Engine/Runtime/Component/Camera.cpp
+    Engine/Runtime/Scene/StartupScene.cpp Engine/Runtime/Scene/InstanceGrid.cpp
+    Engine/Runtime/Scene/SceneModel.cpp Engine/Runtime/Scene/SceneLight.cpp
+    Engine/Runtime/Engine/ApplicationOptions.cpp)
+target_link_libraries(MaiXRuntime PUBLIC MaiXCore)
 
-    # Renderer Core
-    src/Renderer/Core/Renderer.cpp
-    src/Renderer/Core/OpenGLStateCache.cpp
+# Shared diagnostics are below both command execution and renderer orchestration.
+add_library(MaiXRenderSupport STATIC
+    Engine/Rendering/Renderer/Diagnostics/RenderSubmissionStats.cpp
+    Engine/Rendering/Renderer/Core/OpenGLStateCache.cpp)
+target_link_libraries(MaiXRenderSupport PUBLIC MaiXCore MaiXGL)
+add_library(MaiXRHI STATIC Engine/Rendering/RHI/OpenGL/OpenGLCommandList.cpp)
+target_link_libraries(MaiXRHI PUBLIC MaiXRenderSupport)
 
-    # Renderer Diagnostics
-    src/Renderer/Diagnostics/GpuDebugScope.cpp
-    src/Renderer/Diagnostics/GpuPassProfiler.cpp
-    src/Renderer/Diagnostics/RenderSubmissionStats.cpp
-
-    # Renderer Pipeline
-    src/Renderer/Pipeline/RenderPipeline.cpp
-    src/Renderer/Pipeline/PassResourceContract.cpp
-    src/Renderer/Pipeline/PassResourcesGL.cpp
-
-    # Renderer Scene
-    src/Renderer/Scene/RenderScene.cpp
-    src/Renderer/Scene/PrimitiveSceneProxy.cpp
-
-    # Renderer View
-    src/Renderer/View/Frustum.cpp
-    src/Renderer/View/LightRenderData.cpp
-    src/Renderer/View/RenderBatch.cpp
-
-    # Renderer Passes
-    src/Renderer/Passes/ForwardPass.cpp
-    src/Renderer/Passes/OutlinePass.cpp
-    src/Renderer/Passes/SSAOPass.cpp
-    src/Renderer/Passes/TranslucencyPass.cpp
-    src/Renderer/Passes/EditorPrimitivePass.cpp
-    src/Renderer/Passes/ShadowPass.cpp
-    src/Renderer/Passes/ReflectionPass.cpp
-    src/Renderer/Passes/BloomPass.cpp
-    src/Renderer/Passes/PostProcessPass.cpp
-    src/Renderer/Passes/PresentPass.cpp
-
-    # Renderer Resources
-    src/Renderer/Resources/Shader.cpp
-    src/Renderer/Resources/Mesh.cpp
-    src/Renderer/Resources/Texture2D.cpp
-    src/Renderer/Resources/Material.cpp
-    src/Renderer/Resources/MaterialInstance.cpp
-    src/Renderer/Resources/MaterialResourceStore.cpp
-    src/Renderer/Resources/CubemapTexture.cpp
-    src/Renderer/Resources/Framebuffer.cpp
-    src/Renderer/Resources/InstanceBuffer.cpp
-    src/Renderer/Resources/ShadowMap.cpp
-
-    # GLAD
-    ThirdParty/glad/src/glad.c
-
-    # LodePNG
-    ThirdParty/lodepng/lodepng.cpp
-
-    # ufbx
-    ThirdParty/ufbx/ufbx.c
-
-    # Dear ImGui v1.91.9b-docking（含 GLFW/OpenGL 后端，支持编辑器停靠布局）
-    ThirdParty/imgui/imgui.cpp
-    ThirdParty/imgui/imgui_draw.cpp
-    ThirdParty/imgui/imgui_tables.cpp
-    ThirdParty/imgui/imgui_widgets.cpp
-    ThirdParty/imgui/backends/imgui_impl_glfw.cpp
-    ThirdParty/imgui/backends/imgui_impl_opengl3.cpp
-
-    # ImGuizmo (pinned to 18cef5e031d8c6973d80284c67f60549fafd78c1)
-    ThirdParty/ImGuizmo/ImGuizmo.cpp
+add_library(MaiXRendering STATIC
+    Engine/Rendering/Material/Material.cpp
+    Engine/Rendering/Material/MaterialInstance.cpp
+    Engine/Rendering/Material/MaterialResourceStore.cpp
+    Engine/Rendering/Passes/BloomPass.cpp
+    Engine/Rendering/Passes/EditorPrimitivePass.cpp
+    Engine/Rendering/Passes/ForwardPass.cpp
+    Engine/Rendering/Passes/OutlinePass.cpp
+    Engine/Rendering/Passes/PostProcessPass.cpp
+    Engine/Rendering/Passes/PresentPass.cpp
+    Engine/Rendering/Passes/ReflectionPass.cpp
+    Engine/Rendering/Passes/SSAOPass.cpp
+    Engine/Rendering/Passes/ShadowPass.cpp
+    Engine/Rendering/Passes/TranslucencyPass.cpp
+    Engine/Rendering/Renderer/Core/Renderer.cpp
+    Engine/Rendering/Renderer/Diagnostics/GpuDebugScope.cpp
+    Engine/Rendering/Renderer/Diagnostics/GpuPassProfiler.cpp
+    Engine/Rendering/Renderer/Pipeline/PassResourceContract.cpp
+    Engine/Rendering/Renderer/Pipeline/PassResourcesGL.cpp
+    Engine/Rendering/Renderer/Pipeline/RenderPipeline.cpp
+    Engine/Rendering/Renderer/Resources/CubemapTexture.cpp
+    Engine/Rendering/Renderer/Resources/Framebuffer.cpp
+    Engine/Rendering/Renderer/Resources/InstanceBuffer.cpp
+    Engine/Rendering/Renderer/Resources/Mesh.cpp
+    Engine/Rendering/Renderer/Resources/Shader.cpp
+    Engine/Rendering/Renderer/Resources/ShadowMap.cpp
+    Engine/Rendering/Renderer/Resources/Texture2D.cpp
+    Engine/Rendering/Renderer/Scene/RenderScene.cpp
+    Engine/Rendering/Renderer/View/Frustum.cpp
+    Engine/Rendering/Renderer/View/LightRenderData.cpp
+    Engine/Rendering/Renderer/View/RenderBatch.cpp
 )
+target_link_libraries(MaiXRendering PUBLIC MaiXCore MaiXAsset MaiXRHI MaiXPNG)
+target_include_directories(MaiXRendering PRIVATE ${THIRD_PARTY_DIR}/glfw/include)
+target_link_directories(MaiXRendering PUBLIC ${THIRD_PARTY_DIR}/glfw/lib-vc2022)
+target_link_libraries(MaiXRendering PUBLIC glfw3.lib)
+target_compile_options(MaiXRendering PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
 
-# ============================
-# 创建可执行文件
-# ============================
-add_executable(
-    ${PROJECT_NAME}
-    ${SOURCES}
- )
+add_library(MaiXEngine STATIC Engine/Runtime/Engine/EngineSession.cpp
+    Engine/Runtime/Engine/RenderSceneBridge.cpp Engine/Runtime/Engine/SceneFrameBuilder.cpp)
+target_link_libraries(MaiXEngine PUBLIC MaiXRuntime MaiXRendering)
 
-target_compile_options(${PROJECT_NAME} PRIVATE
-    "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>"
+add_library(MaiXEditorUI STATIC ThirdParty/imgui/imgui.cpp ThirdParty/imgui/imgui_draw.cpp
+    ThirdParty/imgui/imgui_tables.cpp ThirdParty/imgui/imgui_widgets.cpp
+    ThirdParty/imgui/backends/imgui_impl_glfw.cpp ThirdParty/imgui/backends/imgui_impl_opengl3.cpp
+    ThirdParty/ImGuizmo/ImGuizmo.cpp)
+target_include_directories(MaiXEditorUI PUBLIC ${THIRD_PARTY_DIR}/imgui
+    ${THIRD_PARTY_DIR}/ImGuizmo ${THIRD_PARTY_DIR}/glfw/include)
+target_link_directories(MaiXEditorUI PUBLIC ${THIRD_PARTY_DIR}/glfw/lib-vc2022)
+target_link_libraries(MaiXEditorUI PUBLIC MaiXGL glfw3.lib)
+
+add_executable(MaiX_Renderer
+    Editor/ContentBrowser/AssetImportPanel.cpp
+    Editor/Diagnostics/RendererStatisticsPanel.cpp
+    Editor/EditorApp/EditorApp.cpp
+    Editor/EditorApp/Main.cpp
+    Editor/Inspector/InspectorPanel.cpp
+    Editor/MaterialEditor/MaterialEditorPanel.cpp
+    Editor/SceneHierarchy/SceneHierarchyPanel.cpp
+    Editor/Session/EditorFonts.cpp
+    Editor/Session/EditorWorkspace.cpp
+    Editor/Viewport/EditorViewportController.cpp
+    Editor/Viewport/ViewportPicking.cpp
 )
+target_link_libraries(MaiX_Renderer PRIVATE MaiXEngine MaiXPlatform MaiXEditorUI)
+target_compile_options(MaiX_Renderer PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
+target_link_options(MaiX_Renderer PRIVATE $<$<CONFIG:Debug>:LINKER:/NODEFAULTLIB:MSVCRT>)
 
-# ============================
-# Include Path
-# ============================
-target_include_directories(MaiX_Renderer PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated" "${THIRD_PARTY_DIR}")
+# Deploy even when only a Shader/scene/font changes and the executable is up to date.
+set(MAIX_RUNTIME_DIR "${CMAKE_CURRENT_BINARY_DIR}")
+set_target_properties(MaiX_Renderer PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${MAIX_RUNTIME_DIR}")
+add_custom_target(MaiXEditorAssets ALL
+    COMMAND ${CMAKE_COMMAND} -E remove_directory ${MAIX_RUNTIME_DIR}/assets
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${ASSET_DIR} ${MAIX_RUNTIME_DIR}/assets
+    COMMAND ${CMAKE_COMMAND} -E remove_directory ${MAIX_RUNTIME_DIR}/Shaders
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${PROJECT_ROOT}/Shaders ${MAIX_RUNTIME_DIR}/Shaders)
+add_dependencies(MaiX_Renderer MaiXEditorAssets)
 
-target_include_directories(
-    ${PROJECT_NAME}
-
-    PRIVATE
-
-    # src
-    ${SRC_DIR}
-
-    # Core
-    ${SRC_DIR}/Core
-
-    # Editor
-    ${SRC_DIR}/Editor
-
-    # GLAD
-    ${THIRD_PARTY_DIR}/glad/include
-
-    # GLFW
-    ${THIRD_PARTY_DIR}/glfw/include
-
-    # cyCodeBase
-    ${THIRD_PARTY_DIR}/cyCodeBase
-
-    # LodePNG
-    ${THIRD_PARTY_DIR}/lodepng
-
-    # Dear ImGui
-    ${THIRD_PARTY_DIR}/imgui
-
-    # ImGuizmo
-    ${THIRD_PARTY_DIR}/ImGuizmo
-
-    # stb_image
-    ${THIRD_PARTY_DIR}/stb
-
-    # ufbx
-    ${THIRD_PARTY_DIR}/ufbx
-)
-
-# ============================
-# GLFW
-# ============================
-target_link_directories(
-    ${PROJECT_NAME}
-
-    PRIVATE
-
-    ${THIRD_PARTY_DIR}/glfw/lib-vc2022
-)
-
-target_link_libraries(
-    ${PROJECT_NAME}
-
-    PRIVATE
-
-    glfw3.lib
-
-    opengl32.lib
-
-    ole32.lib
-
-    shell32.lib
-)
-
-# Debug 配置下排除 Release CRT，解决与预编译 glfw3.lib 的 MSVCRT/MSVCRTD 混用冲突
-# 该冲突会导致 Run-Time Check Failure #2（栈损坏）
-target_link_options(${PROJECT_NAME} PRIVATE
-    $<$<CONFIG:Debug>:LINKER:/NODEFAULTLIB:MSVCRT>
-)
-
-# ============================
-# Copy Assets
-# ============================
-add_custom_command(
-    TARGET ${PROJECT_NAME}
-    POST_BUILD
-
-    COMMAND ${CMAKE_COMMAND} -E remove_directory
-    $<TARGET_FILE_DIR:${PROJECT_NAME}>/assets
-
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-
-    ${ASSET_DIR}
-
-    $<TARGET_FILE_DIR:${PROJECT_NAME}>/assets
-)
-
-# ============================
-# Visual Studio 文件结构
-# ============================
-source_group(
-    TREE ${PROJECT_ROOT}
-
-    FILES
-
-    ${SOURCES}
-)
+add_executable(MaiX_Sandbox Sandbox/Main.cpp)
+target_link_libraries(MaiX_Sandbox PRIVATE MaiXEngine MaiXPlatform)
+target_compile_options(MaiX_Sandbox PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
+target_link_options(MaiX_Sandbox PRIVATE $<$<CONFIG:Debug>:LINKER:/NODEFAULTLIB:MSVCRT>)
+add_dependencies(MaiX_Sandbox MaiXEditorAssets)
 
 if(BUILD_TESTING)
-    add_executable(EditorFontsTests tests/Editor/EditorFontsTests.cpp src/Editor/EditorFonts.cpp
+    add_test(NAME EngineRuntimeSmoke COMMAND MaiX_Sandbox)
+    set_tests_properties(EngineRuntimeSmoke PROPERTIES WORKING_DIRECTORY "${PROJECT_ROOT}")
+    add_executable(EditorFontsTests tests/Editor/EditorFontsTests.cpp Editor/Session/EditorFonts.cpp
         ThirdParty/imgui/imgui.cpp ThirdParty/imgui/imgui_draw.cpp
         ThirdParty/imgui/imgui_tables.cpp ThirdParty/imgui/imgui_widgets.cpp)
     target_include_directories(EditorFontsTests PRIVATE ${SRC_DIR} ${THIRD_PARTY_DIR}/imgui)
+    add_test(NAME ModuleBoundaries COMMAND ${CMAKE_COMMAND} -DPROJECT_ROOT=${PROJECT_ROOT} -P ${PROJECT_ROOT}/tests/Architecture/CheckModuleBoundaries.cmake)
     add_test(NAME EditorFontsTests COMMAND EditorFontsTests "${ASSET_DIR}/fonts/NotoSansSC.ttf")
 
     add_executable(StartupSceneTests tests/Core/StartupSceneTests.cpp
-        src/Core/StartupScene.cpp src/Core/Transform.cpp src/Core/Camera.cpp)
+        Engine/Runtime/Scene/StartupScene.cpp Engine/Core/Math/Transform.cpp Engine/Runtime/Component/Camera.cpp)
     target_include_directories(StartupSceneTests PRIVATE ${SRC_DIR} ${THIRD_PARTY_DIR} "${CMAKE_CURRENT_BINARY_DIR}/generated"
         ${THIRD_PARTY_DIR}/cyCodeBase ${THIRD_PARTY_DIR}/glad/include)
     add_test(NAME StartupSceneTests COMMAND StartupSceneTests)
@@ -274,8 +158,8 @@ if(BUILD_TESTING)
     add_executable(
         FrustumTests
         tests/Renderer/View/FrustumTests.cpp
-        src/Renderer/View/Frustum.cpp
-        src/Renderer/Scene/PrimitiveSceneProxy.cpp
+        Engine/Rendering/Renderer/View/Frustum.cpp
+        Engine/Core/Math/Bounds.cpp
     )
 
     target_include_directories(
@@ -290,10 +174,10 @@ if(BUILD_TESTING)
     add_executable(
         RenderSceneTests
         tests/Renderer/Scene/RenderSceneTests.cpp
-        src/Renderer/Scene/RenderScene.cpp
-        src/Renderer/Scene/PrimitiveSceneProxy.cpp
-        src/Renderer/View/Frustum.cpp
-        src/Renderer/View/RenderBatch.cpp
+        Engine/Rendering/Renderer/Scene/RenderScene.cpp
+        Engine/Core/Math/Bounds.cpp
+        Engine/Rendering/Renderer/View/Frustum.cpp
+        Engine/Rendering/Renderer/View/RenderBatch.cpp
     )
 
     target_include_directories(
@@ -308,7 +192,7 @@ if(BUILD_TESTING)
     add_executable(
         LightRenderDataTests
         tests/Renderer/View/LightRenderDataTests.cpp
-        src/Renderer/View/LightRenderData.cpp
+        Engine/Rendering/Renderer/View/LightRenderData.cpp
     )
 
     target_include_directories(
@@ -336,9 +220,9 @@ if(BUILD_TESTING)
     add_executable(
         FramebufferTests
         tests/Renderer/Resources/FramebufferTests.cpp
-        src/Renderer/Resources/Framebuffer.cpp
-        src/Renderer/Pipeline/PassResourceContract.cpp
-        src/Renderer/Pipeline/PassResourcesGL.cpp
+        Engine/Rendering/Renderer/Resources/Framebuffer.cpp
+        Engine/Rendering/Renderer/Pipeline/PassResourceContract.cpp
+        Engine/Rendering/Renderer/Pipeline/PassResourcesGL.cpp
         ThirdParty/glad/src/glad.c
     )
 
@@ -375,8 +259,8 @@ if(BUILD_TESTING)
     add_executable(
         ApplicationBenchmarkTests
         tests/Core/ApplicationBenchmarkTests.cpp
-        src/Core/ApplicationOptions.cpp
-        src/Core/InstanceGrid.cpp
+        Engine/Runtime/Engine/ApplicationOptions.cpp
+        Engine/Runtime/Scene/InstanceGrid.cpp
     )
 
     target_include_directories(
@@ -391,7 +275,7 @@ if(BUILD_TESTING)
     add_executable(
         RenderBatchTests
         tests/Renderer/View/RenderBatchTests.cpp
-        src/Renderer/View/RenderBatch.cpp
+        Engine/Rendering/Renderer/View/RenderBatch.cpp
     )
 
     target_include_directories(
@@ -417,19 +301,17 @@ if(BUILD_TESTING)
     add_test(NAME MaterialTypesTests COMMAND MaterialTypesTests)
 
     # 使用真正的 Renderer 与资源表验证实例依赖和替换，不复制生产实现。
-    set(MATERIAL_INSTANCE_TEST_SOURCES ${SOURCES})
-    list(FILTER MATERIAL_INSTANCE_TEST_SOURCES INCLUDE REGEX "^src/Renderer/")
+    set(MATERIAL_INSTANCE_TEST_SOURCES)
     add_executable(MaterialInstanceTests
         tests/Renderer/Resources/MaterialInstanceTests.cpp
         ${MATERIAL_INSTANCE_TEST_SOURCES}
-        ThirdParty/glad/src/glad.c
-        ThirdParty/lodepng/lodepng.cpp)
+        )
     target_include_directories(MaterialInstanceTests PRIVATE
         ${SRC_DIR} ${THIRD_PARTY_DIR}/cyCodeBase
         ${THIRD_PARTY_DIR}/glad/include ${THIRD_PARTY_DIR}/glfw/include
         ${THIRD_PARTY_DIR}/lodepng)
     target_link_directories(MaterialInstanceTests PRIVATE ${THIRD_PARTY_DIR}/glfw/lib-vc2022)
-    target_link_libraries(MaterialInstanceTests PRIVATE glfw3.lib opengl32.lib)
+    target_link_libraries(MaterialInstanceTests PRIVATE MaiXRendering glfw3.lib opengl32.lib)
     target_compile_options(MaterialInstanceTests PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
     target_link_options(MaterialInstanceTests PRIVATE $<$<CONFIG:Debug>:LINKER:/NODEFAULTLIB:MSVCRT>)
     add_test(NAME MaterialInstanceTests COMMAND MaterialInstanceTests)
@@ -437,7 +319,7 @@ if(BUILD_TESTING)
     add_executable(
         RenderPassContractTests
         tests/Renderer/Pipeline/RenderPassContractTests.cpp
-        src/Renderer/Pipeline/PassResourceContract.cpp
+        Engine/Rendering/Renderer/Pipeline/PassResourceContract.cpp
     )
 
     target_include_directories(
@@ -453,7 +335,7 @@ if(BUILD_TESTING)
     add_executable(
         ImageLoaderTests
         tests/Assets/Import/ImageLoaderTests.cpp
-        src/Assets/Import/ImageLoader.cpp
+        Engine/Asset/Importer/ImageLoader.cpp
     )
 
     target_include_directories(
@@ -472,8 +354,8 @@ if(BUILD_TESTING)
     add_executable(
         FbxModelImporterTests
         tests/Assets/Import/FbxModelImporterTests.cpp
-        src/Assets/Import/FbxModelImporter.cpp
-        src/Assets/Import/ImageLoader.cpp
+        Engine/Asset/Importer/FbxModelImporter.cpp
+        Engine/Asset/Importer/ImageLoader.cpp
         ThirdParty/ufbx/ufbx.c
     )
 
@@ -496,7 +378,7 @@ if(BUILD_TESTING)
     add_executable(
         CameraTests
         tests/Core/CameraTests.cpp
-        src/Core/Camera.cpp
+        Engine/Runtime/Component/Camera.cpp
     )
 
     target_include_directories(
@@ -511,11 +393,11 @@ if(BUILD_TESTING)
     add_executable(
         EditorInteractionTests
         tests/Editor/EditorInteractionTests.cpp
-        src/Core/Camera.cpp
-        src/Core/Transform.cpp
-        src/Editor/EditableModel.cpp
-        src/Editor/ViewportPicking.cpp
-        src/Renderer/Scene/PrimitiveSceneProxy.cpp
+        Engine/Runtime/Component/Camera.cpp
+        Engine/Core/Math/Transform.cpp
+        Engine/Runtime/Scene/SceneModel.cpp
+        Editor/Viewport/ViewportPicking.cpp
+        Engine/Core/Math/Bounds.cpp
     )
 
     target_include_directories(

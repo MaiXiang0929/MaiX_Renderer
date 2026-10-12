@@ -3,8 +3,8 @@
 #include <iostream>
 #include <vector>
 
-#include "Renderer/View/RenderBatch.h"
-#include "Renderer/View/RenderItem.h"
+#include "Engine/Rendering/Renderer/View/RenderBatch.h"
+#include "Engine/Rendering/Renderer/View/RenderItem.h"
 
 namespace
 {

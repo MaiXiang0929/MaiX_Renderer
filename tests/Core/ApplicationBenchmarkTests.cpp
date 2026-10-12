@@ -5,8 +5,8 @@
 #include <string>
 #include <vector>
 
-#include "Core/ApplicationOptions.h"
-#include "Core/InstanceGrid.h"
+#include "Engine/Runtime/Engine/ApplicationOptions.h"
+#include "Engine/Runtime/Scene/InstanceGrid.h"
 
 namespace
 {
@@ -199,6 +199,6 @@ int main()
     TestInvalidOptions();
     TestCenteredGridLayout();
     TestSceneRadius();
-    std::cout << "Application benchmark tests passed." << std::endl;
+    std::cout << "EditorApp benchmark tests passed." << std::endl;
     return EXIT_SUCCESS;
 }

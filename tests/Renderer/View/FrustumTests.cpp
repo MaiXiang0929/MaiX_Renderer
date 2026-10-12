@@ -3,8 +3,8 @@
 #include <cstdlib>
 #include <iostream>
 
-#include "Renderer/Scene/PrimitiveSceneProxy.h"
-#include "Renderer/View/Frustum.h"
+#include "Engine/Rendering/Renderer/Scene/PrimitiveSceneProxy.h"
+#include "Engine/Rendering/Renderer/View/Frustum.h"
 
 namespace
 {

@@ -6,8 +6,8 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
-#include "Renderer/Resources/Framebuffer.h"
-#include "Renderer/Pipeline/PassResourceContract.h"
+#include "Engine/Rendering/Renderer/Resources/Framebuffer.h"
+#include "Engine/Rendering/Renderer/Pipeline/PassResourceContract.h"
 
 namespace
 {
