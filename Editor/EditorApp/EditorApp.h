@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: MIT
-/// @file Application.h
+/// @file EditorApp.h
 /// @brief 应用程序核心管理类的头文件
 /// @details 该类负责管理整个程序的生命周期，包括初始化、主循环更新、渲染及资源清理。
 /// @author MaiX
 /// @date 2026-07-31
 
 #pragma once
+
+#include "Engine/Runtime/Engine/EngineSession.h"
+#include "Engine/Core/Platform/WindowContext.h"
 
 #include <cstdint>
 #include <limits>
@@ -15,9 +18,9 @@
 #include "cyVector.h"
 
 #include "Engine/Runtime/Component/Camera.h"
-#include "Editor/Session/EditableCamera.h"
-#include "Editor/Session/EditableLight.h"
-#include "Editor/Session/EditableModel.h"
+#include "Engine/Runtime/Scene/SceneCamera.h"
+#include "Engine/Runtime/Scene/SceneLight.h"
+#include "Engine/Runtime/Scene/SceneModel.h"
 #include "Editor/Session/EditorSelection.h"
 #include "Editor/Session/EditorMaterialSelection.h"
 #include "Engine/Rendering/Renderer/Resources/RenderResourceHandle.h"
@@ -38,12 +41,12 @@ struct ImportedModelData;
 
 /// @brief 应用程序核心管理类
 /// @details 该类负责管理整个程序的生命周期，包括初始化、主循环更新、渲染及资源清理。
-class Application
+class EditorApp
 {
 
 public:
 	/// @brief 构造函数
-    Application(
+    EditorApp(
         std::string normalMapPath,
         std::string displacementMapPath,
         std::uint32_t instanceGridSize = 0,
@@ -55,19 +58,21 @@ public:
         bool materialInstanceLab = false);
 
 	/// @brief 析构函数，自动调用 Shutdown 释放资源
-    ~Application();
+    ~EditorApp();
 
 	// 禁止复制
-    Application(const Application&) = delete;
-    Application& operator=(const Application&) = delete;
+    EditorApp(const EditorApp&) = delete;
+    EditorApp& operator=(const EditorApp&) = delete;
 
 	/// @brief 运行应用程序
     void Run();
 
 private:
+    EngineSession m_Engine;
+    WindowContext m_Context;
     GLFWwindow* m_Window        = nullptr;      ///< GLFW 窗口对象的指针句柄
 
-    Renderer* m_Renderer        = nullptr;      ///< 渲染器对象的指针句柄
+    Renderer* m_Renderer        = nullptr;      ///< 从 EngineSession 借用；不拥有资源
     std::unique_ptr<RendererStatisticsPanel> m_StatisticsPanel;
     std::unique_ptr<MaterialEditorPanel> m_MaterialEditorPanel;
     std::unique_ptr<AssetImportPanel> m_AssetImportPanel;
@@ -80,9 +85,7 @@ private:
 
 	Camera m_Camera;                            ///< 编辑器场景视口所使用的摄像机
 
-    EditableCamera m_SceneCamera;
     bool m_SceneCameraView = false;
-    bool m_ReflectionGroundEnabled = false;
 	std::string m_NormalMapPath;
     std::string m_DisplacementMapPath;
     std::uint32_t m_InstanceGridSize = 0;
@@ -92,28 +95,17 @@ private:
     std::string m_FaceShadowDemoModelPath;
     std::string m_FaceShadowDemoTexturePath;
     std::string m_FaceShadowDemoMaterialName;
-    float m_SceneRadius = 1.0f;
 
     bool m_Initialized          = false;        ///< 应用程序是否已初始化
 
     unsigned int m_Width        = 1920;         ///< 窗口宽度
     unsigned int m_Height       = 1080;         ///< 窗口高度
 
-    cy::Vec3f m_ObjCenter;                     ///< 模型包围盒中心
-    cy::Vec3f m_DefaultBoundsMin;
-    cy::Vec3f m_DefaultBoundsMax;
-    float m_GroundY         = 0.0f;            ///< 反射地面 Y 坐标（模型包围盒底部）
-    float m_ModelDiameter   = 0.0f;            ///< 模型包围盒直径，用于缩放地面
-    std::uint32_t m_MainLightId = std::numeric_limits<std::uint32_t>::max();
 
-    std::vector<EditableModel> m_Models;
-    std::uint64_t m_NextModelId = 1;
-    ModelId m_DefaultModelId;
     EditorSelection m_EditorSelection;
     // IDs survive model-vector reallocation; resolved once when the viewport is valid.
     EditorSelection m_PendingFocusSelection;
     EditorMaterialSelection m_MaterialSelection;
-    std::vector<EditableLight> m_EditableLights;
 
 private:
     /// @brief 初始化应用程序
@@ -129,11 +121,11 @@ private:
         std::string& error,
         ModelId& importedId);
     bool LoadStartupFaceShadowDemo();
-    void DestroyModelResources(EditableModel& model);
+    void DestroyModelResources(SceneModel& model);
     bool RemoveModel(ModelId id);
     void ApplyMaterialEditRequest(const struct MaterialEditRequest& request);
-    EditableLight* FindEditableLight(std::uint32_t id);
-    const EditableLight* FindEditableLight(std::uint32_t id) const;
+    SceneLight* FindSceneLight(std::uint32_t id);
+    const SceneLight* FindSceneLight(std::uint32_t id) const;
     
 	/// @brief 更新应用程序状态
     void Update();

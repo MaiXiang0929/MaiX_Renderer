@@ -4,7 +4,7 @@
 #include <algorithm>
 #include "Editor/Session/EditorSelection.h"
 
-// Application 持有此状态，Inspector 与 Material Editor 共用；只保存身份，不持有资源。
+// EditorApp 持有此状态，Inspector 与 Material Editor 共用；只保存身份，不持有资源。
 class EditorMaterialSelection
 {
 public:
@@ -34,7 +34,7 @@ public:
 
     std::vector<MaterialHandle> Synchronize(
         const EditorSelection& selection,
-        const std::vector<EditableModel>& models,
+        const std::vector<SceneModel>& models,
         const std::vector<MaterialHandle>& liveMaterials)
     {
         ModelId owner;
@@ -43,7 +43,7 @@ public:
             candidates = liveMaterials;
         else if (selection.type == EditorSelectionType::Model)
         {
-            const EditableModel* model = FindEditableModel(models, selection.modelId);
+            const SceneModel* model = FindSceneModel(models, selection.modelId);
             if (model)
             {
                 owner = model->id;

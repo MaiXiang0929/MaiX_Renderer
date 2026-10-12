@@ -11,7 +11,7 @@
 #include "cyMatrix.h"
 #include "cyVector.h"
 #include "Engine/Asset/Importer/ImageData.h"
-#include "Engine/Rendering/Renderer/Resources/Mesh.h"
+#include "Engine/Asset/Geometry/Vertex.h"
 
 namespace AssetImport
 {

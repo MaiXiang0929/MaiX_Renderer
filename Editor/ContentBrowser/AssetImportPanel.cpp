@@ -29,7 +29,7 @@ std::string Lowercase(std::string value)
 AssetImportPanel::~AssetImportPanel()
 {
     // A std::async future waits here if shutdown happens during a parse. The
-    // importer only owns CPU memory and does not access Application state.
+    // importer only owns CPU memory and does not access EditorApp state.
     if (m_ImportFuture.valid())
         m_ImportFuture.wait();
 }

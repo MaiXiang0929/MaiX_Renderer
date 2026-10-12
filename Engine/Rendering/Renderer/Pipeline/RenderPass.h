@@ -14,7 +14,7 @@ struct RenderView;
 struct TessellationSettings;
 struct PostProcessSettings;
 
-/// @brief Application 每帧提交给渲染器的纯场景数据。
+/// @brief EditorApp 每帧提交给渲染器的纯场景数据。
 /// @details 这里只保存矩阵、光源和视口等 CPU 数据，不持有任何 OpenGL 资源。
 struct RenderFrameData
 {

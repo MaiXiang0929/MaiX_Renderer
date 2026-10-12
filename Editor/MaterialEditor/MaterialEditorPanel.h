@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 #include "Engine/Rendering/Renderer/Resources/RenderResourceHandle.h"
-#include "Editor/Session/EditableModel.h"
+#include "Engine/Runtime/Scene/SceneModel.h"
 
 enum class MaterialEditAction { None, CreateInstance, UseParent };
 struct MaterialEditRequest
@@ -17,13 +17,13 @@ struct MaterialEditRequest
 class Renderer;
 class EditorMaterialSelection;
 struct EditorSelection;
-struct EditableModel;
+struct SceneModel;
 
 class MaterialEditorPanel
 {
 public:
     void Draw(Renderer& renderer, const EditorSelection& selection,
-              const std::vector<EditableModel>& models,
+              const std::vector<SceneModel>& models,
               EditorMaterialSelection& materialSelection,
               MaterialEditRequest& request,
               void* nativeWindowHandle = nullptr);

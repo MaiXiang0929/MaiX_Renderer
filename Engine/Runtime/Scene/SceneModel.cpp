@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-#include "Editor/Session/EditableModel.h"
+#include "Engine/Runtime/Scene/SceneModel.h"
 
 #include <algorithm>
 #include <iomanip>
@@ -35,7 +35,7 @@ void MergeBounds(PrimitiveBounds& result, bool& initialized,
 }
 }
 
-PrimitiveBounds EditableModel::GetWorldBounds() const
+PrimitiveBounds SceneModel::GetWorldBounds() const
 {
     PrimitiveBounds result;
     if (sections.empty())
@@ -43,7 +43,7 @@ PrimitiveBounds EditableModel::GetWorldBounds() const
 
     const cy::Matrix4f root = transform.ToMatrix();
     bool initialized = false;
-    for (const EditableModelSection& section : sections)
+    for (const SceneModelSection& section : sections)
     {
         const PrimitiveBounds bounds = TransformBounds(
             section.localBounds, root * section.localTransform);
@@ -52,20 +52,20 @@ PrimitiveBounds EditableModel::GetWorldBounds() const
     return result;
 }
 
-EditableModel* FindEditableModel(std::vector<EditableModel>& models, ModelId id)
+SceneModel* FindSceneModel(std::vector<SceneModel>& models, ModelId id)
 {
     if (!id.IsValid())
         return nullptr;
     const auto found = std::find_if(models.begin(), models.end(),
-        [id](const EditableModel& model) { return model.id == id; });
+        [id](const SceneModel& model) { return model.id == id; });
     return found == models.end() ? nullptr : &*found;
 }
 
-std::vector<MaterialHandle> EditableModel::GetUsedMaterials() const
+std::vector<MaterialHandle> SceneModel::GetUsedMaterials() const
 {
     std::vector<MaterialHandle> result;
     // 同一材质可被多个分段共享；编辑列表只保留一次实际使用的句柄。
-    for (const EditableModelSection& section : sections)
+    for (const SceneModelSection& section : sections)
     {
         if (section.material.IsValid() &&
             std::none_of(result.begin(), result.end(),
@@ -76,25 +76,25 @@ std::vector<MaterialHandle> EditableModel::GetUsedMaterials() const
     return result;
 }
 
-const EditableModel* FindEditableModel(
-    const std::vector<EditableModel>& models, ModelId id)
+const SceneModel* FindSceneModel(
+    const std::vector<SceneModel>& models, ModelId id)
 {
     if (!id.IsValid())
         return nullptr;
     const auto found = std::find_if(models.begin(), models.end(),
-        [id](const EditableModel& model) { return model.id == id; });
+        [id](const SceneModel& model) { return model.id == id; });
     return found == models.end() ? nullptr : &*found;
 }
 
 std::string MakeUniqueModelName(
-    const std::vector<EditableModel>& models,
+    const std::vector<SceneModel>& models,
     const std::string& requestedName)
 {
     const std::string baseName = requestedName.empty() ? "Model" : requestedName;
     const auto isUsed = [&models](const std::string& candidate)
     {
         return std::any_of(models.begin(), models.end(),
-            [&candidate](const EditableModel& model)
+            [&candidate](const SceneModel& model)
             {
                 return model.name == candidate;
             });
@@ -113,11 +113,11 @@ std::string MakeUniqueModelName(
     return {};
 }
 
-PrimitiveBounds GetSceneWorldBounds(const std::vector<EditableModel>& models)
+PrimitiveBounds GetSceneWorldBounds(const std::vector<SceneModel>& models)
 {
     PrimitiveBounds result;
     bool initialized = false;
-    for (const EditableModel& model : models)
+    for (const SceneModel& model : models)
         MergeBounds(result, initialized, model.GetWorldBounds());
     return result;
 }

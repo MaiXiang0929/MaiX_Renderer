@@ -5,8 +5,8 @@
 
 #include <imgui.h>
 
-#include "Editor/Session/EditableLight.h"
-#include "Editor/Session/EditableModel.h"
+#include "Engine/Runtime/Scene/SceneLight.h"
+#include "Engine/Runtime/Scene/SceneModel.h"
 
 namespace
 {
@@ -26,8 +26,8 @@ void SetEditorPanelPosition(float width, float offset)
 
 ModelId SceneHierarchyPanel::Draw(
     EditorSelection& selection,
-    const std::vector<EditableModel>& models,
-    const std::vector<EditableLight>& lights, const EditableCamera* camera)
+    const std::vector<SceneModel>& models,
+    const std::vector<SceneLight>& lights, const SceneCamera* camera)
 {
     SetEditorPanelPosition(300.0f, 380.0f);
     ImGui::SetNextWindowSize(ImVec2(300.0f, 360.0f), ImGuiCond_FirstUseEver);
@@ -44,7 +44,7 @@ ModelId SceneHierarchyPanel::Draw(
     }
     else
     {
-        for (const EditableModel& model : models)
+        for (const SceneModel& model : models)
         {
             const std::string label = model.name.empty() ? "Model" : model.name;
             const std::string selectableLabel =
@@ -59,7 +59,7 @@ ModelId SceneHierarchyPanel::Draw(
 
     ModelId removedModel;
     if (selection.type == EditorSelectionType::Model &&
-        FindEditableModel(models, selection.modelId) != nullptr &&
+        FindSceneModel(models, selection.modelId) != nullptr &&
         ImGui::Button("Remove selected model"))
         removedModel = selection.modelId;
 
@@ -71,7 +71,7 @@ ModelId SceneHierarchyPanel::Draw(
         {
             ImGui::TextUnformatted("No lights.");
         }
-        for (const EditableLight& light : lights)
+        for (const SceneLight& light : lights)
         {
             if (!light.IsValid())
                 continue;

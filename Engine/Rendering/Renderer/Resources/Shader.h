@@ -11,9 +11,10 @@
 #include <string>
 #include <vector>
 #include <glad/glad.h>
+#include "Engine/Rendering/RHI/RHICommandList.h"
 
 
-class Shader
+class Shader : public RHIPipeline
 {
 public:
 	Shader();

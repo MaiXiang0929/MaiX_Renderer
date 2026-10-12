@@ -17,7 +17,7 @@ struct ModelId
     bool operator!=(ModelId other) const { return value != other.value; }
 };
 
-struct EditableModelSection
+struct SceneModelSection
 {
     PrimitiveId primitiveId = InvalidPrimitiveId;
     cy::Matrix4f localTransform = cy::Matrix4f::Identity();
@@ -27,12 +27,12 @@ struct EditableModelSection
     std::string name;
 };
 
-struct EditableModel
+struct SceneModel
 {
     ModelId id;
     std::string name;
     Transform transform;
-    std::vector<EditableModelSection> sections;
+    std::vector<SceneModelSection> sections;
     // Renderer owns the GPU objects; the model records handles for ordered cleanup.
     std::vector<MeshHandle> meshes;
     std::vector<MaterialHandle> materials;
@@ -45,14 +45,14 @@ struct EditableModel
     std::vector<MaterialHandle> GetUsedMaterials() const;
 };
 
-EditableModel* FindEditableModel(std::vector<EditableModel>& models, ModelId id);
-const EditableModel* FindEditableModel(
-    const std::vector<EditableModel>& models, ModelId id);
+SceneModel* FindSceneModel(std::vector<SceneModel>& models, ModelId id);
+const SceneModel* FindSceneModel(
+    const std::vector<SceneModel>& models, ModelId id);
 std::string MakeUniqueModelName(
-    const std::vector<EditableModel>& models,
+    const std::vector<SceneModel>& models,
     const std::string& requestedName);
-PrimitiveBounds GetSceneWorldBounds(const std::vector<EditableModel>& models);
+PrimitiveBounds GetSceneWorldBounds(const std::vector<SceneModel>& models);
 
-void ApplyEditableModelTransform(
-    EditableModel& model,
+void ApplySceneModelTransform(
+    SceneModel& model,
     class Renderer& renderer);

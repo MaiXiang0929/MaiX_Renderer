@@ -9,8 +9,8 @@
 #include "Editor/Session/EditorSelection.h"
 
 class Camera;
-struct EditableLight;
-struct EditableModel;
+struct SceneLight;
+struct SceneModel;
 class Renderer;
 struct EditorViewportRegion;
 
@@ -45,8 +45,8 @@ public:
     void FocusSelection(
         Camera& camera,
         const EditorSelection& selection,
-        const std::vector<EditableModel>& models,
-        const std::vector<EditableLight>& lights, const EditableCamera* sceneCamera = nullptr) const;
+        const std::vector<SceneModel>& models,
+        const std::vector<SceneLight>& lights, const SceneCamera* sceneCamera = nullptr) const;
 
     bool IsLeftDown() const { return m_LeftDown; }
     bool HasPointerButtonDown() const { return m_LeftDown || m_MiddleDown || m_RightDown; }
@@ -56,10 +56,10 @@ public:
     void Draw(
         Camera& camera,
         EditorSelection& selection,
-        std::vector<EditableModel>& models,
-        std::vector<EditableLight>& lights,
+        std::vector<SceneModel>& models,
+        std::vector<SceneLight>& lights,
         Renderer& renderer,
-        const EditorViewportRegion& viewport, EditableCamera* sceneCamera = nullptr, bool cameraView = false);
+        const EditorViewportRegion& viewport, SceneCamera* sceneCamera = nullptr, bool cameraView = false);
 
 private:
     bool m_LeftDown = false;

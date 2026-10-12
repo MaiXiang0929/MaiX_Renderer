@@ -5,8 +5,8 @@
 #include <cmath>
 #include <limits>
 
-#include "Editor/Session/EditableLight.h"
-#include "Editor/Session/EditableModel.h"
+#include "Engine/Runtime/Scene/SceneLight.h"
+#include "Engine/Runtime/Scene/SceneModel.h"
 
 namespace
 {
@@ -71,13 +71,13 @@ bool IntersectRaySphere(
 
 bool HitTestEditableModel(
     const WorldRay& ray,
-    const EditableModel& model,
+    const SceneModel& model,
     float& distance)
 {
     const cy::Matrix4f root = model.transform.ToMatrix();
     bool hit = false;
     distance = std::numeric_limits<float>::max();
-    for (const EditableModelSection& section : model.sections)
+    for (const SceneModelSection& section : model.sections)
     {
         const PrimitiveBounds bounds = TransformBounds(
             section.localBounds, root * section.localTransform);
@@ -133,13 +133,13 @@ EditorPickResult PickEditorObject(
     float framebufferHeight,
     const cy::Matrix4f& projection,
     const cy::Matrix4f& view,
-    const std::vector<EditableModel>& models,
-    const std::vector<EditableLight>& lights)
+    const std::vector<SceneModel>& models,
+    const std::vector<SceneLight>& lights)
 {
     EditorPickResult result;
     float nearestLightDepth = 1.0f;
     const cy::Matrix4f viewProjection = projection * view;
-    for (const EditableLight& light : lights)
+    for (const SceneLight& light : lights)
     {
         if (!light.IsValid() || light.proxy.type == LightType::Directional)
             continue;
@@ -173,7 +173,7 @@ EditorPickResult PickEditorObject(
         projection,
         view);
     float nearestModelDistance = std::numeric_limits<float>::max();
-    for (const EditableModel& model : models)
+    for (const SceneModel& model : models)
     {
         float modelDistance = 0.0f;
         if (HitTestEditableModel(ray, model, modelDistance) &&

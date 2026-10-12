@@ -7,7 +7,7 @@
 #include "Engine/Core/Math/Transform.h"
 #include "Engine/Rendering/Renderer/Scene/LightSceneProxy.h"
 
-struct EditableLight
+struct SceneLight
 {
     std::string name;
     Transform transform;
@@ -16,13 +16,13 @@ struct EditableLight
     bool IsValid() const { return proxy.id != InvalidLightId; }
 };
 
-void ApplyEditableLightTransform(
-    EditableLight& light,
+void ApplySceneLightTransform(
+    SceneLight& light,
     class Renderer& renderer);
 
-EditableLight* FindEditableLight(
-    std::vector<EditableLight>& lights,
+SceneLight* FindSceneLight(
+    std::vector<SceneLight>& lights,
     LightId id);
-const EditableLight* FindEditableLight(
-    const std::vector<EditableLight>& lights,
+const SceneLight* FindSceneLight(
+    const std::vector<SceneLight>& lights,
     LightId id);

@@ -16,7 +16,7 @@ struct CameraId
     }
 };
 // CPU scene record; Renderer consumes matrices and does not own a camera resource.
-struct EditableCamera
+struct SceneCamera
 {
     CameraId id;
     std::string name;

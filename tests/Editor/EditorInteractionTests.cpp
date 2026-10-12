@@ -5,8 +5,8 @@
 
 #include "Engine/Runtime/Component/Camera.h"
 #include "Engine/Core/Math/Transform.h"
-#include "Editor/Session/EditableLight.h"
-#include "Editor/Session/EditableModel.h"
+#include "Engine/Runtime/Scene/SceneLight.h"
+#include "Engine/Runtime/Scene/SceneModel.h"
 #include "Editor/Session/EditorSelection.h"
 #include "Editor/Session/EditorMaterialSelection.h"
 #include "Editor/Session/EditorValueConstraints.h"
@@ -56,7 +56,7 @@ void TestCenterRayAndModelHit()
             ray.direction.z < -0.999f,
         "Center-screen ray should point along camera forward.");
 
-    EditableModel model;
+    SceneModel model;
     model.sections.push_back({
         1,
         cy::Matrix4f::Identity(),
@@ -72,7 +72,7 @@ void TestCenterRayAndModelHit()
 
 void TestMergedWorldBounds()
 {
-    EditableModel model;
+    SceneModel model;
     model.transform.scale = cy::Vec3f(2.0f);
     model.sections.push_back({
         1,
@@ -114,7 +114,7 @@ void TestEditorSelectionTransitions()
 
 void TestCentimeterRootBoundsAndPicking()
 {
-    EditableModel model;
+    SceneModel model;
     model.transform.position = cy::Vec3f(0.3f, 0.0f, 0.0f);
     model.transform.scale = cy::Vec3f(0.01f);
     const cy::Vec3f rawCenter(5.0f, 0.0f, 0.0f);
@@ -138,19 +138,19 @@ void TestModelAndLightSelectionAreDistinct()
     Camera camera(cy::Vec3f(0.0f), 10.0f);
     camera.SetAspectRatio(1.0f);
 
-    EditableModel model;
+    SceneModel model;
     model.id = ModelId{11};
     model.sections.push_back({
         1,
         cy::Matrix4f::Identity(),
         {cy::Vec3f(0.0f), 1.0f} });
 
-    EditableLight light;
+    SceneLight light;
     light.proxy.id = 7;
     light.proxy.type = LightType::Point;
     light.transform.position = cy::Vec3f(0.0f);
-    std::vector<EditableLight> lights{light};
-    std::vector<EditableModel> models{model};
+    std::vector<SceneLight> lights{light};
+    std::vector<SceneModel> models{model};
 
     EditorPickResult pick = PickEditorObject(
         500.0f,
@@ -199,20 +199,20 @@ void TestMultipleModelPickingAndBounds()
     Camera camera(cy::Vec3f(0.0f), 10.0f);
     camera.SetAspectRatio(1.0f);
 
-    EditableModel back;
+    SceneModel back;
     back.id = ModelId{21};
     back.sections.push_back({
         1, cy::Matrix4f::Identity(), {cy::Vec3f(0.0f), 1.0f} });
     back.transform.position.z = -2.0f;
 
-    EditableModel front;
+    SceneModel front;
     front.id = ModelId{22};
     front.sections.push_back({
         2, cy::Matrix4f::Identity(), {cy::Vec3f(0.0f), 1.0f} });
     front.transform.position.z = 2.0f;
 
-    std::vector<EditableModel> models{back, front};
-    const std::vector<EditableLight> noLights;
+    std::vector<SceneModel> models{back, front};
+    const std::vector<SceneLight> noLights;
     const auto pickCenter = [&]()
     {
         return PickEditorObject(
@@ -228,32 +228,32 @@ void TestMultipleModelPickingAndBounds()
             NearlyEqual(sceneBounds.radius, 3.0f),
         "Scene bounds should contain both independently positioned models.");
 
-    FindEditableModel(models, front.id)->transform.position.x = 20.0f;
+    FindSceneModel(models, front.id)->transform.position.x = 20.0f;
     Require(pickCenter().modelId == back.id,
         "Moving one model should expose the other model to picking.");
     models.erase(models.begin() + 1);
-    Require(FindEditableModel(models, front.id) == nullptr &&
-            FindEditableModel(models, back.id) != nullptr,
+    Require(FindSceneModel(models, front.id) == nullptr &&
+            FindSceneModel(models, back.id) != nullptr,
         "Removing one model should preserve the other model identity.");
 }
 
 void TestUniqueModelNamesAfterRemoval()
 {
-    std::vector<EditableModel> models;
-    EditableModel first;
+    std::vector<SceneModel> models;
+    SceneModel first;
     first.id = ModelId{2};
     first.name = MakeUniqueModelName(models, "Avatar");
     models.push_back(first);
     Require(first.name == "Avatar", "First import should keep its filename stem.");
 
-    EditableModel second;
+    SceneModel second;
     second.id = ModelId{3};
     second.name = MakeUniqueModelName(models, "Avatar");
     models.push_back(second);
     Require(second.name == "Avatar_001",
         "A duplicate filename should receive the first padded suffix.");
 
-    EditableModel third;
+    SceneModel third;
     third.id = ModelId{4};
     third.name = MakeUniqueModelName(models, "Avatar");
     models.push_back(third);
@@ -261,7 +261,7 @@ void TestUniqueModelNamesAfterRemoval()
         "A further duplicate should skip names already in the scene.");
 
     models.erase(models.begin() + 1);
-    EditableModel replacement;
+    SceneModel replacement;
     replacement.id = ModelId{5};
     replacement.name = MakeUniqueModelName(models, "Avatar");
     models.push_back(replacement);
@@ -272,18 +272,18 @@ void TestUniqueModelNamesAfterRemoval()
 
 void TestMaterialSelectionAcrossModelsAndDeletion()
 {
-    EditableModel first;
+    SceneModel first;
     first.id = ModelId{11};
     first.name = "Avatar";
     first.sections.push_back({1, cy::Matrix4f::Identity(), {}, MaterialHandle{10}, "Body"});
     first.sections.push_back({2, cy::Matrix4f::Identity(), {}, MaterialHandle{20}, "Face"});
     first.sections.push_back({3, cy::Matrix4f::Identity(), {}, MaterialHandle{10}, "Hair"});
-    EditableModel second = first;
+    SceneModel second = first;
     second.id = ModelId{12};
     second.name = "Avatar_001";
     for (auto& section : second.sections)
         section.material.id += 20;
-    std::vector<EditableModel> models{first, second};
+    std::vector<SceneModel> models{first, second};
     std::vector<MaterialHandle> live{{10}, {20}, {30}, {40}};
     EditorSelection objectSelection;
     EditorMaterialSelection materialSelection;

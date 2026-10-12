@@ -5,8 +5,8 @@
 
 #include "Editor/Session/EditorSelection.h"
 
-struct EditableLight;
-struct EditableModel;
+struct SceneLight;
+struct SceneModel;
 struct ModelId;
 
 class SceneHierarchyPanel
@@ -14,6 +14,6 @@ class SceneHierarchyPanel
 public:
     ModelId Draw(
         EditorSelection& selection,
-        const std::vector<EditableModel>& models,
-        const std::vector<EditableLight>& lights, const EditableCamera* camera);
+        const std::vector<SceneModel>& models,
+        const std::vector<SceneLight>& lights, const SceneCamera* camera);
 };

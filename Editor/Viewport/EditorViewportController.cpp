@@ -7,8 +7,8 @@
 #include <imgui.h>
 
 #include "Engine/Runtime/Component/Camera.h"
-#include "Editor/Session/EditableLight.h"
-#include "Editor/Session/EditableModel.h"
+#include "Engine/Runtime/Scene/SceneLight.h"
+#include "Engine/Runtime/Scene/SceneModel.h"
 #include "Editor/Viewport/ViewportPicking.h"
 #include "Editor/Session/EditorWorkspace.h"
 #include "Engine/Rendering/Renderer/Core/Renderer.h"
@@ -108,12 +108,12 @@ void EditorViewportController::ToggleSpace()
 void EditorViewportController::FocusSelection(
     Camera& camera,
     const EditorSelection& selection,
-    const std::vector<EditableModel>& models,
-    const std::vector<EditableLight>& lights, const EditableCamera* sceneCamera) const
+    const std::vector<SceneModel>& models,
+    const std::vector<SceneLight>& lights, const SceneCamera* sceneCamera) const
 {
     if (selection.type == EditorSelectionType::Model)
     {
-        const EditableModel* model = FindEditableModel(models, selection.modelId);
+        const SceneModel* model = FindSceneModel(models, selection.modelId);
         if (model)
         {
             const PrimitiveBounds bounds = model->GetWorldBounds();
@@ -124,7 +124,7 @@ void EditorViewportController::FocusSelection(
         camera.FocusBounds(sceneCamera->transform.position, 1.0f);
     else if (selection.type == EditorSelectionType::Light)
     {
-        const EditableLight* light = FindEditableLight(lights, selection.lightId);
+        const SceneLight* light = FindSceneLight(lights, selection.lightId);
         if (light && light->proxy.type != LightType::Directional)
             camera.FocusBounds(light->transform.position, 1.0f);
     }
@@ -133,10 +133,10 @@ void EditorViewportController::FocusSelection(
 void EditorViewportController::Draw(
     Camera& camera,
     EditorSelection& selection,
-    std::vector<EditableModel>& models,
-    std::vector<EditableLight>& lights,
+    std::vector<SceneModel>& models,
+    std::vector<SceneLight>& lights,
     Renderer& renderer,
-    const EditorViewportRegion& viewport, EditableCamera* sceneCamera, bool cameraView)
+    const EditorViewportRegion& viewport, SceneCamera* sceneCamera, bool cameraView)
 {
     if (viewport.pixelWidth == 0 || viewport.pixelHeight == 0 || viewport.size.x <= 0 || viewport.size.y <= 0)
         return;
@@ -144,20 +144,20 @@ void EditorViewportController::Draw(
         ImGui::GetWindowDrawList()->AddText(ImVec2(viewport.min.x+12,viewport.min.y+12),
             IM_COL32(255,230,160,255), "Camera View - Numpad 0: Editor View");
     bool transformChanged = false;
-    EditableLight* selectedLight = selection.type == EditorSelectionType::Light
-        ? FindEditableLight(lights, selection.lightId)
+    SceneLight* selectedLight = selection.type == EditorSelectionType::Light
+        ? FindSceneLight(lights, selection.lightId)
         : nullptr;
     if (selection.type == EditorSelectionType::Light && !selectedLight)
     {
         selection.Clear();
     }
-    EditableModel* selectedModel = selection.type == EditorSelectionType::Model
-        ? FindEditableModel(models, selection.modelId)
+    SceneModel* selectedModel = selection.type == EditorSelectionType::Model
+        ? FindSceneModel(models, selection.modelId)
         : nullptr;
     if (selection.type == EditorSelectionType::Model && !selectedModel)
         selection.Clear();
     const bool modelSelected = selectedModel != nullptr;
-    EditableCamera* selectedCamera = sceneCamera && selection.IsCameraSelected(sceneCamera->id) ? sceneCamera : nullptr;
+    SceneCamera* selectedCamera = sceneCamera && selection.IsCameraSelected(sceneCamera->id) ? sceneCamera : nullptr;
     const float aspect = static_cast<float>(viewport.pixelWidth) / std::max(viewport.pixelHeight, 1u);
     const auto view = cameraView && sceneCamera ? sceneCamera->GetViewMatrix() : camera.GetViewMatrix();
     const auto projection = cameraView && sceneCamera ? sceneCamera->GetProjectionMatrix(aspect) : camera.GetProjectionMatrix();
@@ -291,10 +291,10 @@ void EditorViewportController::Draw(
             std::abs(selectedModel->transform.scale.y), 0.001f, 1000.0f);
         selectedModel->transform.scale.z = std::clamp(
             std::abs(selectedModel->transform.scale.z), 0.001f, 1000.0f);
-        ApplyEditableModelTransform(*selectedModel, renderer);
+        ApplySceneModelTransform(*selectedModel, renderer);
     }
     else if (transformChanged && selectedLight)
     {
-        ApplyEditableLightTransform(*selectedLight, renderer);
+        ApplySceneLightTransform(*selectedLight, renderer);
     }
 }

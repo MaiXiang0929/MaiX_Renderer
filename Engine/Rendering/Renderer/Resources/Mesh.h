@@ -12,18 +12,14 @@
 #include <cstdint>
 #include <vector>
 #include <glad/glad.h>
+#include "Engine/Rendering/RHI/RHICommandList.h"
 #include "cyMatrix.h"
 #include "cyVector.h"
 
 /// @brief 顶点结构体，包含位置、法线和纹理坐标
-struct Vertex {
-	cy::Vec3f Position;
-	cy::Vec3f Normal;
-	cy::Vec2f TexCoord;
-	cy::Vec4f Tangent;
-};
+#include "Engine/Asset/Geometry/Vertex.h"
 
-class Mesh {
+class Mesh : public RHIBuffer {
 
 public:
 

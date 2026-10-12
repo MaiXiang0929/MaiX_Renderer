@@ -199,6 +199,6 @@ int main()
     TestInvalidOptions();
     TestCenteredGridLayout();
     TestSceneRadius();
-    std::cout << "Application benchmark tests passed." << std::endl;
+    std::cout << "EditorApp benchmark tests passed." << std::endl;
     return EXIT_SUCCESS;
 }

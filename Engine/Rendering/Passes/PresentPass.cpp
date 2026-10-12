@@ -3,6 +3,7 @@
 
 #include "Engine/Rendering/Renderer/Diagnostics/RenderSubmissionStats.h"
 #include "Engine/Rendering/Renderer/Resources/Mesh.h"
+#include "Engine/Rendering/RHI/OpenGL/OpenGLCommandList.h"
 
 bool PresentPass::Init()
 {
@@ -34,18 +35,10 @@ void PresentPass::Execute(RenderPassContext& context)
     const GLuint postProcessTexture = context.Resources().Texture(PassResourceId::PostColor);
     const GLuint editorOverlayTexture = context.Resources().Texture(PassResourceId::Overlay);
 
-    m_Shader.Bind();
-    glActiveTexture(GL_TEXTURE0);
-    RenderSubmissionStats::Get().RecordTextureBind(
-        GL_TEXTURE_2D, 0, postProcessTexture);
-    glBindTexture(GL_TEXTURE_2D, postProcessTexture);
-    m_Shader.SetInt("renderedTexture", 0);
-    glActiveTexture(GL_TEXTURE1);
-    RenderSubmissionStats::Get().RecordTextureBind(
-        GL_TEXTURE_2D, 1, editorOverlayTexture);
-    glBindTexture(GL_TEXTURE_2D, editorOverlayTexture);
-    m_Shader.SetInt("editorOverlayTexture", 1);
-    context.presentMesh.Draw();
+    // The existing resource table is bridged here; command execution is backend-owned.
+    const OpenGLTextureView scene(postProcessTexture), overlay(editorOverlayTexture);
+    OpenGLCommandList commands;
+    commands.Composite(m_Shader, scene, overlay, context.presentMesh);
     context.Resources().EndTarget(PassResourceId::FinalColor);
     context.Resources().Publish(PassResourceId::FinalColor);
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 #include "Engine/Core/Math/Transform.h"
-#include "Editor/Session/EditableCamera.h"
+#include "Engine/Runtime/Scene/SceneCamera.h"
 #include <filesystem>
 #include <string>
 struct StartupSceneDefinition
@@ -13,7 +13,7 @@ struct StartupSceneDefinition
     cy::Vec3f lightRotation, lightColor;
     float lightIntensity = 0;
     bool castsShadow = false;
-    EditableCamera camera;
+    SceneCamera camera;
     std::string selectedObject;
 };
 bool ParseStartupScene(const std::string &text, StartupSceneDefinition &result, std::string &error);

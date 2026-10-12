@@ -18,10 +18,10 @@ MaiX Renderer 当前是一个基于 C++17 与 OpenGL 4.0 Core Profile 的实时�
 ## 2. 总体架构
 
 ```text
-Application
-  ├─ Window / Input / Camera
-  ├─ 游戏侧场景状态
-  └─ 每帧提交 RenderFrameData
+EditorApp / Sandbox（宿主）
+  ├─ WindowContext（平台窗口与 GL Context）
+  └─ EngineSession（场景状态和 Renderer 生命周期）
+       └─ SceneFrameBuilder 准备 RenderFrameData
            │
            ▼
 Renderer（渲染资源所有者与管线入口）
@@ -45,36 +45,36 @@ Renderer（渲染资源所有者与管线入口）
 ### 2.1 当前目录结构
 
 ```text
-src/
-├─ Assets/               FBX 模型与图片导入
-├─ Core/                 应用生命周期、窗口、输入、相机
-├─ Editor/               灯光调试 Gizmo 等编辑器叠加层
-├─ Platform/             平台文件对话框等边界
-├─ Renderer/
-│  ├─ Core/              Renderer 门面与 GPU 资源所有权
-│  ├─ Pipeline/          RenderPipeline、RenderPass 契约、RenderSettings
-│  ├─ Passes/            Shadow、Reflection、Forward、Bloom、PostProcess、Present
-│  ├─ Resources/         Mesh、Material、Shader、Texture、Framebuffer
-│  ├─ Scene/             RenderScene 与 Scene Proxy
-│  └─ View/              RenderView 与 RenderItem
-└─ main.cpp
-
-assets/shaders/
-├─ pbr/                  标准 PBR 与曲面细分/位移 Shader
-├─ shadow/               阴影深度 Shader
-├─ environment/         Skybox Shader
-├─ npr/                  Outline 等 NPR Shader
-├─ postprocess/          SSAO、Bloom 与色调处理 Shader
-├─ reflection/          反射地面 Shader
-├─ present/              离屏结果显示 Shader
-└─ debug/                灯光 Gizmo 等调试 Shader
+Engine/
+├─ Core/                 CPU 数学、平台窗口与文件对话框
+├─ Runtime/
+│  ├─ Component/         现有 Camera；完整组件体系留待 Phase 2
+│  ├─ Scene/             CPU 模型、灯光、场景相机、启动数据
+│  └─ Engine/            EngineSession、SceneState、RenderSceneBridge、SceneFrameBuilder
+├─ Asset/
+│  ├─ Geometry/          CPU Vertex 与程序化几何
+│  └─ Importer/          FBX/Image CPU 解析
+└─ Rendering/
+   ├─ RHI/OpenGL/        首个即时 Present 命令入口
+   ├─ Renderer/          Core、Scene、View、Pipeline、Resources、Diagnostics
+   ├─ Material/          Material、Instance 与有效材质解析
+   └─ Passes/            已有渲染算法
+Editor/                  EditorApp、Viewport、场景/属性/材质/导入面板与 UI 会话
+Sandbox/                 不链接 ImGui 的引擎/真实 OpenGL 验证宿主
+Shaders/                 按 PBR、NPR、阴影、后处理等用途组织的 GLSL
+assets/                  字体、图片、默认启动场景等非 Shader 资源
+tests/                   数学、资产、渲染、交互和架构检查
+ThirdParty/              第三方依赖
+docs/                    仅本地保留，已取消 Git 跟踪
 ```
+
+以上为 M0 后实际存在的目录。原设计中的 World、Actor、RenderGraph、AssetRegistry 等按 Phase 1–8 的使用需求逐步落地；不以空接口或空目录表示功能完成。Shader 源码位于顶层 Shaders，构建时部署到可执行目录的 Shaders。
 
 ## 3. 每帧渲染数据流
 
 ```text
 逻辑场景对象
-    │ Application 更新 Transform / Light
+    │ Editor 提交编辑，Engine 场景状态更新 Transform / Light
     ▼
 RenderScene
     │ BuildRenderView()
@@ -159,6 +159,8 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 
 - [x] 2026-10-11 完成项目能力核对及非必要产物清理：删除旧构建、临时诊断目录和可重建 Visual Studio 索引/预编译缓存，共约 2.90 GiB；保留当前 Ninja Debug 构建、源码、资产、完整第三方依赖、RenderDoc 捕获、本地配置及已有未提交修改，清理前后 22 组内容摘要一致。重新配置、构建、17 项测试及默认场景启动通过，无明显初始化、Shader 编译或链接错误；画面与交互待用户验收，见 `docs/project-status-and-cleanup.md`。
 
+- [x] 2026-10-12 完成 M0 目录迁移与最小职责拆分：先将 128 个源文件及 Shader 移到 Engine/Core、Runtime、Asset、Rendering、顶层 Editor/Shaders，再在新位置建立真实静态库依赖。EditorApp 保留输入、导航相机与 UI；WindowContext 持有 GLFW/GL Context；EngineSession 持有 CPU 场景状态与 Renderer；SceneFrameBuilder 准备多视图矩阵，RenderSceneBridge 同步变换并按 Primitive→Mesh→实例/父材质顺序清理。CPU Vertex 和包围体数学不再依赖 GPU Mesh。Present 经最小 RHICommandList 转入 OpenGL，其他资源/Pass 的完整 RHI 迁移留待 M1。Sandbox 不链接 ImGui/ImGuizmo。配置、构建、19 项测试及根目录/可执行目录默认、Material Lab、Material Instance Lab、透明和 256 实例启动/正常退出通过，真实合成像素与生命周期检查通过；视觉与交互待用户验收。docs 的 16 个远程文件已在 5852803 从 main 删除，本地保留并忽略，不清除 Git 历史。
+
 ### 部分完成
 
 - [ ] CMake 项目与可执行文件命名为 `MaiX_Renderer`，编辑器主窗口标题为 `MaiX Engine`；已接入 ImGui Docking 默认布局，左下 Console 与 Content Browser 共用标签区，右侧 Scene 与 Inspector 并排；更名后重新配置、构建、启动与 14 项测试通过；最终画面改为 Viewport 内的 Present 纹理，拾取与 Gizmo 改用视口矩形；布局、输入和画面效果待用户视觉验收，见 `docs/editor/workflows.md`
@@ -174,6 +176,9 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 - [ ] ImGui 统计面板、Material Editor、Asset Import、视口 Transform、Scene Window 和 Inspector 已完成；更完整的 Scene Window 层级与 Inspector 尚未开始
 
 ## 5. 分阶段实施计划
+
+当前整体架构路线以本地整体设计 v1.1 为准：M0 Architecture Refactor → M1 RHI → M2 World/Actor/Component → M3 Render Scene/Proxy → M4 Render Graph → M5 Material → M6 Asset → M7 Editor → M8 Modern Rendering Lab。已有渲染功能持续保留，下列阶段一至五为渲染能力建设的历史/专项安排，不替代这条整体架构路线。
+
 
 ### 阶段一：材质与 PBR 基础（已完成）
 
@@ -237,7 +242,7 @@ CPU 负责场景代理、可见项列表、矩阵和资源绑定准备；GPU 负
 
 ## 6. 近期下一步
 
-下一次实现前仍遵循“先给方案、确认后执行”的协作流程。根据当前阶段的渲染引擎目标，建议优先顺序为：
+M0 技术迁移已完成，下一架构步骤是 M1 的当前 OpenGL 使用路径 RHI 收敛，先提交具体资源/命令迁移方案再执行。已有功能的视觉/交互验收保持原状态。下一次实现前仍遵循“先给方案、确认后执行”的协作流程。根据当前阶段的渲染引擎目标，建议优先顺序为：
 
 1. 对已通过 `--face-shadow-demo` 绑定目标角色贴图的 Face Shadow 执行用户视觉验收；优先修复轴向、镜像或阈值方向等正确性问题，再评估是否需要扩展 NPR 功能。
 2. 验证 Docking 工作区、Scene Window / Inspector 的布局、视口输入、选择同步和参数约束，修复影响渲染调试与材质工作流的问题。

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 #pragma once
-#include "Engine/Rendering/Renderer/Resources/Mesh.h"
+#include "Engine/Asset/Geometry/Vertex.h"
 #include <vector>
 struct CubeGeometry
 {

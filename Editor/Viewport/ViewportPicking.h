@@ -7,8 +7,8 @@
 #include "cyVector.h"
 #include "Editor/Session/EditorSelection.h"
 
-struct EditableLight;
-struct EditableModel;
+struct SceneLight;
+struct SceneModel;
 
 struct EditorPickResult
 {
@@ -39,7 +39,7 @@ bool IntersectRaySphere(
 
 bool HitTestEditableModel(
     const WorldRay& ray,
-    const EditableModel& model,
+    const SceneModel& model,
     float& distance);
 
 bool HitTestLightIcon(
@@ -59,5 +59,5 @@ EditorPickResult PickEditorObject(
     float framebufferHeight,
     const cy::Matrix4f& projection,
     const cy::Matrix4f& view,
-    const std::vector<EditableModel>& models,
-    const std::vector<EditableLight>& lights);
+    const std::vector<SceneModel>& models,
+    const std::vector<SceneLight>& lights);

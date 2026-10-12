@@ -5,8 +5,8 @@
 
 #include "Editor/Session/EditorSelection.h"
 
-struct EditableLight;
-struct EditableModel;
+struct SceneLight;
+struct SceneModel;
 class Renderer;
 class EditorMaterialSelection;
 
@@ -15,9 +15,9 @@ class InspectorPanel
 public:
     bool Draw(
         EditorSelection& selection,
-        std::vector<EditableModel>& models,
-        std::vector<EditableLight>& lights,
-        EditableCamera& camera, bool& cameraView,
+        std::vector<SceneModel>& models,
+        std::vector<SceneLight>& lights,
+        SceneCamera& camera, bool& cameraView,
         Renderer& renderer,
         EditorMaterialSelection& materialSelection);
 };

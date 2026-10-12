@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
-#include "Editor/Session/EditableModel.h"
-#include "Editor/Session/EditableCamera.h"
+#include "Engine/Runtime/Scene/SceneModel.h"
+#include "Engine/Runtime/Scene/SceneCamera.h"
 #include "Engine/Rendering/Renderer/Scene/LightSceneProxy.h"
 
 enum class EditorSelectionType

@@ -128,7 +128,7 @@ void Camera::FocusBounds(const cy::Vec3f& center, float radius)
         return;
     m_Target = center;
     m_Distance = distance;
-    // Also make standalone focus safe before Application fits the full scene.
+    // Also make standalone focus safe before EditorApp fits the full scene.
     SetClipPlanes(std::clamp((distance - radius) * 0.5f, 0.0001f, 0.1f),
         std::max(1.0f, (distance + radius) * 1.1f + 0.01f));
 }

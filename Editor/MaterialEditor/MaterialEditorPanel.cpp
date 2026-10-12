@@ -43,7 +43,7 @@ std::string TextureDisplayName(const std::string& source)
 
 void MaterialEditorPanel::Draw(
     Renderer& renderer, const EditorSelection& selection,
-    const std::vector<EditableModel>& models,
+    const std::vector<SceneModel>& models,
     EditorMaterialSelection& materialSelection, MaterialEditRequest& request,
     void* nativeWindowHandle)
 {
@@ -68,7 +68,7 @@ void MaterialEditorPanel::Draw(
         if (materialSelection.AllMaterials())
         {
             std::string owners;
-            for (const EditableModel& model : models)
+            for (const SceneModel& model : models)
             {
                 for (MaterialHandle used : model.GetUsedMaterials())
                 {
@@ -84,7 +84,7 @@ void MaterialEditorPanel::Draw(
         }
         return label;
     };
-    const EditableModel* owner = FindEditableModel(models, materialSelection.Owner());
+    const SceneModel* owner = FindSceneModel(models, materialSelection.Owner());
     if (owner)
         ImGui::TextWrapped("Model: %s", owner->name.c_str());
     else if (allMaterials)

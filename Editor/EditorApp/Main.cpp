@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-#include "Editor/EditorApp/Application.h"
+#include "Editor/EditorApp/EditorApp.h"
 #include "Engine/Runtime/Engine/ApplicationOptions.h"
 
 #include <iostream>
@@ -27,7 +27,7 @@ int main(int argc, char** argv)
         return 0;
     }
 
-    Application app(
+    EditorApp app(
         options.normalMapPath,
         options.displacementMapPath,
         options.instanceGridSize,

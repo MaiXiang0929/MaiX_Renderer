@@ -6,8 +6,8 @@
 
 #include <imgui.h>
 
-#include "Editor/Session/EditableLight.h"
-#include "Editor/Session/EditableModel.h"
+#include "Engine/Runtime/Scene/SceneLight.h"
+#include "Engine/Runtime/Scene/SceneModel.h"
 #include "Editor/Session/EditorMaterialSelection.h"
 #include "Editor/Session/EditorValueConstraints.h"
 #include "Engine/Rendering/Renderer/Core/Renderer.h"
@@ -43,9 +43,9 @@ const char* LightTypeName(LightType type)
 
 bool InspectorPanel::Draw(
     EditorSelection& selection,
-    std::vector<EditableModel>& models,
-    std::vector<EditableLight>& lights,
-        EditableCamera& camera, bool& cameraView,
+    std::vector<SceneModel>& models,
+    std::vector<SceneLight>& lights,
+        SceneCamera& camera, bool& cameraView,
     Renderer& renderer,
     EditorMaterialSelection& materialSelection)
 {
@@ -66,7 +66,7 @@ bool InspectorPanel::Draw(
 
     if (selection.type == EditorSelectionType::Model)
     {
-        EditableModel* model = FindEditableModel(models, selection.modelId);
+        SceneModel* model = FindSceneModel(models, selection.modelId);
         if (model == nullptr)
         {
             selection.Clear();
@@ -96,7 +96,7 @@ bool InspectorPanel::Draw(
             "Scale", &model->transform.scale.x, 0.001f, 0.001f, 1000.0f, "%.4f");
         EditorValueConstraints::SanitizeScale(model->transform.scale);
         if (changed && model->IsValid())
-            ApplyEditableModelTransform(*model, renderer);
+            ApplySceneModelTransform(*model, renderer);
 
         ImGui::SeparatorText("Materials");
         bool openMaterialEditor = false;
@@ -124,7 +124,7 @@ bool InspectorPanel::Draw(
             for (std::size_t sectionIndex = 0; sectionIndex < model->sections.size();
                  ++sectionIndex)
             {
-                const EditableModelSection& section = model->sections[sectionIndex];
+                const SceneModelSection& section = model->sections[sectionIndex];
                 if (section.material.id == handles[index].id)
                 {
                     const std::string sectionName = section.name.empty()
@@ -163,7 +163,7 @@ bool InspectorPanel::Draw(
         ImGui::End(); return false;
     }
 
-    EditableLight* light = FindEditableLight(lights, selection.lightId);
+    SceneLight* light = FindSceneLight(lights, selection.lightId);
     if (light == nullptr)
     {
         selection.Clear();
@@ -223,7 +223,7 @@ bool InspectorPanel::Draw(
 
     changed |= ImGui::Checkbox("Cast Shadow", &light->proxy.castsShadow);
     if (changed)
-        ApplyEditableLightTransform(*light, renderer);
+        ApplySceneLightTransform(*light, renderer);
 
     ImGui::End();
     return false;
