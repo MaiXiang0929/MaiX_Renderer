@@ -141,6 +141,11 @@ target_compile_options(MaiX_Sandbox PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
 target_link_options(MaiX_Sandbox PRIVATE $<$<CONFIG:Debug>:LINKER:/NODEFAULTLIB:MSVCRT>)
 add_dependencies(MaiX_Sandbox MaiXEditorAssets)
 
+if(BUILD_TESTING AND NOT EXISTS "${PROJECT_ROOT}/tests/Core/StartupSceneTests.cpp")
+    message(STATUS "Local tests directory is absent; skipping test targets.")
+    set(BUILD_TESTING OFF)
+endif()
+
 if(BUILD_TESTING)
     add_test(NAME EngineRuntimeSmoke COMMAND MaiX_Sandbox)
     set_tests_properties(EngineRuntimeSmoke PROPERTIES WORKING_DIRECTORY "$<TARGET_FILE_DIR:MaiX_Renderer>")
