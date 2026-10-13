@@ -1,0 +1,34 @@
+Asset package: UE5 Basic Level visual reference assets for MaiX_Renderer
+Prepared: 2026-10-13
+
+ground_100m.fbx and checker_gray.png
+----------------------------------
+Original geometry and mathematical checker pattern prepared for this project.
+Released under CC0 1.0 Universal (CC0-1.0).
+License: https://creativecommons.org/publicdomain/zero/1.0/
+These files were created independently and are not Epic Games assets.
+
+sky/cubemap_*.png
+-----------------
+Original asset: clouds skybox 1
+Author: Luke.RUSTLTD
+Source: https://opengameart.org/content/clouds-skybox-1
+Download: https://opengameart.org/sites/default/files/clouds1.zip
+The source page identifies these sky textures as CC0.
+License: https://creativecommons.org/publicdomain/zero/1.0/
+
+Preparation consists of lossless BMP-to-PNG conversion and filenames matching
+MaiX_Renderer's six-face cubemap loader. No color adjustment, cropping, rotation,
+or painting was applied. RGB pixels remain identical to the source images;
+an opaque alpha channel was added for RGBA8 loading.
+
+Source face mapping:
+clouds1_east.bmp  -> sky/cubemap_posx.png
+clouds1_west.bmp  -> sky/cubemap_negx.png
+clouds1_up.bmp    -> sky/cubemap_posy.png
+clouds1_down.bmp  -> sky/cubemap_negy.png
+clouds1_north.bmp -> sky/cubemap_posz.png
+clouds1_south.bmp -> sky/cubemap_negz.png
+
+The Epic documentation screenshot is linked in README.md as a visual reference.
+It is not included in this package and is not covered by this CC0 statement.
