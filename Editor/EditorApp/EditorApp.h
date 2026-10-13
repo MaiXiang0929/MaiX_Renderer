@@ -112,6 +112,7 @@ private:
     /// @return 初始化成功返回 true，否则返回 false
     bool Init();
     bool CreateStartupScene(const struct StartupSceneDefinition& scene);
+    bool CreateBasicStartupScene(const struct StartupSceneDefinition& scene);
 
     /// @brief 创建用于验收透明排序、混合和深度遮挡的最小场景。
     void CreateTranslucencyTestScene();

@@ -273,6 +273,10 @@ bool EditorApp::Init() {
 
 bool EditorApp::CreateStartupScene(const StartupSceneDefinition& scene)
 {
+    if (scene.basicScene && !m_MaterialLab && !m_MaterialInstanceLab &&
+        !m_TranslucencyTest && m_InstanceGridSize == 0 && m_FaceShadowDemoModelPath.empty() &&
+        m_NormalMapPath.empty() && m_DisplacementMapPath.empty())
+        return CreateBasicStartupScene(scene);
     const CubeGeometry cube = CreateCubeGeometry(scene.cubeEdgeLength);
     const auto& vertices = cube.vertices;
     m_Engine.Scene().objCenter = cy::Vec3f(0.0f);
@@ -528,6 +532,100 @@ bool EditorApp::CreateStartupScene(const StartupSceneDefinition& scene)
     if (!LoadStartupFaceShadowDemo())
         return false;
 
+    return true;
+}
+
+bool EditorApp::CreateBasicStartupScene(const StartupSceneDefinition& definition)
+{
+    const BasicStartupSceneDefinition& basic = *definition.basicScene;
+    SceneState& scene = m_Engine.Scene();
+    for (const StartupModelDefinition* entry : {&basic.ground, &basic.monkey})
+    {
+        auto imported = AssetImport::FbxModelImporter::Import(entry->path);
+        if (!imported)
+        {
+            std::cerr << "[StartupScene] Failed to import '" << entry->path.u8string()
+                << "': " << imported.error << std::endl;
+            return false;
+        }
+        imported.model.name = entry->name;
+        for (auto& material : imported.model.materials)
+        {
+            material.baseColor = entry->baseColor;
+            material.metallic = 0.0f;
+            material.roughness = entry->roughness;
+            material.opacity = 1.0f;
+        }
+        std::string error;
+        ModelId id;
+        if (!CommitImportedModel(imported.model, error, id))
+        {
+            std::cerr << "[StartupScene] Failed to submit '" << entry->name
+                << "': " << error << std::endl;
+            return false;
+        }
+        SceneModel* model = FindSceneModel(scene.models, id);
+        model->transform = entry->transform;
+        ApplySceneModelTransform(*model, *m_Renderer);
+        for (const auto& warning : imported.model.warnings)
+            std::cerr << "[StartupScene] " << entry->name << ": " << warning << std::endl;
+        if (entry == &basic.monkey)
+        {
+            scene.defaultModelId = id;
+            scene.defaultBoundsMin = imported.model.boundsMin;
+            scene.defaultBoundsMax = imported.model.boundsMax;
+        }
+    }
+    const SceneModel* monkey = FindSceneModel(scene.models, scene.defaultModelId);
+    const PrimitiveBounds monkeyBounds = monkey->GetWorldBounds();
+    scene.objCenter = monkeyBounds.center;
+    scene.modelDiameter = monkeyBounds.radius * 2.0f;
+    scene.sceneRadius = GetSceneWorldBounds(scene.models).radius;
+    scene.groundY = basic.ground.transform.position.y;
+    // The visible FBX floor is an ordinary PBR primitive, without the legacy
+    // mirror ground used by material/instancing validation modes.
+    scene.reflectionGroundEnabled = false;
+    m_Renderer->SetSsaoRadius(0.5f);
+    m_Renderer->SetSsaoBias(0.025f);
+
+    SceneLight light;
+    light.name = basic.pointLightName;
+    light.transform.position = basic.pointLightPosition;
+    light.proxy.type = LightType::Point;
+    light.proxy.color = basic.pointLightColor;
+    light.proxy.intensity = basic.pointLightIntensity;
+    light.proxy.range = basic.pointLightRange;
+    // Point shadows are not implemented by the current shadow pipeline.
+    light.proxy.castsShadow = false;
+    light.proxy.id = m_Renderer->AddLight(light.proxy);
+    if (!light.IsValid()) return false;
+    scene.mainLightId = light.proxy.id;
+    scene.lights.push_back(std::move(light));
+    ApplySceneLightTransform(scene.lights.back(), *m_Renderer);
+    scene.camera = definition.camera;
+    scene.camera.id = CameraId{1};
+
+    // Frame the Monkey rather than fitting the 100-meter ground. Preserve an
+    // orbit camera at the authored eye position, so navigation works on launch.
+    const cy::Vec3f offset = scene.camera.transform.position - monkeyBounds.center;
+    const float distance = offset.Length();
+    if (distance <= 0.001f)
+    {
+        std::cerr << "[StartupScene] Camera coincides with the Monkey center." << std::endl;
+        return false;
+    }
+    m_Camera.SetTarget(monkeyBounds.center);
+    m_Camera.SetDistance(distance);
+    m_Camera.SetClipPlanes(scene.camera.nearPlane, scene.camera.farPlane);
+    m_Camera.ProcessMouseOrbit(std::atan2(offset.x, offset.z) / 0.01f,
+        std::asin(std::clamp(offset.y / distance, -1.0f, 1.0f)) / 0.01f);
+    m_EditorSelection.SelectModel(scene.defaultModelId);
+    if (definition.selectedObject == "ground")
+        m_EditorSelection.SelectModel(scene.models.front().id);
+    if (definition.selectedObject == "pointLight") m_EditorSelection.SelectLight(scene.mainLightId);
+    if (definition.selectedObject == "camera") m_EditorSelection.SelectCamera(scene.camera.id);
+    std::cout << "[StartupScene] Ground + Monkey + Point Light + Camera; 1 unit=1 m"
+        << std::endl;
     return true;
 }
 

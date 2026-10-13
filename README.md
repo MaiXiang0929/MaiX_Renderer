@@ -77,7 +77,7 @@ cmake --build --preset windows-ninja-debug
 .\out\build\windows-ninja-debug\MaiX_Renderer.exe
 ```
 
-无参数启动会载入 Cube、Directional Light、Camera：1 单位=1 米，正方体边长 2 米，中心位于原点，默认材质不绑定贴图。启动场景 JSON 位于 assets/scenes/startup.json，加载失败时使用由同一文件生成的内嵌回退。
+无参数启动会载入默认场景。默认选中 Monkey，可在 Scene 中选择地面或点光源，在 Inspector/Material Editor 中编辑。点光源当前不支持阴影；SSAO 保留现有手动开关，默认关闭。
 
 构建产物位于 `out/build/windows-ninja-debug/`；构建时部署最新的 `assets/` 和 `Shaders/`，支持从仓库根目录或可执行文件目录启动。
 
@@ -94,7 +94,7 @@ cmake --build --preset windows-ninja-debug
 | `Alt` + 左键拖动 | Orbit 相机 |
 | `Alt` + 中键拖动 | Pan 相机 |
 | `Alt` + 右键拖动或滚轮 | Dolly 相机 |
-| `Ctrl` + 左键拖动 | 旋转主方向光 |
+| `Ctrl` + 左键拖动 | 旋转主灯光朝向，对方向光和聚光灯有效；默认点光源使用 Gizmo 移动 |
 | 小键盘 `0` | 切换场景 Camera / 编辑器视图 |
 | `F` | 聚焦当前选中对象 |
 | `W` / `E` / `R` | ImGuizmo 移动 / 旋转 / 缩放 |
@@ -135,4 +135,4 @@ docs/                    仅本地保留，已取消 Git 跟踪
 
 ## 许可证与资产署名
 
-第三方依赖的许可证信息请查看其目录中的 LICENSE/README 文件。外部角色资产不属于本仓库；使用或分发时应保留其原始署名与来源说明。
+第三方依赖的许可证信息请查看其目录中的 LICENSE/README 文件。

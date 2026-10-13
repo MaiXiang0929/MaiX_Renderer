@@ -59,7 +59,7 @@ bool Renderer::Init()
     };
     m_GroundMesh.Upload(groundVertices);
 
-    LoadCubemap("assets/models/cubemap");
+    LoadCubemap("assets/models/sky");
     return true;
 }
 

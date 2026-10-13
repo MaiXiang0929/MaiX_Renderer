@@ -31,6 +31,26 @@ std::string Name(const Json &value)
         throw std::runtime_error("Empty object name");
     return result;
 }
+bool ValidColor(const cy::Vec3f& color)
+{
+    return color.x >= 0 && color.y >= 0 && color.z >= 0 && color.Max() <= 1;
+}
+StartupModelDefinition Model(const Json& value)
+{
+    StartupModelDefinition model;
+    model.name = Name(value.at("name"));
+    model.path = std::filesystem::u8path(Name(value.at("path")));
+    model.transform.position = Vector(value.at("position"));
+    model.transform.rotationDegrees = Vector(value.at("rotation"));
+    model.transform.scale = Vector(value.at("scale"));
+    model.baseColor = Vector(value.at("baseColor"));
+    model.roughness = Number(value.at("roughness"));
+    if (model.transform.scale.x < 0.001f || model.transform.scale.y < 0.001f ||
+        model.transform.scale.z < 0.001f || model.transform.scale.Max() > 1000 ||
+        !ValidColor(model.baseColor) || model.roughness < 0.045f || model.roughness > 1)
+        throw std::runtime_error("Invalid startup model parameters");
+    return model;
+}
 } // namespace
 bool ParseStartupScene(const std::string &text, StartupSceneDefinition &result, std::string &error)
 {
@@ -71,9 +91,29 @@ bool ParseStartupScene(const std::string &text, StartupSceneDefinition &result, 
             candidate.camera.nearPlane < 0.0001f ||
             candidate.camera.farPlane <= candidate.camera.nearPlane)
             throw std::runtime_error("Invalid camera projection");
+        if (json.contains("basicScene"))
+        {
+            const auto& basic = json.at("basicScene");
+            BasicStartupSceneDefinition definition;
+            definition.ground = Model(basic.at("ground"));
+            definition.monkey = Model(basic.at("monkey"));
+            const auto& point = basic.at("pointLight");
+            definition.pointLightName = Name(point.at("name"));
+            definition.pointLightPosition = Vector(point.at("position"));
+            definition.pointLightColor = Vector(point.at("color"));
+            definition.pointLightIntensity = Number(point.at("intensity"));
+            definition.pointLightRange = Number(point.at("range"));
+            if (!ValidColor(definition.pointLightColor) || definition.pointLightIntensity < 0 ||
+                definition.pointLightIntensity > 100 || definition.pointLightRange < 0.001f ||
+                definition.pointLightRange > 10000)
+                throw std::runtime_error("Invalid startup point light parameters");
+            candidate.basicScene = std::move(definition);
+        }
         candidate.selectedObject = json.at("selectedObject").get<std::string>();
         if (candidate.selectedObject != "cube" && candidate.selectedObject != "directionalLight" &&
-            candidate.selectedObject != "camera")
+            candidate.selectedObject != "camera" &&
+            !(candidate.basicScene && (candidate.selectedObject == "ground" ||
+                candidate.selectedObject == "monkey" || candidate.selectedObject == "pointLight")))
             throw std::runtime_error("Unknown selected object");
         result = std::move(candidate);
         error.clear();
