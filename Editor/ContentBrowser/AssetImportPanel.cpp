@@ -190,6 +190,9 @@ void AssetImportPanel::SelectModel(void* nativeWindowHandle)
 
 void AssetImportPanel::BeginImport(const std::filesystem::path& path)
 {
+    if (m_Status == Status::Parsing || m_Status == Status::AwaitingCommit)
+        return;
+    m_ShowWindow = true;
     if (Lowercase(path.extension().string()) != ".fbx")
     {
         m_SourcePath = path;

@@ -38,6 +38,10 @@
 #include "Editor/SceneHierarchy/SceneHierarchyPanel.h"
 #include "Editor/Session/EditorWorkspace.h"
 #include "Editor/Session/EditorFonts.h"
+#include "Editor/Session/EditorTheme.h"
+#include "Editor/Session/EditorWidgets.h"
+#include "Editor/Session/EditorProject.h"
+#include "Engine/Core/Platform/Windows/PlatformPaths.h"
 
 #include "Engine/Asset/Geometry/CubeGeometry.h"
 #include "Engine/Runtime/Scene/StartupScene.h"
@@ -180,7 +184,6 @@ bool EditorApp::Init() {
     // EditorApp 保留 GLFW 回调所有权，ImGui 后端只接收手动转发的输入事件。
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
-    ImGui::StyleColorsDark();
     ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     // 将布局保存在用户目录，避免 Visual Studio 的工作目录改变时丢失停靠状态。
 #if defined(_WIN32)
@@ -208,6 +211,22 @@ bool EditorApp::Init() {
 #if defined(_WIN32)
     std::free(localAppData);
 #endif
+    const auto documents = PlatformPaths::DocumentsDirectory();
+    const auto defaultProject = documents.empty() ? std::filesystem::path{} :
+        documents / "MaiX Projects" / "DefaultProject";
+    const std::filesystem::path engineSource(MAIX_ENGINE_SOURCE_DIR);
+    m_Project = std::make_unique<EditorProject>(defaultProject,
+        std::vector<std::filesystem::path>{engineSource / "assets", engineSource / "Shaders",
+            engineSource / "out", PlatformPaths::ExecutableDirectory()});
+    m_Project->RegisterSettings();
+    EditorTheme::RegisterSettings(m_Appearance);
+    // Load before applying the first style, avoiding a flash of the wrong theme.
+    if (!m_ImGuiIniPath.empty())
+        ImGui::LoadIniSettingsFromDisk(m_ImGuiIniPath.c_str());
+    if (m_Project->Initialize())
+        std::cout << "[Project] Assets: " << m_Project->AssetsRoot().u8string() << std::endl;
+    else
+        std::cerr << "[Project] " << m_Project->Diagnostic() << std::endl;
     const bool imguiPlatformInitialized =
         ImGui_ImplGlfw_InitForOpenGL(m_Window, false);
     const bool imguiRendererInitialized =
@@ -222,8 +241,13 @@ bool EditorApp::Init() {
     }
     m_ImGuiInitialized = true;
     std::string fontDiagnostic;
+    float contentScaleX = 1.0f, contentScaleY = 1.0f;
+    glfwGetWindowContentScale(m_Window, &contentScaleX, &contentScaleY);
+    m_AppliedUiScale = std::clamp(contentScaleX * m_Appearance.uiScale, 0.75f, 4.0f);
+    m_AppliedTheme = m_Appearance.theme;
+    EditorTheme::Apply(m_AppliedTheme, m_AppliedUiScale);
     if (!EditorFonts::Initialize(*ImGui::GetIO().Fonts,
-            "assets/fonts/NotoSansSC.ttf", fontDiagnostic))
+            "assets/fonts/NotoSansSC.ttf", fontDiagnostic, 15.0f * m_AppliedUiScale))
         std::cerr << "[Warning] " << fontDiagnostic << std::endl;
     else
         std::cout << "[Editor] Chinese font atlas initialized." << std::endl;
@@ -264,8 +288,10 @@ bool EditorApp::Init() {
         return false;
     }
     m_Renderer = m_Engine.GetRenderer();
-    m_Workspace = std::make_unique<EditorWorkspace>(m_Renderer->Device());
+    m_Workspace = std::make_unique<EditorWorkspace>(m_Renderer->Device(), *m_Project);
     m_Workspace->AddLog("MaiX Renderer initialized.");
+    if (!m_Project->Diagnostic().empty())
+        m_Workspace->AddLog("[Project] " + m_Project->Diagnostic());
     if (!fontDiagnostic.empty())
         m_Workspace->AddLog("[Warning] " + fontDiagnostic);
     std::string diagnostic;
@@ -1223,13 +1249,16 @@ void EditorApp::Update() {
 /// @brief 渲染应用程序
 void EditorApp::Render() {
     // 先建立 ImGui 布局，取得中央视口的实际像素尺寸，再提交渲染帧。
+    UpdateAppearance();
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
     ImGuizmo::BeginFrame();
     void* nativeWindowHandle = GetNativeWindowHandle(m_Window);
-    m_Workspace->BeginFrame(*m_AssetImportPanel, nativeWindowHandle);
-    const EditorViewportRegion viewport = m_Workspace->BeginViewport();
+    m_Workspace->BeginFrame(*m_AssetImportPanel, nativeWindowHandle, m_Appearance);
+    const EditorViewportRegion viewport = m_Workspace->BeginViewport([&] {
+        m_ViewportController->DrawToolbar(m_EditorSelection, m_Engine.Scene().lights, m_SceneCameraView);
+    });
     if (viewport.visible && viewport.pixelWidth > 0 && viewport.pixelHeight > 0)
     {
         m_Camera.SetAspectRatio(static_cast<float>(viewport.pixelWidth) /
@@ -1281,14 +1310,37 @@ void EditorApp::Render() {
             nativeWindowHandle);
         ApplyMaterialEditRequest(request);
     }
-    m_Workspace->DrawBottomPanels(*m_AssetImportPanel, nativeWindowHandle);
+    m_Workspace->DrawBottomPanels(*m_AssetImportPanel);
+    EditorWidgets::DrawDockTabAccents();
     ImGui::Render();
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, static_cast<GLsizei>(m_Width), static_cast<GLsizei>(m_Height));
-    glClearColor(0.09f, 0.09f, 0.09f, 1.0f);
+    const auto background = EditorTheme::GetPalette().background;
+    glClearColor(background.x, background.y, background.z, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
+}
+void EditorApp::UpdateAppearance()
+{
+    float contentScaleX = 1.0f, contentScaleY = 1.0f;
+    glfwGetWindowContentScale(m_Window, &contentScaleX, &contentScaleY);
+    const float scale = std::clamp(contentScaleX * m_Appearance.uiScale, 0.75f, 4.0f);
+    const bool resized = std::abs(scale - m_AppliedUiScale) > 0.01f;
+    if (resized)
+    {
+        // Previous frame has already been submitted. Never rebuild a locked atlas.
+        ImGui_ImplOpenGL3_DestroyFontsTexture();
+        std::string diagnostic;
+        EditorFonts::Initialize(*ImGui::GetIO().Fonts,"assets/fonts/NotoSansSC.ttf",diagnostic,15.0f*scale);
+        if (!diagnostic.empty()) m_Workspace->AddLog("[Warning] " + diagnostic);
+    }
+    if (resized || m_AppliedTheme != m_Appearance.theme)
+    {
+        EditorTheme::Apply(m_Appearance.theme,scale);
+        m_AppliedUiScale = scale;
+        m_AppliedTheme = m_Appearance.theme;
+    }
 }
 /// @brief 关闭应用程序
 void EditorApp::Shutdown() {
@@ -1308,6 +1360,7 @@ void EditorApp::Shutdown() {
         ImGui::DestroyContext();
         m_ImGuiInitialized = false;
     }
+    m_Project.reset();
 
     m_Engine.Shutdown();
     m_Renderer = nullptr;

@@ -30,7 +30,8 @@ target_include_directories(MaiXPNG PUBLIC ${THIRD_PARTY_DIR}/lodepng)
 add_library(MaiXCore STATIC Engine/Core/Math/Transform.cpp Engine/Core/Math/Bounds.cpp)
 target_link_libraries(MaiXCore PUBLIC MaiXHeaders)
 
-add_library(MaiXPlatform STATIC Engine/Core/Platform/Windows/FileDialog.cpp Engine/Core/Platform/WindowContext.cpp)
+add_library(MaiXPlatform STATIC Engine/Core/Platform/Windows/FileDialog.cpp
+    Engine/Core/Platform/Windows/PlatformPaths.cpp Engine/Core/Platform/WindowContext.cpp)
 target_include_directories(MaiXPlatform PUBLIC ${THIRD_PARTY_DIR}/glfw/include)
 target_link_directories(MaiXPlatform PUBLIC ${THIRD_PARTY_DIR}/glfw/lib-vc2022)
 target_link_libraries(MaiXPlatform PUBLIC MaiXCore MaiXGL glfw3.lib PRIVATE ole32.lib shell32.lib)
@@ -115,11 +116,15 @@ add_executable(MaiX_Renderer
     Editor/MaterialEditor/MaterialEditorPanel.cpp
     Editor/SceneHierarchy/SceneHierarchyPanel.cpp
     Editor/Session/EditorFonts.cpp
+    Editor/Session/EditorProject.cpp
+    Editor/Session/EditorTheme.cpp
+    Editor/Session/EditorWidgets.cpp
     Editor/Session/EditorWorkspace.cpp
     Editor/Viewport/EditorViewportController.cpp
     Editor/Viewport/ViewportPicking.cpp
 )
 target_link_libraries(MaiX_Renderer PRIVATE MaiXEngine MaiXPlatform MaiXEditorUI)
+target_compile_definitions(MaiX_Renderer PRIVATE MAIX_ENGINE_SOURCE_DIR="${PROJECT_ROOT}")
 target_compile_options(MaiX_Renderer PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
 target_link_options(MaiX_Renderer PRIVATE $<$<CONFIG:Debug>:LINKER:/NODEFAULTLIB:MSVCRT>)
 
@@ -161,6 +166,20 @@ if(BUILD_TESTING)
     target_include_directories(EditorFontsTests PRIVATE ${SRC_DIR} ${THIRD_PARTY_DIR}/imgui)
     add_test(NAME ModuleBoundaries COMMAND ${CMAKE_COMMAND} -DPROJECT_ROOT=${PROJECT_ROOT} -P ${PROJECT_ROOT}/tests/Architecture/CheckModuleBoundaries.cmake)
     add_test(NAME EditorFontsTests COMMAND EditorFontsTests "${ASSET_DIR}/fonts/NotoSansSC.ttf")
+    add_executable(EditorThemeTests tests/Editor/EditorThemeTests.cpp Editor/Session/EditorTheme.cpp)
+    target_link_libraries(EditorThemeTests PRIVATE MaiXEditorUI MaiXHeaders)
+    add_test(NAME EditorThemeTests COMMAND EditorThemeTests)
+    add_executable(EditorProjectTests tests/Editor/EditorProjectTests.cpp Editor/Session/EditorProject.cpp)
+    target_link_libraries(EditorProjectTests PRIVATE MaiXEditorUI MaiXHeaders)
+    target_compile_options(EditorProjectTests PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
+    add_test(NAME EditorProjectTests COMMAND EditorProjectTests)
+    add_executable(EditorWorkspaceTests tests/Editor/EditorWorkspaceTests.cpp
+        Editor/Session/EditorWorkspace.cpp Editor/Session/EditorTheme.cpp Editor/Session/EditorProject.cpp
+        Editor/Session/EditorWidgets.cpp Editor/ContentBrowser/AssetImportPanel.cpp
+        Editor/Viewport/EditorViewportController.cpp Editor/Viewport/ViewportPicking.cpp)
+    target_link_libraries(EditorWorkspaceTests PRIVATE MaiXEngine MaiXPlatform MaiXEditorUI)
+    target_compile_options(EditorWorkspaceTests PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
+    add_test(NAME EditorWorkspaceTests COMMAND EditorWorkspaceTests)
 
     add_executable(StartupSceneTests tests/Core/StartupSceneTests.cpp
         Engine/Runtime/Scene/StartupScene.cpp Engine/Core/Math/Transform.cpp Engine/Runtime/Component/Camera.cpp)

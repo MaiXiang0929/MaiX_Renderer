@@ -5,6 +5,7 @@
 #include <cmath>
 
 #include <imgui.h>
+#include "Editor/Session/EditorWidgets.h"
 
 #include "Engine/Runtime/Scene/SceneLight.h"
 #include "Engine/Runtime/Scene/SceneModel.h"
@@ -74,67 +75,70 @@ bool InspectorPanel::Draw(
             ImGui::End();
             return false;
         }
-        ImGui::TextUnformatted(model->name.empty() ? "Model" : model->name.c_str());
-        if (model->importedSizeMeters)
-        {
-            const cy::Vec3f& size = *model->importedSizeMeters;
-            ImGui::TextWrapped("Imported X / Y / Z: %.4g / %.4g / %.4g m",
-                size.x, size.y, size.z);
-            if (model->sourceUnitMeters)
-                ImGui::TextWrapped("Reported source unit: %.6g m/unit", *model->sourceUnitMeters);
-            else
-                ImGui::TextUnformatted("Reported source unit: unknown");
-            ImGui::TextDisabled("Imported size excludes current root Transform.");
-        }
-        ImGui::SeparatorText("Transform");
+        EditorWidgets::ObjectHeader(EditorWidgets::Icon::Mesh,
+            model->name.empty() ? "Model" : model->name.c_str(),"Mesh");
         bool changed = false;
-        changed |= ImGui::DragFloat3(
-            "Position (m)", &model->transform.position.x, 0.005f);
-        changed |= ImGui::DragFloat3(
-            "Rotation", &model->transform.rotationDegrees.x, 1.0f);
-        changed |= ImGui::DragFloat3(
-            "Scale", &model->transform.scale.x, 0.001f, 0.001f, 1000.0f, "%.4f");
+        if (EditorWidgets::Section("Transform"))
+        {
+            changed |= EditorWidgets::DragVector3(
+                "Position (m)", &model->transform.position.x, 0.005f);
+            changed |= EditorWidgets::DragVector3(
+                "Rotation", &model->transform.rotationDegrees.x, 1.0f);
+            changed |= EditorWidgets::DragVector3(
+                "Scale", &model->transform.scale.x, 0.001f, 0.001f, 1000.0f, "%.4f");
+        }
         EditorValueConstraints::SanitizeScale(model->transform.scale);
         if (changed && model->IsValid())
             ApplySceneModelTransform(*model, renderer);
 
-        ImGui::SeparatorText("Materials");
         bool openMaterialEditor = false;
-        bool hasAvailableMaterial = false;
-        const std::vector<MaterialHandle> handles = model->GetUsedMaterials();
-        for (std::size_t index = 0; index < handles.size(); ++index)
+        if (EditorWidgets::Section("Materials"))
         {
-            Renderer::MaterialSnapshot snapshot;
-            if (!renderer.GetMaterialSnapshot(handles[index], snapshot))
-                continue;
-            hasAvailableMaterial = true;
-            const std::string label = "Slot " + std::to_string(index + 1) +
-                ": " + (snapshot.name.empty() ? "Material" : snapshot.name);
-            ImGui::PushID(static_cast<int>(handles[index].id));
-            if (ImGui::Selectable(label.c_str(),
-                    !materialSelection.AllMaterials() &&
-                    materialSelection.Owner() == model->id &&
-                    materialSelection.Material().id == handles[index].id))
+            bool hasAvailableMaterial = false;
+            const std::vector<MaterialHandle> handles = model->GetUsedMaterials();
+            for (std::size_t index = 0; index < handles.size(); ++index)
             {
-                // 点击模型材质时回到模型范围，并打开共用的参数编辑面板。
-                materialSelection.Select(model->id, handles[index]);
-                openMaterialEditor = true;
-            }
-            ImGui::PopID();
-            for (std::size_t sectionIndex = 0; sectionIndex < model->sections.size();
-                 ++sectionIndex)
-            {
-                const SceneModelSection& section = model->sections[sectionIndex];
-                if (section.material.id == handles[index].id)
+                Renderer::MaterialSnapshot snapshot;
+                if (!renderer.GetMaterialSnapshot(handles[index], snapshot))
+                    continue;
+                hasAvailableMaterial = true;
+                const std::string label = "Slot " + std::to_string(index + 1) +
+                    ": " + (snapshot.name.empty() ? "Material" : snapshot.name);
+                ImGui::PushID(static_cast<int>(handles[index].id));
+                if (ImGui::Selectable(label.c_str(),
+                        !materialSelection.AllMaterials() &&
+                        materialSelection.Owner() == model->id &&
+                        materialSelection.Material().id == handles[index].id))
                 {
-                    const std::string sectionName = section.name.empty()
-                        ? "Section " + std::to_string(sectionIndex + 1) : section.name;
-                    ImGui::TextDisabled("  %s", sectionName.c_str());
+                    // 点击模型材质时回到模型范围，并打开共用的参数编辑面板。
+                    materialSelection.Select(model->id, handles[index]);
+                    openMaterialEditor = true;
+                }
+                ImGui::PopID();
+                for (std::size_t sectionIndex = 0; sectionIndex < model->sections.size();
+                     ++sectionIndex)
+                {
+                    const SceneModelSection& section = model->sections[sectionIndex];
+                    if (section.material.id == handles[index].id)
+                    {
+                        const std::string sectionName = section.name.empty()
+                            ? "Section " + std::to_string(sectionIndex + 1) : section.name;
+                        ImGui::TextDisabled("  %s", sectionName.c_str());
+                    }
                 }
             }
+            if (!hasAvailableMaterial)
+                ImGui::TextUnformatted("No available materials used by this model.");
         }
-        if (!hasAvailableMaterial)
-            ImGui::TextUnformatted("No available materials used by this model.");
+        if (model->importedSizeMeters && EditorWidgets::Section("Asset Info",false))
+        {
+            const auto& size=*model->importedSizeMeters;
+            ImGui::TextWrapped("Imported X / Y / Z: %.4g / %.4g / %.4g m",size.x,size.y,size.z);
+            if (model->sourceUnitMeters)
+                ImGui::TextWrapped("Reported source unit: %.6g m/unit",*model->sourceUnitMeters);
+            else ImGui::TextUnformatted("Reported source unit: unknown");
+            ImGui::TextWrapped("Imported size excludes current root Transform.");
+        }
         ImGui::End();
         return openMaterialEditor;
     }
@@ -142,9 +146,9 @@ bool InspectorPanel::Draw(
     if (selection.IsCameraSelected(camera.id))
     {
         const auto previousCamera = camera;
-        ImGui::TextUnformatted(camera.name.c_str());
-        ImGui::DragFloat3("Position (m)", &camera.transform.position.x, 0.05f);
-        ImGui::DragFloat3("Rotation", &camera.transform.rotationDegrees.x, 0.5f);
+        EditorWidgets::ObjectHeader(EditorWidgets::Icon::Camera,camera.name.c_str(),"Camera");
+        EditorWidgets::DragVector3("Position (m)", &camera.transform.position.x, 0.05f);
+        EditorWidgets::DragVector3("Rotation", &camera.transform.rotationDegrees.x, 0.5f);
         ImGui::DragFloat("Vertical FOV", &camera.fovDegrees, 0.5f, 1, 150, "%.1f deg");
         ImGui::DragFloat("Near (m)", &camera.nearPlane, 0.01f, 0.0001f, 1000, "%.4f");
         ImGui::DragFloat("Far (m)", &camera.farPlane, 1, 0.001f, 100000);
@@ -172,20 +176,20 @@ bool InspectorPanel::Draw(
         return false;
     }
 
-    ImGui::TextUnformatted(light->name.empty() ? "Light" : light->name.c_str());
-    ImGui::TextDisabled("Type: %s", LightTypeName(light->proxy.type));
+    EditorWidgets::ObjectHeader(EditorWidgets::Icon::Light,
+        light->name.empty() ? "Light" : light->name.c_str(),LightTypeName(light->proxy.type));
     ImGui::SeparatorText("Light Parameters");
 
     bool changed = false;
     if (light->proxy.type != LightType::Directional)
     {
-        changed |= ImGui::DragFloat3(
+        changed |= EditorWidgets::DragVector3(
             "Position", &light->transform.position.x, 0.05f);
     }
     else
     {
         const auto previousRotation = light->transform.rotationDegrees;
-        changed |= ImGui::DragFloat3(
+        changed |= EditorWidgets::DragVector3(
             "Rotation", &light->transform.rotationDegrees.x, 0.5f);
         const auto rotation = light->transform.rotationDegrees;
         if (!std::isfinite(rotation.x) || !std::isfinite(rotation.y) || !std::isfinite(rotation.z))

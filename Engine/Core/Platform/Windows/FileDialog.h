@@ -13,4 +13,7 @@ std::optional<std::filesystem::path> OpenModelFile(
     NativeWindowHandle ownerWindow = nullptr);
 std::optional<std::filesystem::path> OpenTextureFile(
     NativeWindowHandle ownerWindow = nullptr);
+std::optional<std::filesystem::path> OpenDirectory(
+    NativeWindowHandle ownerWindow = nullptr,
+    const std::filesystem::path& initialDirectory = {});
 }

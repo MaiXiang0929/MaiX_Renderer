@@ -7,11 +7,19 @@
 #include <optional>
 #include <system_error>
 #include <vector>
+#include <fstream>
+#include <iterator>
 
 #include <imgui_internal.h>
 #include <lodepng.h>
 
 #include "Editor/ContentBrowser/AssetImportPanel.h"
+#include "Editor/Session/EditorTheme.h"
+#include "Editor/Session/EditorWidgets.h"
+#include "Editor/Session/EditorProject.h"
+#include "Engine/Core/Platform/Windows/FileDialog.h"
+#include <cctype>
+#include <cfloat>
 #include "Engine/Rendering/Renderer/Resources/Texture2D.h"
 
 namespace
@@ -19,9 +27,13 @@ namespace
 std::shared_ptr<Texture2D> LoadSmallPreview(RHIDevice& device, const std::filesystem::path& path)
 {
     std::vector<unsigned char> source;
+    std::ifstream input(path, std::ios::binary);
+    if (!input) return nullptr;
+    const std::vector<unsigned char> encoded((std::istreambuf_iterator<char>(input)),
+        std::istreambuf_iterator<char>());
     unsigned int width = 0;
     unsigned int height = 0;
-    if (lodepng::decode(source, width, height, path.string()) != 0 ||
+    if (lodepng::decode(source, width, height, encoded) != 0 ||
         width == 0 || height == 0)
         return nullptr;
 
@@ -44,9 +56,10 @@ std::shared_ptr<Texture2D> LoadSmallPreview(RHIDevice& device, const std::filesy
 }
 }
 
-EditorWorkspace::EditorWorkspace(RHIDevice& device)
+EditorWorkspace::EditorWorkspace(RHIDevice& device, EditorProject& project)
     : m_Device(device)
-    , m_AssetRoot(std::filesystem::current_path() / "assets")
+    , m_Project(project)
+    , m_AssetRoot(project.AssetsRoot())
     , m_CurrentDirectory(m_AssetRoot)
 {
     RefreshAssets();
@@ -59,22 +72,26 @@ void EditorWorkspace::BuildDefaultLayout(ImGuiID dockspaceId)
     ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace);
     ImGui::DockBuilderSetNodeSize(dockspaceId, ImGui::GetMainViewport()->WorkSize);
 
+    const float scale = EditorTheme::GetScale();
+    const auto size = ImGui::GetMainViewport()->WorkSize;
     ImGuiID left = dockspaceId;
-    ImGuiID right = ImGui::DockBuilderSplitNode(left, ImGuiDir_Right, 0.32f, nullptr, &left);
-    ImGuiID bottom = ImGui::DockBuilderSplitNode(left, ImGuiDir_Down, 0.20f, nullptr, &left);
-    ImGuiID scene = right;
-    ImGuiID inspector = ImGui::DockBuilderSplitNode(right, ImGuiDir_Right, 0.50f, nullptr, &scene);
+    const float inspectorRatio = std::clamp(390*scale/size.x,0.20f,0.32f);
+    ImGuiID inspector = ImGui::DockBuilderSplitNode(left, ImGuiDir_Right, inspectorRatio, nullptr, &left);
+    ImGuiID bottom = ImGui::DockBuilderSplitNode(left, ImGuiDir_Down, 0.26f, nullptr, &left);
+    const float sceneRatio = std::clamp(260*scale/(size.x*(1-inspectorRatio)),0.17f,0.30f);
+    ImGuiID scene = ImGui::DockBuilderSplitNode(left, ImGuiDir_Left, sceneRatio, nullptr, &left);
 
     ImGui::DockBuilderDockWindow("Viewport", left);
     // 两个工具窗口停靠到同一节点，显示为左下区域的两个标签。
-    ImGui::DockBuilderDockWindow("Console", bottom);
     ImGui::DockBuilderDockWindow("Content Browser", bottom);
+    ImGui::DockBuilderDockWindow("Console", bottom);
     ImGui::DockBuilderDockWindow("Scene", scene);
     ImGui::DockBuilderDockWindow("Inspector", inspector);
     // 共用现有 Inspector 节点，不新增分区，也不改变其他面板的比例。
     ImGui::DockBuilderDockWindow("Material Editor", inspector);
     ImGui::DockBuilderFinish(dockspaceId);
     m_MaterialDockChecked = false;
+    m_ContentFocusRequested = true;
 }
 
 void EditorWorkspace::OpenMaterialEditor()
@@ -107,17 +124,57 @@ void EditorWorkspace::PrepareMaterialEditor()
     }
 }
 
-void EditorWorkspace::BeginFrame(AssetImportPanel& assetImport, void* nativeWindowHandle)
+void EditorWorkspace::BeginFrame(AssetImportPanel& assetImport, void* nativeWindowHandle, EditorAppearanceSettings& appearance)
 {
+    bool projectOpened = false;
+    if (m_PendingProjectRoot)
+    {
+        const auto root = *m_PendingProjectRoot;
+        m_PendingProjectRoot.reset();
+        if (m_Project.Open(root))
+        {
+            projectOpened = true;
+            AddLog("Project Assets: " + m_Project.AssetsRoot().u8string());
+        }
+        else AddLog("[Project] " + m_Project.Diagnostic());
+    }
+    if (projectOpened || m_AssetRoot != m_Project.AssetsRoot())
+    {
+        m_AssetRoot = m_Project.AssetsRoot();
+        m_CurrentDirectory = m_AssetRoot;
+        m_PendingDirectory.reset();
+        m_AssetFilter[0] = '\0';
+        RefreshAssets();
+    }
     if (ImGui::BeginMainMenuBar())
     {
         if (ImGui::BeginMenu("File"))
         {
+            if (ImGui::MenuItem("Open Project Folder...")) ChooseProjectFolder(nativeWindowHandle);
+            ImGui::Separator();
             assetImport.DrawFileMenuItems(nativeWindowHandle);
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("View"))
         {
+            if (ImGui::BeginMenu("Theme"))
+            {
+                if (ImGui::MenuItem("Light",nullptr,appearance.theme==EditorThemeMode::Light))
+                { appearance.theme=EditorThemeMode::Light; ImGui::MarkIniSettingsDirty(); }
+                if (ImGui::MenuItem("Dark",nullptr,appearance.theme==EditorThemeMode::Dark))
+                { appearance.theme=EditorThemeMode::Dark; ImGui::MarkIniSettingsDirty(); }
+                ImGui::EndMenu();
+            }
+            if (ImGui::BeginMenu("UI Scale"))
+            {
+                const float scales[] = {1.0f,1.25f,1.5f,2.0f};
+                const char* labels[] = {"100%","125%","150%","200%"};
+                for (int index=0; index<4; ++index)
+                    if (ImGui::MenuItem(labels[index],nullptr,appearance.uiScale==scales[index]))
+                    { appearance.uiScale=scales[index]; ImGui::MarkIniSettingsDirty(); }
+                ImGui::EndMenu();
+            }
+            ImGui::Separator();
             if (ImGui::MenuItem("Material Editor", nullptr, &m_ShowMaterialEditor) &&
                 m_ShowMaterialEditor)
                 OpenMaterialEditor();
@@ -132,7 +189,7 @@ void EditorWorkspace::BeginFrame(AssetImportPanel& assetImport, void* nativeWind
 
     // 布局版本更新时更换稳定 ID，使旧版停靠配置在首次启动时重建；之后仍保存用户调整。
     const ImGuiID dockspaceId = ImGui::DockSpaceOverViewport(
-        ImHashStr("MaiXEditorDockspaceV2"), ImGui::GetMainViewport(),
+        ImHashStr("MaiXEditorDockspaceV3"), ImGui::GetMainViewport(),
         ImGuiDockNodeFlags_PassthruCentralNode);
     const ImGuiDockNode* root = ImGui::DockBuilderGetNode(dockspaceId);
     m_SkipViewportFrame = !m_LayoutChecked || m_ResetLayout;
@@ -142,7 +199,13 @@ void EditorWorkspace::BeginFrame(AssetImportPanel& assetImport, void* nativeWind
     m_ResetLayout = false;
 }
 
-EditorViewportRegion EditorWorkspace::BeginViewport()
+void EditorWorkspace::ChooseProjectFolder(void* nativeWindowHandle)
+{
+    if (const auto selected = FileDialog::OpenDirectory(nativeWindowHandle, m_Project.Root()))
+        m_PendingProjectRoot = *selected;
+}
+
+EditorViewportRegion EditorWorkspace::BeginViewport(const std::function<void()>& drawToolbar)
 {
     m_ViewportRegion = {};
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
@@ -152,6 +215,12 @@ EditorViewportRegion EditorWorkspace::BeginViewport()
     if (!m_ViewportOpen)
         return m_ViewportRegion;
 
+    const float inset = 7*EditorTheme::GetScale();
+    ImGui::SetCursorPos(ImVec2(inset,ImGui::GetCursorPosY()+inset));
+    drawToolbar();
+    ImGui::Separator();
+    // Only the image rectangle is used for picking, navigation and target sizing.
+    ImGui::SetCursorPosX(0);
     m_ViewportRegion.min = ImGui::GetCursorScreenPos();
     m_ViewportRegion.size = ImGui::GetContentRegionAvail();
     const ImVec2 scale = ImGui::GetIO().DisplayFramebufferScale;
@@ -196,27 +265,49 @@ void EditorWorkspace::RefreshAssets()
 {
     m_Entries.clear();
     m_Previews.clear();
+    m_BrowserError.clear();
+    if (!m_Project.IsReady()) return;
+    if (!m_Project.ContainsAssetPath(m_CurrentDirectory))
+    {
+        m_BrowserError = "This folder is outside the current project's Assets.";
+        return;
+    }
     std::error_code error;
     for (std::filesystem::directory_iterator it(m_CurrentDirectory, error), end;
          !error && it != end; it.increment(error))
-        m_Entries.push_back(*it);
+    {
+        if (m_Project.ContainsAssetPath(it->path())) m_Entries.push_back(*it);
+    }
+    if (error) m_BrowserError = "Cannot read folder: " + error.message();
     std::sort(m_Entries.begin(), m_Entries.end(),
         [](const auto& lhs, const auto& rhs) {
-            if (lhs.is_directory() != rhs.is_directory())
-                return lhs.is_directory();
-            return lhs.path().filename().string() < rhs.path().filename().string();
+            std::error_code leftError, rightError;
+            const bool leftDirectory = lhs.is_directory(leftError);
+            const bool rightDirectory = rhs.is_directory(rightError);
+            if (leftDirectory != rightDirectory) return leftDirectory;
+            return lhs.path().filename().native() < rhs.path().filename().native();
         });
 }
 
 void EditorWorkspace::DrawDirectoryNode(const std::filesystem::path& path, int depth)
 {
-    if (depth > 2)
+    if (depth > 2 || !m_Project.ContainsAssetPath(path))
         return;
-    const std::string label = path.filename().string();
+    const std::string label = path.filename().u8string();
     const bool selected = path == m_CurrentDirectory;
     const ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow |
+        ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_FramePadding |
+        (depth == 0 ? ImGuiTreeNodeFlags_DefaultOpen : 0) |
         (selected ? ImGuiTreeNodeFlags_Selected : 0);
-    const bool open = ImGui::TreeNodeEx(path.string().c_str(), flags, "%s", label.c_str());
+    const bool open = ImGui::TreeNodeEx(path.u8string().c_str(), flags, "");
+    const auto itemMin=ImGui::GetItemRectMin();
+    const float iconX=itemMin.x+ImGui::GetTreeNodeToLabelSpacing();
+    const float scale=EditorTheme::GetScale();
+    EditorWidgets::DrawIcon(EditorWidgets::Icon::Folder,ImVec2(iconX,itemMin.y+5*scale),16*scale);
+    auto* draw=ImGui::GetWindowDrawList();
+    draw->PushClipRect(itemMin,ImGui::GetItemRectMax(),true);
+    draw->AddText(ImVec2(iconX+22*scale,itemMin.y+5*scale),ImGui::GetColorU32(ImGuiCol_Text),label.c_str());
+    draw->PopClipRect();
     if (ImGui::IsItemClicked() && path != m_CurrentDirectory)
     {
         m_CurrentDirectory = path;
@@ -228,76 +319,134 @@ void EditorWorkspace::DrawDirectoryNode(const std::filesystem::path& path, int d
         for (std::filesystem::directory_iterator it(path, error), end;
              !error && it != end; it.increment(error))
         {
-            if (it->is_directory())
+            std::error_code statusError;
+            if (it->is_directory(statusError) && !statusError)
                 DrawDirectoryNode(it->path(), depth + 1);
         }
         ImGui::TreePop();
     }
 }
 
-void EditorWorkspace::DrawContentBrowser(AssetImportPanel& assetImport, void* nativeWindowHandle)
+void EditorWorkspace::DrawContentBrowser(AssetImportPanel& assetImport)
 {
     if (m_PendingDirectory)
     {
-        m_CurrentDirectory = *m_PendingDirectory;
+        const auto requested = *m_PendingDirectory;
         m_PendingDirectory.reset();
-        RefreshAssets();
+        if (m_Project.ContainsAssetPath(requested))
+        {
+            m_CurrentDirectory = requested;
+            RefreshAssets();
+        }
+    }
+    if (m_ContentFocusRequested)
+    {
+        ImGui::SetNextWindowFocus();
+        m_ContentFocusRequested=false;
     }
     if (!ImGui::Begin("Content Browser"))
     {
         ImGui::End();
         return;
     }
-    if (ImGui::Button("Import FBX"))
-        assetImport.OpenImportDialog(nativeWindowHandle);
-    ImGui::SameLine();
-    if (ImGui::Button("Refresh"))
-        RefreshAssets();
+    ImGui::TextUnformatted(m_Project.Root().empty() ? "No project available" :
+        m_Project.Root().filename().u8string().c_str());
+    if (ImGui::IsItemHovered() && !m_Project.Root().empty())
+        ImGui::SetTooltip("%s", m_Project.Root().u8string().c_str());
+    if (!m_Project.Diagnostic().empty())
+        ImGui::TextWrapped("%s", m_Project.Diagnostic().c_str());
+    if (!m_Project.IsReady())
+    {
+        ImGui::TextWrapped("Project Assets is unavailable. Open a project folder to continue browsing.");
+        ImGui::End();
+        return;
+    }
+    std::error_code relativeError;
+    const auto relative = std::filesystem::relative(m_CurrentDirectory,m_AssetRoot,relativeError);
+    if (!relativeError && relative != ".")
+        ImGui::TextDisabled("%s", relative.generic_u8string().c_str());
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::InputTextWithHint("##AssetFilter","Filter current folder...",m_AssetFilter,sizeof(m_AssetFilter));
+    if (!m_BrowserError.empty()) ImGui::TextWrapped("%s", m_BrowserError.c_str());
     ImGui::Separator();
-    ImGui::TextWrapped("%s", m_CurrentDirectory.string().c_str());
 
-    const float treeWidth = std::max(120.0f, ImGui::GetContentRegionAvail().x * 0.28f);
+    const float treeWidth = std::min(240*EditorTheme::GetScale(),std::max(100.0f,ImGui::GetContentRegionAvail().x*.23f));
     ImGui::BeginChild("AssetTree", ImVec2(treeWidth, 0.0f), ImGuiChildFlags_Borders);
     DrawDirectoryNode(m_AssetRoot, 0);
     ImGui::EndChild();
     ImGui::SameLine();
     ImGui::BeginChild("AssetList", ImVec2(0.0f, 0.0f), ImGuiChildFlags_Borders);
 
-    const float tileWidth = 96.0f;
+    const float tileWidth = 104.0f*EditorTheme::GetScale();
     const int columns = std::max(1, static_cast<int>(ImGui::GetContentRegionAvail().x / tileWidth));
     std::optional<std::filesystem::path> requestedDirectory;
+    const auto drawTile = [](EditorWidgets::Icon icon, ImTextureID preview = 0) {
+        const float scale = EditorTheme::GetScale();
+        const bool pressed = ImGui::InvisibleButton("##Asset", ImVec2(88*scale,66*scale));
+        const auto p = ImGui::GetItemRectMin();
+        auto* draw = ImGui::GetWindowDrawList();
+        if (ImGui::IsItemHovered())
+            draw->AddRectFilled(p,ImGui::GetItemRectMax(),ImGui::GetColorU32(ImGuiCol_HeaderHovered),4*scale);
+        const ImVec2 origin(p.x+19*scale,p.y+7*scale);
+        if (preview)
+            draw->AddImage(preview,origin,ImVec2(origin.x+50*scale,origin.y+50*scale),ImVec2(0,1),ImVec2(1,0));
+        else
+            EditorWidgets::DrawIcon(icon,origin,50*scale);
+        return pressed;
+    };
     if (ImGui::BeginTable("AssetTiles", columns))
     {
         for (const auto& entry : m_Entries)
         {
+            if (!m_Project.ContainsAssetPath(entry.path())) continue;
+            const std::string name = entry.path().filename().u8string();
+            std::string foldedName=name, foldedFilter=m_AssetFilter;
+            const auto fold=[](unsigned char c) { return static_cast<char>(std::tolower(c)); };
+            std::transform(foldedName.begin(),foldedName.end(),foldedName.begin(),fold);
+            std::transform(foldedFilter.begin(),foldedFilter.end(),foldedFilter.begin(),fold);
+            if (!foldedFilter.empty() && foldedName.find(foldedFilter)==std::string::npos) continue;
             ImGui::TableNextColumn();
-            const std::string name = entry.path().filename().string();
             ImGui::PushID(name.c_str());
-            if (entry.is_directory())
+            std::error_code statusError;
+            const bool directory = entry.is_directory(statusError);
+            if (statusError) { ImGui::PopID(); continue; }
+            std::string extension = entry.path().extension().string();
+            std::transform(extension.begin(), extension.end(), extension.begin(), fold);
+            if (directory)
             {
-                if (ImGui::Button("[Folder]", ImVec2(80.0f, 72.0f)))
+                if (drawTile(EditorWidgets::Icon::Folder))
                     requestedDirectory = entry.path();
             }
-            else if (entry.path().extension() == ".png" && m_Previews.size() < 24)
+            else if (extension == ".png" &&
+                (m_Previews.count(entry.path().u8string()) != 0 || m_Previews.size() < 24))
             {
-                const std::string key = entry.path().string();
+                const std::string key = entry.path().u8string();
                 auto [previewIt, inserted] = m_Previews.try_emplace(key);
                 if (inserted)
                     previewIt->second = LoadSmallPreview(m_Device,entry.path());
                 const auto& preview = previewIt->second;
-                if (preview)
-                    ImGui::Image(static_cast<ImTextureID>(GetOpenGLTexture(m_Device,preview->GetID())),
-                        ImVec2(80.0f, 72.0f), ImVec2(0.0f, 1.0f), ImVec2(1.0f, 0.0f));
-                else
-                    ImGui::Button("[Image]", ImVec2(80.0f, 72.0f));
+                drawTile(EditorWidgets::Icon::File, preview ?
+                    static_cast<ImTextureID>(GetOpenGLTexture(m_Device,preview->GetID())) : 0);
             }
             else
-                ImGui::Button("[Asset]", ImVec2(80.0f, 72.0f));
+                drawTile(EditorWidgets::Icon::File);
+            if (!directory && ImGui::IsItemHovered())
+            {
+                if (extension == ".fbx")
+                {
+                    ImGui::SetTooltip("Double-click to load this FBX into the current scene.");
+                    if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+                        assetImport.BeginImport(entry.path());
+                }
+                else ImGui::SetTooltip("%s", entry.path().u8string().c_str());
+            }
             ImGui::TextWrapped("%s", name.c_str());
             ImGui::PopID();
         }
         ImGui::EndTable();
     }
+    if (m_Entries.empty() && m_BrowserError.empty())
+        ImGui::TextWrapped("Assets is empty. Place your project files in this folder to browse them here.");
     if (requestedDirectory)
     {
         // 本帧 Image 绘制命令仍引用预览纹理，下一帧再释放旧目录的缓存。
@@ -324,10 +473,10 @@ void EditorWorkspace::DrawConsole()
     ImGui::End();
 }
 
-void EditorWorkspace::DrawBottomPanels(AssetImportPanel& assetImport, void* nativeWindowHandle)
+void EditorWorkspace::DrawBottomPanels(AssetImportPanel& assetImport)
 {
     DrawConsole();
-    DrawContentBrowser(assetImport, nativeWindowHandle);
+    DrawContentBrowser(assetImport);
 }
 
 void EditorWorkspace::AddLog(std::string message)

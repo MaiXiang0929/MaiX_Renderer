@@ -23,6 +23,8 @@ public:
     void Draw(void* nativeWindowHandle = nullptr);
     void DrawFileMenuItems(void* nativeWindowHandle);
     void OpenImportDialog(void* nativeWindowHandle);
+    // Loads the source into the scene; does not copy files into project Assets.
+    void BeginImport(const std::filesystem::path& path);
 
     std::optional<AssetImport::ModelImportResult> TakeCompletedImport();
     void ReportCommitSuccess(
@@ -41,7 +43,6 @@ private:
     };
 
     void SelectModel(void* nativeWindowHandle);
-    void BeginImport(const std::filesystem::path& path);
     const char* GetStatusLabel() const;
 
     Status m_Status = Status::Idle;

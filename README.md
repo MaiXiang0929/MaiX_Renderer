@@ -83,7 +83,13 @@ cmake --build --preset windows-ninja-debug
 
 ## 编辑器操作
 
-默认工作区左侧上方是 Viewport，左下方由 Console 与 Content Browser 共用标签区，右侧是并排的 Scene 和 Inspector。Material Editor 打开后与 Inspector 共用最右侧区域，通过标签切换。`View` 菜单可打开 Material Editor、Renderer Statistics，或用 `Reset Layout` 恢复默认布局。下列场景快捷键在 Viewport 获得焦点时生效；鼠标场景操作从视口图像内开始。
+默认工作区采用左侧 Scene、中央 Viewport、右侧 Inspector 的布局，左侧与中央下方由 Content Browser 和 Console 共用标签区。Material Editor 打开后继续与 Inspector 共用标签。`View → Theme → Light / Dark` 切换雾蓝与柔粉的浅色/深色主题；`View → UI Scale` 调整界面缩放，并叠加窗口所在显示器的内容缩放。主题与缩放保存在用户目录的 `MaiX_Renderer/imgui.ini` 中，切换主题不重置布局。`Reset Layout` 恢复新版默认布局。
+
+Viewport 顶部工具栏提供移动、旋转、缩放与世界/局部空间切换；不可用于当前对象的操作会禁用。工具栏不计入视口图像的拾取和渲染范围。Inspector 中 Transform、Materials 使用折叠分组，导入尺寸和源单位位于默认收起的 Asset Info。资源浏览器只浏览当前用户项目的 `Assets/`，提供统一雾蓝文件夹图标、相对路径导航和当前目录名称过滤。下列场景快捷键在 Viewport 获得焦点时生效；鼠标场景操作从视口图像内开始。
+
+引擎内置 `assets/`（字体、天空盒、默认模型和场景）及其构建副本与用户内容分离。首次启动在 Windows 的“文档”实际位置下创建 `MaiX Projects/DefaultProject/Assets`；文档目录重定向时同样生效。通过 `File → Open Project Folder...` 选择其他项目根目录，并创建其中缺失的 `Assets/`。上次成功选择保存在用户目录的 `MaiX_Renderer/imgui.ini` 的项目配置段中；失效配置显示错误，不会改为浏览引擎资源。项目内容不能放入引擎内置资源或构建部署目录，构建只部署引擎资源。
+
+默认用户目录最初为空；场景里的 Ground/Monkey 是内置示例，不会自动复制进去。Content Browser 顶部显示项目名称与当前子目录路径，过滤框仅过滤当前目录；通过左侧目录树切换目录或返回 `Assets` 根目录。双击项目中的 FBX 可加载到当前场景；`File → Import FBX...` 也可选择外部源文件。加载操作不自动复制模型或贴图依赖。切换项目内容目录保留当前场景，暂不提供项目场景保存、资产数据库或依赖归档。
 
 | 操作 | 用途 |
 | --- | --- |
@@ -126,7 +132,7 @@ Engine/
 Editor/                  EditorApp、Viewport、场景/属性/材质/导入面板与 UI 会话
 Sandbox/                 不链接 ImGui 的引擎/真实 OpenGL 验证宿主
 Shaders/                 按 PBR、NPR、阴影、后处理等用途组织的 GLSL
-assets/                  字体、图片、默认启动场景等非 Shader 资源
+assets/                  引擎内置字体、图片、模型与默认启动场景
 tests/                   数学、资产、渲染、交互和架构检查
 ThirdParty/              第三方依赖
 docs/                    仅本地保留，已取消 Git 跟踪

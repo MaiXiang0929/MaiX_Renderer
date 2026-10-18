@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
 #include "Editor/Viewport/EditorViewportController.h"
+#include "Editor/Session/EditorWidgets.h"
+#include "Editor/Session/EditorTheme.h"
 
 #include <algorithm>
 #include <cmath>
@@ -12,6 +14,39 @@
 #include "Editor/Viewport/ViewportPicking.h"
 #include "Editor/Session/EditorWorkspace.h"
 #include "Engine/Rendering/Renderer/Core/Renderer.h"
+
+ImGuizmo::OPERATION EditorViewportController::GetEffectiveOperation(
+    EditorSelectionType type, const SceneLight* light) const
+{
+    if (type == EditorSelectionType::Light && light)
+        return light->proxy.type == LightType::Directional ? ImGuizmo::ROTATE : ImGuizmo::TRANSLATE;
+    if (type == EditorSelectionType::Camera && m_Operation == ImGuizmo::SCALE)
+        return ImGuizmo::TRANSLATE;
+    return m_Operation;
+}
+
+void EditorViewportController::DrawToolbar(const EditorSelection& selection,
+    const std::vector<SceneLight>& lights, bool cameraView)
+{
+    using namespace EditorWidgets;
+    const auto* light=selection.type==EditorSelectionType::Light ? FindSceneLight(lights,selection.lightId) : nullptr;
+    const bool directional=light && light->proxy.type==LightType::Directional;
+    const bool cameraLocked=cameraView && selection.type==EditorSelectionType::Camera;
+    const auto displayed = GetEffectiveOperation(selection.type, light);
+    ImGui::BeginDisabled(cameraLocked || directional);
+    if (IconButton("##Translate",Icon::Move,"Move (W)",displayed==ImGuizmo::TRANSLATE)) SetOperation(ImGuizmo::TRANSLATE);
+    ImGui::EndDisabled(); ImGui::SameLine();
+    ImGui::BeginDisabled(cameraLocked || (light && !directional));
+    if (IconButton("##Rotate",Icon::Rotate,"Rotate (E)",displayed==ImGuizmo::ROTATE)) SetOperation(ImGuizmo::ROTATE);
+    ImGui::EndDisabled(); ImGui::SameLine();
+    ImGui::BeginDisabled(selection.type!=EditorSelectionType::Model);
+    if (IconButton("##Scale",Icon::Scale,"Scale (R)",displayed==ImGuizmo::SCALE)) SetOperation(ImGuizmo::SCALE);
+    ImGui::EndDisabled(); ImGui::SameLine(0,14*EditorTheme::GetScale());
+    if (IconButton("##Space",m_Mode==ImGuizmo::WORLD ? Icon::World : Icon::Local,"Toggle world/local space (Q)")) ToggleSpace();
+    ImGui::SameLine();
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextDisabled("%s",m_Mode==ImGuizmo::WORLD ? "World" : "Local");
+}
 
 void EditorViewportController::SetButtonState(
     EditorPointerButton button,
@@ -170,17 +205,13 @@ void EditorViewportController::Draw(
         viewport.size.x,
         viewport.size.y);
 
-    const bool lightHasPosition = selectedLight &&
-        selectedLight->proxy.type != LightType::Directional;
     if (modelSelected || (selectedCamera && !cameraView) || selectedLight)
     {
         Transform& activeTransform = modelSelected
             ? selectedModel->transform
             : selectedCamera ? selectedCamera->transform : selectedLight->transform;
         cy::Matrix4f matrix = activeTransform.ToMatrix();
-        const auto operation = modelSelected ? m_Operation :
-            selectedCamera ? (m_Operation == ImGuizmo::SCALE ? ImGuizmo::TRANSLATE : m_Operation) :
-            lightHasPosition ? ImGuizmo::TRANSLATE : ImGuizmo::ROTATE;
+        const auto operation = GetEffectiveOperation(selection.type, selectedLight);
         if (ImGuizmo::Manipulate(
                 view.cell,
                 projection.cell,

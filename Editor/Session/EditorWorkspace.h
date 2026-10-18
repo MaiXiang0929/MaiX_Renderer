@@ -8,12 +8,15 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <functional>
 
 #include <imgui.h>
 
 class AssetImportPanel;
 class Texture2D;
 class RHIDevice;
+class EditorProject;
+struct EditorAppearanceSettings;
 
 /// 编辑器拥有的视口矩形。屏幕坐标用于输入，像素尺寸用于 GPU 渲染目标。
 struct EditorViewportRegion
@@ -37,13 +40,13 @@ struct EditorViewportRegion
 class EditorWorkspace
 {
 public:
-    explicit EditorWorkspace(RHIDevice& device);
+    EditorWorkspace(RHIDevice& device, EditorProject& project);
 
-    void BeginFrame(AssetImportPanel& assetImport, void* nativeWindowHandle);
-    EditorViewportRegion BeginViewport();
+    void BeginFrame(AssetImportPanel& assetImport, void* nativeWindowHandle, EditorAppearanceSettings& appearance);
+    EditorViewportRegion BeginViewport(const std::function<void()>& drawToolbar);
     void DrawViewportImage(unsigned int textureId);
     void EndViewport();
-    void DrawBottomPanels(AssetImportPanel& assetImport, void* nativeWindowHandle);
+    void DrawBottomPanels(AssetImportPanel& assetImport);
     void AddLog(std::string message);
 
     bool ShowMaterialEditor() const { return m_ShowMaterialEditor; }
@@ -54,11 +57,13 @@ public:
 
 private:
     RHIDevice& m_Device;
+    EditorProject& m_Project;
     void BuildDefaultLayout(ImGuiID dockspaceId);
     void RefreshAssets();
     void DrawDirectoryNode(const std::filesystem::path& path, int depth);
-    void DrawContentBrowser(AssetImportPanel& assetImport, void* nativeWindowHandle);
+    void DrawContentBrowser(AssetImportPanel& assetImport);
     void DrawConsole();
+    void ChooseProjectFolder(void* nativeWindowHandle);
 
     bool m_LayoutChecked = false;
     bool m_ResetLayout = false;
@@ -68,10 +73,14 @@ private:
     bool m_MaterialFocusRequested = false;
     bool m_ShowStatistics = false;
     bool m_ViewportOpen = false;
+    bool m_ContentFocusRequested = false;
+    char m_AssetFilter[128]{};
     EditorViewportRegion m_ViewportRegion;
     std::filesystem::path m_AssetRoot;
     std::filesystem::path m_CurrentDirectory;
     std::optional<std::filesystem::path> m_PendingDirectory;
+    std::optional<std::filesystem::path> m_PendingProjectRoot;
+    std::string m_BrowserError;
     std::vector<std::filesystem::directory_entry> m_Entries;
     std::unordered_map<std::string, std::shared_ptr<Texture2D>> m_Previews;
     std::deque<std::string> m_Log;

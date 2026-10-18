@@ -47,7 +47,9 @@ std::optional<std::filesystem::path> OpenFile(
     FileDialog::NativeWindowHandle ownerWindow,
     const wchar_t* title,
     const COMDLG_FILTERSPEC* filters,
-    std::size_t filterCount)
+    std::size_t filterCount,
+    bool pickDirectory = false,
+    const std::filesystem::path& initialDirectory = {})
 {
     ScopedComInitialization comInitialization;
     if (!comInitialization.IsAvailable())
@@ -67,18 +69,25 @@ std::optional<std::filesystem::path> OpenFile(
         return std::nullopt;
 
     options |= FOS_FORCEFILESYSTEM |
-               FOS_FILEMUSTEXIST |
                FOS_PATHMUSTEXIST |
                FOS_NOCHANGEDIR;
+    options |= pickDirectory ? FOS_PICKFOLDERS : FOS_FILEMUSTEXIST;
 
     if (FAILED(dialog->SetOptions(options)) ||
-        FAILED(dialog->SetFileTypes(static_cast<UINT>(filterCount), filters)) ||
-        FAILED(dialog->SetFileTypeIndex(1)) ||
+        (filterCount != 0 && FAILED(dialog->SetFileTypes(static_cast<UINT>(filterCount), filters))) ||
+        (filterCount != 0 && FAILED(dialog->SetFileTypeIndex(1))) ||
         FAILED(dialog->SetTitle(title)))
     {
         return std::nullopt;
     }
 
+    if (!initialDirectory.empty())
+    {
+        ComPtr<IShellItem> initial;
+        if (SUCCEEDED(SHCreateItemFromParsingName(initialDirectory.c_str(), nullptr,
+                IID_PPV_ARGS(initial.GetAddressOf()))))
+            dialog->SetFolder(initial.Get());
+    }
     const HRESULT showResult = dialog->Show(static_cast<HWND>(ownerWindow));
     if (showResult == HRESULT_FROM_WIN32(ERROR_CANCELLED))
         return std::nullopt;
@@ -101,6 +110,12 @@ std::optional<std::filesystem::path> OpenFile(
 
 namespace FileDialog
 {
+std::optional<std::filesystem::path> OpenDirectory(NativeWindowHandle ownerWindow,
+    const std::filesystem::path& initialDirectory)
+{
+    return OpenFile(ownerWindow, L"Open Project Folder", nullptr, 0, true, initialDirectory);
+}
+
 std::optional<std::filesystem::path> OpenModelFile(NativeWindowHandle ownerWindow)
 {
     static constexpr COMDLG_FILTERSPEC filters[] = {

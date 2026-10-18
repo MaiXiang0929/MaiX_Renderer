@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "Editor/MaterialEditor/MaterialEditorPanel.h"
+#include "Editor/Session/EditorTheme.h"
 
 #include <array>
 #include <cfloat>
@@ -364,7 +365,7 @@ void MaterialEditorPanel::Draw(
     if (!m_TextureMessage.empty())
     {
         const ImVec4 color = m_TextureMessageIsError
-            ? ImVec4(1.0f, 0.35f, 0.30f, 1.0f)
+            ? EditorTheme::GetPalette().error
             : ImGui::GetStyleColorVec4(ImGuiCol_Text);
         ImGui::PushTextWrapPos(0.0f);
         ImGui::TextColored(color, "%s", m_TextureMessage.c_str());

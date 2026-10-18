@@ -4,6 +4,8 @@
 #include <fstream>
 #include <cstdint>
 #include <vector>
+#include <algorithm>
+#include <cmath>
 
 #include <imgui.h>
 
@@ -29,6 +31,7 @@ bool HasBundledFontIntegrity(const std::vector<unsigned char>& bytes)
 // 2,500 common characters: imported names can contain traditional Chinese.
 // Static storage is required because ImGui retains the range pointer.
 constexpr ImWchar ChineseRanges[] = {
+    0x0020, 0x00FF,
     0x2000, 0x206F,
     0x3000, 0x30FF,
     0x31F0, 0x31FF,
@@ -41,16 +44,18 @@ constexpr ImWchar ChineseRanges[] = {
 }
 
 bool Initialize(ImFontAtlas& atlas, const std::filesystem::path& fontPath,
-    std::string& diagnostic)
+    std::string& diagnostic, float pixelSize)
 {
     diagnostic.clear();
     atlas.Clear();
-    atlas.AddFontDefault();
+    pixelSize = std::isfinite(pixelSize) ? std::clamp(pixelSize, 10.0f, 60.0f) : 15.0f;
+    ImFontConfig numericConfig;
+    numericConfig.SizePixels = pixelSize;
 
     const auto fallback = [&](const char* reason)
     {
         atlas.Clear();
-        atlas.AddFontDefault();
+        atlas.AddFontDefault(&numericConfig);
         const bool built = atlas.Build();
         diagnostic = std::string(reason) + ": " + fontPath.u8string() +
             ". Using the default font; Chinese names may display as '?'.";
@@ -75,12 +80,14 @@ bool Initialize(ImFontAtlas& atlas, const std::filesystem::path& fontPath,
         return fallback("Editor Chinese font integrity check failed");
 
     ImFontConfig config;
-    config.MergeMode = true;
     // ImGui copies these bytes into atlas-owned storage before bytes goes away.
     config.FontDataOwnedByAtlas = false;
     config.OversampleH = config.OversampleV = 1;
     if (atlas.AddFontFromMemoryTTF(bytes.data(), static_cast<int>(size),
-            13.0f, &config, ChineseRanges) == nullptr || !atlas.Build())
+            pixelSize, &config, ChineseRanges) == nullptr)
+        return fallback("Unable to load editor font");
+    atlas.AddFontDefault(&numericConfig);
+    if (!atlas.Build())
         return fallback("Unable to build editor Chinese font atlas");
     return true;
 }

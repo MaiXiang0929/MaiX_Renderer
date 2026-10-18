@@ -4,6 +4,7 @@
 #include <string>
 
 #include <imgui.h>
+#include "Editor/Session/EditorWidgets.h"
 
 #include "Engine/Runtime/Scene/SceneLight.h"
 #include "Engine/Runtime/Scene/SceneModel.h"
@@ -47,13 +48,11 @@ ModelId SceneHierarchyPanel::Draw(
         for (const SceneModel& model : models)
         {
             const std::string label = model.name.empty() ? "Model" : model.name;
-            const std::string selectableLabel =
-                label + "##Model" + std::to_string(model.id.value);
-            if (ImGui::Selectable(
-                    selectableLabel.c_str(), selection.IsModelSelected(model.id)))
+            const std::string selectableLabel = "##Model" + std::to_string(model.id.value);
+            if (EditorWidgets::IconSelectable(selectableLabel.c_str(),EditorWidgets::Icon::Mesh,
+                    label.c_str(), selection.IsModelSelected(model.id)))
                 selection.SelectModel(model.id);
-            ImGui::SameLine();
-            ImGui::TextDisabled("%zu sections", model.sections.size());
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s (%zu sections)",label.c_str(),model.sections.size());
         }
     }
 
@@ -79,26 +78,24 @@ ModelId SceneHierarchyPanel::Draw(
             const std::string label = light.name.empty()
                 ? "Light"
                 : light.name;
-            const std::string selectableLabel =
-                label + "##Light" + std::to_string(light.proxy.id);
-            if (ImGui::Selectable(
-                    selectableLabel.c_str(),
-                    selection.IsLightSelected(light.proxy.id)))
+            const std::string selectableLabel = "##Light" + std::to_string(light.proxy.id);
+            if (EditorWidgets::IconSelectable(selectableLabel.c_str(),EditorWidgets::Icon::Light,
+                    label.c_str(), selection.IsLightSelected(light.proxy.id)))
             {
                 selection.SelectLight(light.proxy.id);
             }
-            ImGui::SameLine();
             const char* typeName = light.proxy.type == LightType::Directional
                 ? "Directional"
                 : light.proxy.type == LightType::Spot
                     ? "Spot"
                     : "Point";
-            ImGui::TextDisabled("%s", typeName);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s (%s)",label.c_str(),typeName);
         }
         ImGui::TreePop();
     }
 
-    if (camera && ImGui::Selectable(camera->name.c_str(), selection.IsCameraSelected(camera->id)))
+    if (camera && EditorWidgets::IconSelectable("##Camera",EditorWidgets::Icon::Camera,
+            camera->name.c_str(), selection.IsCameraSelected(camera->id)))
         selection.SelectCamera(camera->id);
     ImGui::End();
     return removedModel;

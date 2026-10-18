@@ -52,6 +52,8 @@ public:
     bool HasPointerButtonDown() const { return m_LeftDown || m_MiddleDown || m_RightDown; }
     ImGuizmo::OPERATION GetOperation() const { return m_Operation; }
     ImGuizmo::MODE GetMode() const { return m_Mode; }
+    ImGuizmo::OPERATION GetEffectiveOperation(EditorSelectionType type, const SceneLight* light) const;
+    void DrawToolbar(const EditorSelection& selection, const std::vector<SceneLight>& lights, bool cameraView);
 
     void Draw(
         Camera& camera,
