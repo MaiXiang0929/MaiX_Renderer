@@ -23,6 +23,7 @@
 #include "Engine/Runtime/Scene/SceneModel.h"
 #include "Editor/Session/EditorSelection.h"
 #include "Editor/Session/EditorMaterialSelection.h"
+#include "Editor/Session/EditorTheme.h"
 #include "Engine/Rendering/Renderer/Resources/RenderResourceHandle.h"
 
 struct GLFWwindow;
@@ -34,6 +35,7 @@ class EditorViewportController;
 class SceneHierarchyPanel;
 class InspectorPanel;
 class EditorWorkspace;
+class EditorProject;
 namespace AssetImport
 {
 struct ImportedModelData;
@@ -80,8 +82,12 @@ private:
     std::unique_ptr<SceneHierarchyPanel> m_SceneHierarchyPanel;
     std::unique_ptr<InspectorPanel> m_InspectorPanel;
     std::unique_ptr<EditorWorkspace> m_Workspace;
+    std::unique_ptr<EditorProject> m_Project;
     std::string m_ImGuiIniPath;
     bool m_ImGuiInitialized     = false;
+    EditorAppearanceSettings m_Appearance;
+    EditorThemeMode m_AppliedTheme = EditorThemeMode::Dark;
+    float m_AppliedUiScale = 0.0f;
 
 	Camera m_Camera;                            ///< 编辑器场景视口所使用的摄像机
 
@@ -133,6 +139,7 @@ private:
     
 	/// @brief 渲染应用程序
     void Render();
+    void UpdateAppearance();
     
 	/// @brief 关闭应用程序
     void Shutdown();
