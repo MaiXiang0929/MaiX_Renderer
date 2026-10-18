@@ -16,10 +16,8 @@ namespace
 {
 void BindEnvironment(RenderPassContext& context, unsigned int unit)
 {
-    const GLuint texture = context.Resources().Texture(PassResourceId::Environment);
-    RenderSubmissionStats::Get().RecordTextureBind(GL_TEXTURE_CUBE_MAP, unit, texture);
-    glActiveTexture(GL_TEXTURE0 + unit);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, texture);
+    const RHITextureHandle texture = context.Resources().Texture(PassResourceId::Environment);
+    context.device.Commands().BindTexture(texture,unit,RHITextureKind::Cubemap);
 }
 
 InstanceTransformData BuildInstanceTransform(
@@ -34,22 +32,14 @@ InstanceTransformData BuildInstanceTransform(
 
 ForwardPass::~ForwardPass()
 {
-    if (m_LightBuffer != 0)
-        glDeleteBuffers(1, &m_LightBuffer);
+    m_Device.DestroyBuffer(m_LightBuffer);
 }
 
 bool ForwardPass::Init()
 {
     const bool loaded = ReloadShaders();
     const bool instanceBufferInitialized = m_InstanceBuffer.Init();
-    glGenBuffers(1, &m_LightBuffer);
-    glBindBuffer(GL_UNIFORM_BUFFER, m_LightBuffer);
-    glBufferData(
-        GL_UNIFORM_BUFFER,
-        sizeof(GpuLightData) * MaxForwardLights,
-        nullptr,
-        GL_DYNAMIC_DRAW);
-    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+    m_LightBuffer=m_Device.CreateBuffer({RHIBufferUsage::Uniform,sizeof(GpuLightData)*MaxForwardLights,true});
     return loaded && instanceBufferInitialized && m_LightBuffer != 0;
 }
 
@@ -95,19 +85,7 @@ bool ForwardPass::ReloadShaders()
 
 bool ForwardPass::BindForwardLightsBlock(const Shader& shader) const
 {
-    const GLuint blockIndex = glGetUniformBlockIndex(
-        shader.GetProgramID(), "ForwardLights");
-    if (blockIndex == GL_INVALID_INDEX)
-    {
-        std::cerr
-            << "[ForwardPass] ForwardLights uniform block was not found."
-            << std::endl;
-        return false;
-    }
-
-    glUniformBlockBinding(
-        shader.GetProgramID(), blockIndex, ForwardLightsBindingPoint);
-    return true;
+    return m_Device.BindUniformBlock(shader.GetProgramID(),"ForwardLights",ForwardLightsBindingPoint);
 }
 
 LightUploadData ForwardPass::UploadLights(
@@ -118,15 +96,8 @@ LightUploadData ForwardPass::UploadLights(
     const LightUploadData upload = BuildLightUploadData(
         view.lights, view.view, shadowLightId, keyLightId);
 
-    glBindBuffer(GL_UNIFORM_BUFFER, m_LightBuffer);
-    glBufferSubData(
-        GL_UNIFORM_BUFFER,
-        0,
-        sizeof(upload.lights),
-        upload.lights.data());
-    glBindBufferBase(
-        GL_UNIFORM_BUFFER, ForwardLightsBindingPoint, m_LightBuffer);
-    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+    m_Device.UpdateBuffer(m_LightBuffer,0,sizeof(upload.lights),upload.lights.data());
+    m_Device.Commands().BindUniformBuffer(m_LightBuffer,ForwardLightsBindingPoint,0,sizeof(upload.lights));
 
     if (upload.truncated && !m_LightLimitWarningIssued)
     {
@@ -143,8 +114,8 @@ void ForwardPass::Execute(RenderPassContext& context)
 {
     // CPU 侧切换主颜色目标；随后所有绘制命令写入同一个 Framebuffer。
     context.Resources().BeginTarget(PassResourceId::ForwardColor);
-    const GLuint reflectionTexture = context.Resources().Texture(PassResourceId::ReflectionColor);
-    const GLuint shadowTexture = context.frame.shadowsEnabled
+    const RHITextureHandle reflectionTexture = context.Resources().Texture(PassResourceId::ReflectionColor);
+    const RHITextureHandle shadowTexture = context.frame.shadowsEnabled
         ? context.Resources().Texture(PassResourceId::ShadowDepth) : 0;
 
     RenderSkybox(context, context.frame.view);
@@ -164,15 +135,9 @@ void ForwardPass::Execute(RenderPassContext& context)
             context.frame.cameraWorldPosition.z);
         BindEnvironment(context, 0);
         m_GroundShader.SetInt("cubemap", 0);
-        glActiveTexture(GL_TEXTURE1);
-        RenderSubmissionStats::Get().RecordTextureBind(
-            GL_TEXTURE_2D, 1, reflectionTexture);
-        glBindTexture(GL_TEXTURE_2D, reflectionTexture);
+        m_Device.Commands().BindTexture(reflectionTexture,1);
         m_GroundShader.SetInt("reflectionTex", 1);
-        glActiveTexture(GL_TEXTURE2);
-        RenderSubmissionStats::Get().RecordTextureBind(
-            GL_TEXTURE_2D, 2, shadowTexture);
-        glBindTexture(GL_TEXTURE_2D, shadowTexture);
+        m_Device.Commands().BindTexture(shadowTexture,2);
         m_GroundShader.SetInt("shadowMap", 2);
         m_GroundShader.SetInt(
             "shadowsEnabled", context.frame.shadowsEnabled ? 1 : 0);
@@ -247,19 +212,18 @@ void ForwardPass::RenderItems(
             continue;
         }
 
-        glPatchParameteri(GL_PATCH_VERTICES, 3);
         item.mesh->DrawPatches();
         if (!allowWireframeOverlay || !context.tessellation.wireframe ||
             renderView.type == RenderViewType::Reflection)
             continue;
 
         shader.SetInt("wireframePass", 1);
-        glEnable(GL_POLYGON_OFFSET_LINE);
-        glPolygonOffset(-1.0f, -1.0f);
-        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-        item.mesh->DrawPatches();
-        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-        glDisable(GL_POLYGON_OFFSET_LINE);
+        {
+            RHIScopedPipelineState stateScope(m_Device.Commands());
+            auto state=stateScope.saved; state.offsetLine=true; state.offsetFactor=-1; state.offsetUnits=-1; state.wireframe=true;
+            m_Device.Commands().SetPipelineState(state);
+            item.mesh->DrawPatches();
+        }
         shader.SetInt("wireframePass", 0);
     }
 }
@@ -423,10 +387,7 @@ void ForwardPass::PrepareSurfaceShader(
         view.cell[1], view.cell[5], view.cell[9],
         view.cell[2], view.cell[6], view.cell[10]
     };
-    const GLint viewToWorldLocation = glGetUniformLocation(
-        shader.GetProgramID(), "viewToWorld");
-    if (viewToWorldLocation != -1)
-        glUniformMatrix3fv(viewToWorldLocation, 1, GL_FALSE, viewToWorld);
+    shader.SetMatrix3("viewToWorld",viewToWorld);
 
     if (tessellationEnabled)
     {
@@ -438,12 +399,9 @@ void ForwardPass::PrepareSurfaceShader(
 
     BindEnvironment(context, 4);
     shader.SetInt("cubemap", 4);
-    glActiveTexture(GL_TEXTURE5);
-    const GLuint shadowTexture = context.frame.shadowsEnabled
+    const RHITextureHandle shadowTexture = context.frame.shadowsEnabled
         ? context.Resources().Texture(PassResourceId::ShadowDepth) : 0;
-    RenderSubmissionStats::Get().RecordTextureBind(
-        GL_TEXTURE_2D, 5, shadowTexture);
-    glBindTexture(GL_TEXTURE_2D, shadowTexture);
+    m_Device.Commands().BindTexture(shadowTexture,5);
     shader.SetInt("shadowMap", 5);
     shader.SetInt(
         "shadowsEnabled", context.frame.shadowsEnabled ? 1 : 0);
@@ -469,9 +427,8 @@ void ForwardPass::RenderSkybox(
     BindEnvironment(context, 0);
     m_SkyboxShader.SetInt("skybox", 0);
 
-    glDepthMask(GL_FALSE);
-    glDepthFunc(GL_LEQUAL);
+    RHIScopedPipelineState stateScope(m_Device.Commands());
+    auto state=stateScope.saved; state.depthWrite=false; state.depthCompare=RHICompare::LessEqual;
+    m_Device.Commands().SetPipelineState(state);
     context.skyboxMesh.Draw();
-    glDepthFunc(GL_LESS);
-    glDepthMask(GL_TRUE);
 }

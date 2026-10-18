@@ -27,29 +27,22 @@ bool PostProcessPass::ReloadShaders()
 
 void PostProcessPass::Execute(RenderPassContext& context)
 {
-    const GLboolean depthTestEnabled = glIsEnabled(GL_DEPTH_TEST);
-    const GLboolean blendEnabled = glIsEnabled(GL_BLEND);
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_BLEND);
+    RHIScopedPipelineState stateScope(m_Device.Commands());
+    auto state=stateScope.saved; state.depthTest=false; state.blend=false; state.cull=RHICull::None;
+    m_Device.Commands().SetPipelineState(state);
 
     context.Resources().BeginTarget(PassResourceId::PostColor);
     m_Shader.Bind();
 
-    glActiveTexture(GL_TEXTURE0);
-    const GLuint sceneColorTexture = context.Resources().HdrTexture();
-    RenderSubmissionStats::Get().RecordTextureBind(
-        GL_TEXTURE_2D, 0, sceneColorTexture);
-    glBindTexture(GL_TEXTURE_2D, sceneColorTexture);
+    const RHITextureHandle sceneColorTexture = context.Resources().HdrTexture();
+    m_Device.Commands().BindTexture(sceneColorTexture, 0);
     m_Shader.SetInt("sceneTexture", 0);
 
     const bool bloomEnabled = context.postProcess.bloomEnabled;
     if (bloomEnabled)
     {
-        const GLuint bloomTexture = context.Resources().Texture(PassResourceId::Bloom);
-        glActiveTexture(GL_TEXTURE1);
-        RenderSubmissionStats::Get().RecordTextureBind(
-            GL_TEXTURE_2D, 1, bloomTexture);
-        glBindTexture(GL_TEXTURE_2D, bloomTexture);
+        const RHITextureHandle bloomTexture = context.Resources().Texture(PassResourceId::Bloom);
+        m_Device.Commands().BindTexture(bloomTexture, 1);
     }
     m_Shader.SetInt("bloomTexture", 1);
     m_Shader.SetInt("bloomEnabled", bloomEnabled ? 1 : 0);
@@ -64,6 +57,5 @@ void PostProcessPass::Execute(RenderPassContext& context)
 
     context.Resources().EndTarget(PassResourceId::PostColor);
     context.Resources().Publish(PassResourceId::PostColor);
-    if (depthTestEnabled) glEnable(GL_DEPTH_TEST);
-    if (blendEnabled) glEnable(GL_BLEND);
+
 }

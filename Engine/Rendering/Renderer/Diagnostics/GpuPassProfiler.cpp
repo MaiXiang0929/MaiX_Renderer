@@ -38,9 +38,7 @@ GpuPassProfiler::~GpuPassProfiler()
 
     for (QueryFrame& frame : m_Frames)
     {
-        glDeleteQueries(
-            static_cast<GLsizei>(frame.queries.size()),
-            frame.queries.data());
+        for (auto query : frame.queries) m_Device.DestroyQuery(query);
     }
 }
 
@@ -48,9 +46,7 @@ bool GpuPassProfiler::Init()
 {
     if (m_Initialized)
         return true;
-    if (glGenQueries == nullptr || glBeginQuery == nullptr ||
-        glEndQuery == nullptr || glGetQueryObjectuiv == nullptr ||
-        glGetQueryObjectui64v == nullptr)
+    if (!m_Device.Capabilities().timerQueries)
     {
         std::cerr << "[GpuPassProfiler] Timer Query API is unavailable."
                   << std::endl;
@@ -59,19 +55,17 @@ bool GpuPassProfiler::Init()
 
     for (QueryFrame& frame : m_Frames)
     {
-        glGenQueries(
-            static_cast<GLsizei>(frame.queries.size()),
-            frame.queries.data());
-        for (GLuint query : frame.queries)
+        for (auto& query : frame.queries) query=m_Device.CreateQuery();
+        for (RHIQueryHandle query : frame.queries)
         {
             if (query == 0)
             {
                 for (QueryFrame& cleanupFrame : m_Frames)
                 {
-                    for (GLuint& cleanupQuery : cleanupFrame.queries)
+                    for (RHIQueryHandle& cleanupQuery : cleanupFrame.queries)
                     {
                         if (cleanupQuery != 0)
-                            glDeleteQueries(1, &cleanupQuery);
+                            m_Device.DestroyQuery(cleanupQuery);
                         cleanupQuery = 0;
                     }
                 }
@@ -99,6 +93,7 @@ void GpuPassProfiler::BeginFrame()
         return;
     }
 
+    writeFrame.issued.fill(false);
     m_FrameActive = true;
 }
 
@@ -108,9 +103,8 @@ void GpuPassProfiler::BeginPass(RenderPassType type)
         return;
 
     m_ActivePass = type;
-    glBeginQuery(
-        GL_TIME_ELAPSED,
-        m_Frames[m_WriteFrameIndex].queries[ToIndex(type)]);
+    m_Device.Commands().BeginQuery(m_Frames[m_WriteFrameIndex].queries[ToIndex(type)]);
+    m_Frames[m_WriteFrameIndex].issued[ToIndex(type)]=true;
     m_PassActive = true;
 }
 
@@ -119,7 +113,7 @@ void GpuPassProfiler::EndPass()
     if (!m_PassActive)
         return;
 
-    glEndQuery(GL_TIME_ELAPSED);
+    m_Device.Commands().EndQuery();
     m_PassActive = false;
 }
 
@@ -135,21 +129,16 @@ void GpuPassProfiler::EndFrame()
 
 bool GpuPassProfiler::TryResolve(QueryFrame& frame)
 {
-    for (GLuint query : frame.queries)
-    {
-        GLuint available = GL_FALSE;
-        glGetQueryObjectuiv(query, GL_QUERY_RESULT_AVAILABLE, &available);
-        if (available != GL_TRUE)
-            return false;
-    }
+    std::array<std::uint64_t,GpuTimingSnapshot::PassCount> results{};
+    for (std::size_t i=0;i<frame.queries.size();++i)
+        if(frame.issued[i] && !m_Device.TryQueryResult(frame.queries[i],results[i])) return false;
 
     m_Snapshot.totalLastMilliseconds = 0.0;
     m_Snapshot.totalAverageMilliseconds = 0.0;
     for (std::size_t index = 0; index < frame.queries.size(); ++index)
     {
-        GLuint64 elapsedNanoseconds = 0;
-        glGetQueryObjectui64v(
-            frame.queries[index], GL_QUERY_RESULT, &elapsedNanoseconds);
+        if(!frame.issued[index]) { m_Snapshot.passes[index].valid=false; continue; }
+        const std::uint64_t elapsedNanoseconds=results[index];
         const double milliseconds =
             static_cast<double>(elapsedNanoseconds) / 1.0e6;
 

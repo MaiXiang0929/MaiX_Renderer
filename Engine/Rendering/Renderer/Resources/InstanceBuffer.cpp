@@ -9,39 +9,25 @@
 
 InstanceBuffer::~InstanceBuffer()
 {
-    if (m_Buffer != 0)
-        glDeleteBuffers(1, &m_Buffer);
+    m_Device.DestroyBuffer(m_Buffer);
 }
 
 bool InstanceBuffer::Init()
 {
-    GLint offsetAlignment = 1;
-    glGetIntegerv(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, &offsetAlignment);
+    const unsigned offsetAlignment = m_Device.Capabilities().uniformBufferAlignment;
     const std::size_t blockSize =
         sizeof(InstanceTransformData) * MaxInstancesPerDraw;
     const std::size_t alignment = static_cast<std::size_t>(
-        std::max(offsetAlignment, 1));
+        std::max(offsetAlignment, 1u));
     m_ChunkStride =
         ((blockSize + alignment - 1) / alignment) * alignment;
 
-    glGenBuffers(1, &m_Buffer);
-    return m_Buffer != 0 && EnsureRegionCapacity(1);
+    return EnsureRegionCapacity(1);
 }
 
 bool InstanceBuffer::BindShaderBlock(const Shader& shader) const
 {
-    const GLuint blockIndex = glGetUniformBlockIndex(
-        shader.GetProgramID(), "InstanceTransforms");
-    if (blockIndex == GL_INVALID_INDEX)
-    {
-        std::cerr
-            << "[InstanceBuffer] InstanceTransforms uniform block was not found."
-            << std::endl;
-        return false;
-    }
-    glUniformBlockBinding(
-        shader.GetProgramID(), blockIndex, BindingPoint);
-    return true;
+    return m_Device.BindUniformBlock(shader.GetProgramID(), "InstanceTransforms", BindingPoint);
 }
 
 bool InstanceBuffer::UploadChunks(
@@ -70,13 +56,7 @@ bool InstanceBuffer::UploadChunks(
     m_CurrentRegionOffset =
         m_CurrentRegion * m_RegionChunkCapacity * m_ChunkStride;
 
-    glBindBuffer(GL_UNIFORM_BUFFER, m_Buffer);
-    glBufferSubData(
-        GL_UNIFORM_BUFFER,
-        static_cast<GLintptr>(m_CurrentRegionOffset),
-        static_cast<GLsizeiptr>(uploadSize),
-        m_UploadBytes.data());
-    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+    m_Device.UpdateBuffer(m_Buffer, m_CurrentRegionOffset, uploadSize, m_UploadBytes.data());
     return true;
 }
 
@@ -87,19 +67,14 @@ void InstanceBuffer::BindChunk(std::size_t chunkIndex) const
 
     const std::size_t blockSize =
         sizeof(InstanceTransformData) * MaxInstancesPerDraw;
-    glBindBufferRange(
-        GL_UNIFORM_BUFFER,
-        BindingPoint,
-        m_Buffer,
-        static_cast<GLintptr>(
-            m_CurrentRegionOffset + chunkIndex * m_ChunkStride),
-        static_cast<GLsizeiptr>(blockSize));
+    m_Device.Commands().BindUniformBuffer(m_Buffer, BindingPoint,
+        m_CurrentRegionOffset + chunkIndex * m_ChunkStride, blockSize);
 }
 
 bool InstanceBuffer::EnsureRegionCapacity(
     std::size_t requiredChunkCount)
 {
-    if (m_Buffer == 0 || m_ChunkStride == 0)
+    if (m_ChunkStride == 0)
         return false;
     if (requiredChunkCount <= m_RegionChunkCapacity)
         return true;
@@ -109,14 +84,10 @@ bool InstanceBuffer::EnsureRegionCapacity(
     while (newCapacity < requiredChunkCount)
         newCapacity *= 2;
 
-    glBindBuffer(GL_UNIFORM_BUFFER, m_Buffer);
-    glBufferData(
-        GL_UNIFORM_BUFFER,
-        static_cast<GLsizeiptr>(
-            BufferedRegionCount * newCapacity * m_ChunkStride),
-        nullptr,
-        GL_STREAM_DRAW);
-    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+    const auto candidate = m_Device.CreateBuffer({RHIBufferUsage::Uniform,
+        BufferedRegionCount * newCapacity * m_ChunkStride, true});
+    if (candidate == 0) return false;
+    m_Device.DestroyBuffer(m_Buffer); m_Buffer = candidate;
 
     m_RegionChunkCapacity = newCapacity;
     m_CurrentRegion = BufferedRegionCount - 1;

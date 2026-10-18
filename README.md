@@ -54,7 +54,7 @@ OpenGL GPU → 最终纹理 → 编辑器 Viewport
 
 每帧由 EditorApp 收集输入与编辑操作，EngineSession 持有场景数据，SceneFrameBuilder 准备多视图帧数据，`RenderScene::BuildRenderView()` 生成各视图的可见项。CPU 负责裁剪、排序、矩阵与资源绑定准备；GPU 执行顶点变换、光栅化、深度与混合测试、纹理采样、光照和像素输出。各 Pass 依次消费场景视图与前序 Pass 生成的纹理资源。
 
-固定管线通过显式资源契约声明各 Pass 的输入、输出与附件清空/保留行为；执行前校验本帧资源、尺寸和格式，输出发布后才允许后续 Pass 消费。Framebuffer 仍由各 Pass 管理，不额外复制主场景颜色。Present 的纹理绑定与绘制通过最小 RHICommandList 转入 OpenGL 后端，其余资源与 Pass 的完整 RHI 迁移留待 Phase 1。
+固定管线通过显式资源契约声明各 Pass 的输入、输出与附件清空/保留行为；执行前校验本帧资源、尺寸和格式，输出发布后才允许后续 Pass 消费。Framebuffer 仍由各 Pass 管理，不额外复制主场景颜色。Renderer 持有 RHIDevice，资源包装与全部 Pass 通过类型化句柄和即时 RHICommandList 提交到 OpenGL 后端。后端负责 GPU 资源、绘制、状态与诊断；编辑器通过受限原生桥接将纹理交给 ImGui。失败帧停止后续 Pass，不向视口返回旧的最终纹理。当前仍只有 OpenGL 后端，不包含延迟命令或跨 API 实现。
 
 ## 快速开始
 
@@ -119,7 +119,7 @@ Engine/
 │  ├─ Geometry/          CPU Vertex 与程序化几何
 │  └─ Importer/          FBX/Image CPU 解析
 └─ Rendering/
-   ├─ RHI/OpenGL/        首个即时 Present 命令入口
+   ├─ RHI/OpenGL/        即时资源、绘制、状态和诊断后端
    ├─ Renderer/          Core、Scene、View、Pipeline、Resources、Diagnostics
    ├─ Material/          Material、Instance 与有效材质解析
    └─ Passes/            已有渲染算法

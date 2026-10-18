@@ -50,23 +50,11 @@ void OutlinePass::Execute(RenderPassContext& context)
         return;
     }
 
-    const GLboolean depthTestEnabled = glIsEnabled(GL_DEPTH_TEST);
-    const GLboolean blendEnabled = glIsEnabled(GL_BLEND);
-    const GLboolean cullFaceEnabled = glIsEnabled(GL_CULL_FACE);
-    GLboolean depthWriteEnabled = GL_TRUE;
-    GLint depthFunction = GL_LESS;
-    GLint cullFaceMode = GL_BACK;
-    glGetBooleanv(GL_DEPTH_WRITEMASK, &depthWriteEnabled);
-    glGetIntegerv(GL_DEPTH_FUNC, &depthFunction);
-    glGetIntegerv(GL_CULL_FACE_MODE, &cullFaceMode);
-
+    RHIScopedPipelineState stateScope(m_Device.Commands());
+    auto state=stateScope.saved; state.depthTest=true; state.depthCompare=RHICompare::Less;
+    state.depthWrite=false; state.blend=false; state.cull=RHICull::Front;
     context.Resources().BeginTarget(PassResourceId::OutlinedColor);
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LESS);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_FRONT);
+    m_Device.Commands().SetPipelineState(state);
 
     m_Shader.Bind();
     m_Shader.SetMatrix4(
@@ -94,15 +82,6 @@ void OutlinePass::Execute(RenderPassContext& context)
         item.mesh->Draw();
     }
 
-    glCullFace(cullFaceMode);
-    if (!cullFaceEnabled)
-        glDisable(GL_CULL_FACE);
-    if (blendEnabled)
-        glEnable(GL_BLEND);
-    glDepthMask(depthWriteEnabled);
-    glDepthFunc(depthFunction);
-    if (!depthTestEnabled)
-        glDisable(GL_DEPTH_TEST);
     context.Resources().EndTarget(PassResourceId::OutlinedColor, false);
     context.Resources().Publish(PassResourceId::OutlinedColor);
 }

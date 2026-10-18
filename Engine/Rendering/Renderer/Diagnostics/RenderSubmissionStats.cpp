@@ -29,9 +29,9 @@ const char* ToString(RenderPassType type)
     return "Unknown";
 }
 
-std::size_t TextureTargetIndex(GLenum target)
+std::size_t TextureTargetIndex(RHITextureKind target)
 {
-    return target == GL_TEXTURE_CUBE_MAP ? 1 : 0;
+    return target == RHITextureKind::Cubemap ? 1 : 0;
 }
 }
 
@@ -106,7 +106,7 @@ void RenderSubmissionStats::EndFrame()
     m_HasPrevious = true;
 }
 
-void RenderSubmissionStats::RecordShaderBind(GLuint program)
+void RenderSubmissionStats::RecordShaderBind(std::uint64_t program)
 {
     if (!m_PassActive)
         return;
@@ -132,7 +132,7 @@ void RenderSubmissionStats::RecordMaterialBind(const void* material)
     }
 }
 
-void RenderSubmissionStats::RecordMeshDraw(GLuint vao)
+void RenderSubmissionStats::RecordMeshDraw(std::uint64_t vao)
 {
     if (!m_PassActive)
         return;
@@ -148,7 +148,7 @@ void RenderSubmissionStats::RecordMeshDraw(GLuint vao)
 }
 
 void RenderSubmissionStats::RecordMeshDrawInstanced(
-    GLuint vao,
+    std::uint64_t vao,
     std::size_t instanceCount)
 {
     if (!m_PassActive || instanceCount == 0)
@@ -166,9 +166,9 @@ void RenderSubmissionStats::RecordMeshDrawInstanced(
 }
 
 void RenderSubmissionStats::RecordTextureBind(
-    GLenum target,
+    RHITextureKind target,
     unsigned int unit,
-    GLuint texture)
+    std::uint64_t texture)
 {
     if (!m_PassActive)
         return;

@@ -50,11 +50,10 @@ target_link_libraries(MaiXRuntime PUBLIC MaiXCore)
 
 # Shared diagnostics are below both command execution and renderer orchestration.
 add_library(MaiXRenderSupport STATIC
-    Engine/Rendering/Renderer/Diagnostics/RenderSubmissionStats.cpp
-    Engine/Rendering/Renderer/Core/OpenGLStateCache.cpp)
-target_link_libraries(MaiXRenderSupport PUBLIC MaiXCore MaiXGL)
-add_library(MaiXRHI STATIC Engine/Rendering/RHI/OpenGL/OpenGLCommandList.cpp)
-target_link_libraries(MaiXRHI PUBLIC MaiXRenderSupport)
+    Engine/Rendering/Renderer/Diagnostics/RenderSubmissionStats.cpp)
+target_link_libraries(MaiXRenderSupport PUBLIC MaiXCore)
+add_library(MaiXRHI STATIC Engine/Rendering/RHI/OpenGL/OpenGLDevice.cpp)
+target_link_libraries(MaiXRHI PUBLIC MaiXRenderSupport PRIVATE MaiXPlatform MaiXGL)
 
 add_library(MaiXRendering STATIC
     Engine/Rendering/Material/Material.cpp
@@ -74,7 +73,7 @@ add_library(MaiXRendering STATIC
     Engine/Rendering/Renderer/Diagnostics/GpuDebugScope.cpp
     Engine/Rendering/Renderer/Diagnostics/GpuPassProfiler.cpp
     Engine/Rendering/Renderer/Pipeline/PassResourceContract.cpp
-    Engine/Rendering/Renderer/Pipeline/PassResourcesGL.cpp
+    Engine/Rendering/Renderer/Pipeline/PassResources.cpp
     Engine/Rendering/Renderer/Pipeline/RenderPipeline.cpp
     Engine/Rendering/Renderer/Resources/CubemapTexture.cpp
     Engine/Rendering/Renderer/Resources/Framebuffer.cpp
@@ -140,6 +139,13 @@ target_link_libraries(MaiX_Sandbox PRIVATE MaiXEngine MaiXPlatform)
 target_compile_options(MaiX_Sandbox PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
 target_link_options(MaiX_Sandbox PRIVATE $<$<CONFIG:Debug>:LINKER:/NODEFAULTLIB:MSVCRT>)
 add_dependencies(MaiX_Sandbox MaiXEditorAssets)
+
+if(BUILD_TESTING AND EXISTS "${PROJECT_ROOT}/tests/Renderer/RHITests.cpp")
+    add_executable(RHITests tests/Renderer/RHITests.cpp)
+    target_link_libraries(RHITests PRIVATE MaiXRendering MaiXPlatform)
+    target_compile_options(RHITests PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
+    add_test(NAME RHITests COMMAND RHITests)
+endif()
 
 if(BUILD_TESTING AND NOT EXISTS "${PROJECT_ROOT}/tests/Core/StartupSceneTests.cpp")
     message(STATUS "Local tests directory is absent; skipping test targets.")
@@ -229,7 +235,7 @@ if(BUILD_TESTING)
         tests/Renderer/Resources/FramebufferTests.cpp
         Engine/Rendering/Renderer/Resources/Framebuffer.cpp
         Engine/Rendering/Renderer/Pipeline/PassResourceContract.cpp
-        Engine/Rendering/Renderer/Pipeline/PassResourcesGL.cpp
+        Engine/Rendering/Renderer/Pipeline/PassResources.cpp
         ThirdParty/glad/src/glad.c
     )
 
@@ -243,7 +249,7 @@ if(BUILD_TESTING)
 
     target_link_directories(FramebufferTests PRIVATE
         ${THIRD_PARTY_DIR}/glfw/lib-vc2022)
-    target_link_libraries(FramebufferTests PRIVATE glfw3.lib opengl32.lib)
+    target_link_libraries(FramebufferTests PRIVATE MaiXRHI glfw3.lib opengl32.lib)
     target_compile_options(FramebufferTests PRIVATE
         "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
     target_link_options(FramebufferTests PRIVATE

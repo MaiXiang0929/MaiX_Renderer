@@ -13,7 +13,7 @@
 
 #include "Engine/Rendering/Renderer/Diagnostics/GpuDebugScope.h"
 #include "Engine/Rendering/Renderer/Diagnostics/RenderSubmissionStats.h"
-#include "Engine/Rendering/Renderer/Core/OpenGLStateCache.h"
+
 #include "Engine/Rendering/Renderer/Pipeline/RenderTargetSizing.h"
 #include "Engine/Rendering/Renderer/Pipeline/RenderSettings.h"
 #include "Engine/Rendering/Renderer/Resources/CubemapTexture.h"
@@ -50,9 +50,11 @@ const char* GetPassDebugName(RenderPassType type)
 }
 }
 
-RenderPipeline::RenderPipeline()
-    : m_TranslucencyPass(m_ForwardPass)
-    , m_ReflectionPass(m_ForwardPass, m_TranslucencyPass)
+RenderPipeline::RenderPipeline(RHIDevice& device)
+    : m_Device(device), m_ForwardPass(device), m_OutlinePass(device), m_TranslucencyPass(m_ForwardPass),
+      m_SSAOPass(device), m_EditorPrimitivePass(device), m_ShadowPass(device),
+      m_ReflectionPass(device, m_ForwardPass, m_TranslucencyPass), m_BloomPass(device),
+      m_PostProcessPass(device), m_PresentPass(device), m_GpuProfiler(device)
 {
     // 顺序由 GPU 资源依赖决定：阴影和反射必须先于主颜色与 Present。
     m_Passes = {
@@ -145,22 +147,23 @@ void RenderPipeline::Execute(RenderPassContext& context)
     {
         const RenderPassType type = pass->GetType();
         const auto contract = BuildPassResourceContract(type, features);
-        PassResources access(resources, contract);
+        PassResources access(resources, contract, &m_Device.Commands());
         bool passStarted = false;
         try
         {
             // 先检查所有输入与输出，缺失资源时不能提交该 Pass 的 GPU 命令。
             access.Validate();
             context.passResources = &access;
-            OpenGLStateCache::Get().Invalidate();
+            m_Device.Commands().InvalidateState();
             stats.BeginPass(type);
             m_GpuProfiler.BeginPass(type);
             passStarted = true;
-            const GpuDebugScope debugScope(GetPassDebugName(type));
+            const GpuDebugScope debugScope(m_Device.Commands(), GetPassDebugName(type));
+            m_Device.Commands().SetPipelineState(RHIPipelineState{});
             pass->Execute(context);
             access.Complete();
         }
-        catch (const ResourceContractError& error)
+        catch (const RHIError& error)
         {
             if (m_LastResourceError != error.what())
                 std::cerr << "[PassResources] " << error.what() << std::endl;
@@ -171,8 +174,8 @@ void RenderPipeline::Execute(RenderPassContext& context)
                 m_GpuProfiler.EndPass();
                 stats.EndPass();
             }
-            glBindFramebuffer(GL_FRAMEBUFFER, 0);
-            OpenGLStateCache::Get().Invalidate();
+            m_Device.Commands().EndTarget();
+            m_Device.Commands().InvalidateState();
             break;
         }
         context.passResources = nullptr;

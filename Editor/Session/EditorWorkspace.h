@@ -13,6 +13,7 @@
 
 class AssetImportPanel;
 class Texture2D;
+class RHIDevice;
 
 /// 编辑器拥有的视口矩形。屏幕坐标用于输入，像素尺寸用于 GPU 渲染目标。
 struct EditorViewportRegion
@@ -36,7 +37,7 @@ struct EditorViewportRegion
 class EditorWorkspace
 {
 public:
-    EditorWorkspace();
+    explicit EditorWorkspace(RHIDevice& device);
 
     void BeginFrame(AssetImportPanel& assetImport, void* nativeWindowHandle);
     EditorViewportRegion BeginViewport();
@@ -52,6 +53,7 @@ public:
     const EditorViewportRegion& GetViewportRegion() const { return m_ViewportRegion; }
 
 private:
+    RHIDevice& m_Device;
     void BuildDefaultLayout(ImGuiID dockspaceId);
     void RefreshAssets();
     void DrawDirectoryNode(const std::filesystem::path& path, int depth);

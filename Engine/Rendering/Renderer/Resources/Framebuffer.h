@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include <glad/glad.h>
+#include "Engine/Rendering/RHI/RHIDevice.h"
 
 enum class FramebufferColorFormat
 {
@@ -28,7 +28,7 @@ struct FramebufferSpecification
 
 class Framebuffer {
 public:
-    Framebuffer() = default;
+    explicit Framebuffer(RHIDevice& device) : m_Device(device) {}
     ~Framebuffer();
 
     // 禁止复制
@@ -57,24 +57,24 @@ public:
     void GenerateMipmaps() const;
 
     /// @brief 获取生成的离屏颜色纹理 ID
-    GLuint GetColorTexture() const { return m_ColorTexture; }
-    GLuint GetFramebufferId() const { return m_FBO; }
+    RHITextureHandle GetColorTexture() const { return m_ColorTexture; }
+    RHITargetHandle GetFramebufferId() const { return m_FBO; }
 
     int GetWidth() const { return m_Width; }
     int GetHeight() const { return m_Height; }
     FramebufferColorFormat GetColorFormat() const { return m_ColorFormat; }
     bool HasDepthStencil() const { return m_DepthStencilEnabled; }
     bool HasDepthTexture() const { return m_DepthTexture != 0; }
-    GLuint GetDepthTexture() const { return m_DepthTexture; }
+    RHITextureHandle GetDepthTexture() const { return m_DepthTexture; }
     bool HasMipmaps() const { return m_MipmapsEnabled; }
 
 private:
-    void Swap(Framebuffer& other) noexcept;
+    RHIDevice& m_Device;
 
-    GLuint m_FBO = 0;
-    GLuint m_ColorTexture = 0;
-    GLuint m_DepthTexture = 0;
-    GLuint m_RBO = 0; // 深度/模板 Renderbuffer
+
+    RHITargetHandle m_FBO = 0;
+    RHITextureHandle m_ColorTexture = 0;
+    RHITextureHandle m_DepthTexture = 0;
 
     int m_Width = 0;
     int m_Height = 0;

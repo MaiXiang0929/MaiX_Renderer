@@ -1,183 +1,90 @@
 // SPDX-License-Identifier: MIT
-/// @file Mesh.cpp
-/// @brief Mesh 类的实现文件
-/// @details 该文件实现了 Mesh 类的核心功能，包括顶点数据上传、绘制以及 OpenGL 缓冲区管理。
-/// @author MaiX
-/// @date 2026-08-04
-
-
 #include "Engine/Rendering/Renderer/Resources/Mesh.h"
-
-#include <cstddef>
 #include <limits>
-#include <stdexcept>
-
-#include "Engine/Rendering/Renderer/Diagnostics/RenderSubmissionStats.h"
-#include "Engine/Rendering/Renderer/Core/OpenGLStateCache.h"
-
-Mesh::Mesh()
-{
-    CreateBuffers();
-}
-
 Mesh::~Mesh()
 {
-    if (m_EBO != 0) glDeleteBuffers(1, &m_EBO);
-    if (m_VBO != 0) glDeleteBuffers(1, &m_VBO);
-    if (m_VAO != 0) glDeleteVertexArrays(1, &m_VAO);
-    OpenGLStateCache::Get().Invalidate();
+    Cleanup();
 }
-
-void Mesh::Upload(const std::vector<Vertex>& vertices)
+void Mesh::Cleanup()
 {
-    if (vertices.size() > static_cast<size_t>(std::numeric_limits<int>::max())) {
-        throw std::length_error("Mesh vertex count exceeds OpenGL draw range");
-    }
-
-    glBindVertexArray(m_VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, m_VBO);
-    glBufferData(GL_ARRAY_BUFFER,
-        static_cast<GLsizeiptr>(vertices.size() * sizeof(Vertex)),
-        vertices.empty() ? nullptr : vertices.data(), GL_STATIC_DRAW);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_EBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, 0, nullptr, GL_STATIC_DRAW);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-    OpenGLStateCache::Get().Invalidate();
-
-    m_VertexCount = static_cast<int>(vertices.size());
+    m_Device.DestroyVertexInput(m_VAO);
+    m_Device.DestroyBuffer(m_EBO);
+    m_Device.DestroyBuffer(m_VBO);
+    m_VAO = 0;
+    m_EBO = 0;
+    m_VBO = 0;
+    m_VertexCount = 0;
     m_IndexCount = 0;
 }
-
-void Mesh::Upload(
-    const std::vector<Vertex>& vertices,
-    const std::vector<std::uint32_t>& indices)
+void Mesh::Upload(const std::vector<Vertex> &vertices)
 {
-    if (vertices.size() > static_cast<size_t>(std::numeric_limits<int>::max())) {
-        throw std::length_error("Mesh vertex count exceeds OpenGL draw range");
+    Upload(vertices, {});
+}
+void Mesh::Upload(const std::vector<Vertex> &vertices, const std::vector<std::uint32_t> &indices)
+{
+    if (vertices.size() > INT_MAX || indices.size() > INT_MAX)
+        throw std::length_error("Mesh exceeds draw range");
+    for (auto index : indices)
+        if (index >= vertices.size())
+            throw std::out_of_range("Mesh index exceeds vertices");
+    if (vertices.empty())
+    {
+        Cleanup();
+        return;
     }
-    if (indices.size() > static_cast<size_t>(std::numeric_limits<int>::max())) {
-        throw std::length_error("Mesh index count exceeds OpenGL draw range");
+    Mesh candidate(m_Device);
+    candidate.m_VBO =
+        m_Device.CreateBuffer({RHIBufferUsage::Vertex, vertices.size() * sizeof(Vertex)}, vertices.data());
+    if (candidate.m_VBO == 0)
+        throw RHIError("Mesh vertex allocation failed");
+    if (!indices.empty())
+    {
+        candidate.m_EBO = m_Device.CreateBuffer(
+            {RHIBufferUsage::Index, indices.size() * sizeof(std::uint32_t)}, indices.data());
+        if (candidate.m_EBO == 0)
+            throw RHIError("Mesh index allocation failed");
     }
-
-    for (const std::uint32_t index : indices) {
-        if (index >= vertices.size()) {
-            throw std::out_of_range("Mesh index references a missing vertex");
-        }
-    }
-
-    glBindVertexArray(m_VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, m_VBO);
-    glBufferData(GL_ARRAY_BUFFER,
-        static_cast<GLsizeiptr>(vertices.size() * sizeof(Vertex)),
-        vertices.empty() ? nullptr : vertices.data(), GL_STATIC_DRAW);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_EBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-        static_cast<GLsizeiptr>(indices.size() * sizeof(std::uint32_t)),
-        indices.empty() ? nullptr : indices.data(), GL_STATIC_DRAW);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-    OpenGLStateCache::Get().Invalidate();
-
+    candidate.m_VAO = m_Device.CreateVertexInput({candidate.m_VBO,
+                                                  candidate.m_EBO,
+                                                  sizeof(Vertex),
+                                                  {{0, 3, offsetof(Vertex, Position)},
+                                                   {1, 3, offsetof(Vertex, Normal)},
+                                                   {2, 2, offsetof(Vertex, TexCoord)},
+                                                   {3, 4, offsetof(Vertex, Tangent)}}});
+    if (candidate.m_VAO == 0)
+        throw RHIError("Mesh vertex input creation failed");
+    Cleanup();
+    std::swap(m_VAO, candidate.m_VAO);
+    std::swap(m_VBO, candidate.m_VBO);
+    std::swap(m_EBO, candidate.m_EBO);
     m_VertexCount = static_cast<int>(vertices.size());
     m_IndexCount = static_cast<int>(indices.size());
 }
-
 void Mesh::Draw() const
 {
-    if (m_VertexCount == 0) return;
-
-    RenderSubmissionStats::Get().RecordMeshDraw(m_VAO);
-    OpenGLStateCache::Get().BindVertexArray(m_VAO);
-    if (m_IndexCount > 0) {
-        glDrawElements(GL_TRIANGLES, m_IndexCount, GL_UNSIGNED_INT, nullptr);
-    }
-    else {
-        glDrawArrays(GL_TRIANGLES, 0, m_VertexCount);
-    }
+    if (m_VertexCount)
+        m_Device.Commands().Draw(m_VAO, RHITopology::Triangles, m_IndexCount ? m_IndexCount : m_VertexCount,
+                                 m_IndexCount > 0);
 }
-
-void Mesh::DrawInstanced(std::size_t instanceCount) const
+void Mesh::DrawInstanced(std::size_t count) const
 {
-    if (m_VertexCount == 0 || instanceCount == 0)
-        return;
-    if (instanceCount >
-        static_cast<std::size_t>(std::numeric_limits<GLsizei>::max()))
-        throw std::length_error("Mesh instance count exceeds OpenGL draw range");
-
-    RenderSubmissionStats::Get().RecordMeshDrawInstanced(
-        m_VAO, instanceCount);
-    OpenGLStateCache::Get().BindVertexArray(m_VAO);
-    if (m_IndexCount > 0) {
-        glDrawElementsInstanced(
-            GL_TRIANGLES,
-            m_IndexCount,
-            GL_UNSIGNED_INT,
-            nullptr,
-            static_cast<GLsizei>(instanceCount));
-    }
-    else {
-        glDrawArraysInstanced(
-            GL_TRIANGLES,
-            0,
-            m_VertexCount,
-            static_cast<GLsizei>(instanceCount));
-    }
+    if (count > INT_MAX)
+        throw std::length_error("Instance count exceeds draw range");
+    if (m_VertexCount && count)
+        m_Device.Commands().Draw(m_VAO, RHITopology::Triangles, m_IndexCount ? m_IndexCount : m_VertexCount,
+                                 m_IndexCount > 0, static_cast<unsigned>(count));
 }
-
 void Mesh::DrawPatches() const
 {
-    if (m_VertexCount == 0) return;
-    RenderSubmissionStats::Get().RecordMeshDraw(m_VAO);
-    OpenGLStateCache::Get().BindVertexArray(m_VAO);
-    if (m_IndexCount > 0) {
-        glDrawElements(GL_PATCHES, m_IndexCount, GL_UNSIGNED_INT, nullptr);
-    }
-    else {
-        glDrawArrays(GL_PATCHES, 0, m_VertexCount);
-    }
+    if (m_VertexCount)
+        m_Device.Commands().Draw(m_VAO, RHITopology::Patches, m_IndexCount ? m_IndexCount : m_VertexCount,
+                                 m_IndexCount > 0);
 }
-
 int Mesh::GetVertexCount() const
 {
     return m_VertexCount;
 }
-
 int Mesh::GetIndexCount() const
 {
     return m_IndexCount;
-}
-
-void Mesh::CreateBuffers()
-{
-    glGenVertexArrays(1, &m_VAO);
-    glGenBuffers(1, &m_VBO);
-    glGenBuffers(1, &m_EBO);
-
-    glBindVertexArray(m_VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, m_VBO);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_EBO);
-    SetupVertexAttributes();
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-    OpenGLStateCache::Get().Invalidate();
-}
-
-void Mesh::SetupVertexAttributes()
-{
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-        reinterpret_cast<void*>(offsetof(Vertex, Position)));
-    glEnableVertexAttribArray(0);
-
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-        reinterpret_cast<void*>(offsetof(Vertex, Normal)));
-    glEnableVertexAttribArray(1);
-
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-        reinterpret_cast<void*>(offsetof(Vertex, TexCoord)));
-    glEnableVertexAttribArray(2);
-
-    glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-        reinterpret_cast<void*>(offsetof(Vertex, Tangent)));
-    glEnableVertexAttribArray(3);
 }

@@ -9,10 +9,11 @@
 class PresentPass final : public RenderPass
 {
 public:
+    explicit PresentPass(RHIDevice& device) : m_Device(device), m_Shader(device), m_Framebuffer(device) {}
     bool Init();
     bool Resize(unsigned int width, unsigned int height);
     bool ReloadShaders();
-    GLuint GetColorTexture() const { return m_Framebuffer.GetColorTexture(); }
+    RHITextureHandle GetColorTexture() const { return m_Framebuffer.GetColorTexture(); }
     const Framebuffer& GetTarget() const { return m_Framebuffer; }
     int GetTargetWidth() const { return m_Framebuffer.GetWidth(); }
     int GetTargetHeight() const { return m_Framebuffer.GetHeight(); }
@@ -24,6 +25,7 @@ public:
     void Execute(RenderPassContext& context) override;
 
 private:
+    RHIDevice& m_Device;
     Shader m_Shader;
     Framebuffer m_Framebuffer;
 };

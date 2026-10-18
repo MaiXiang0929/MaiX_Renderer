@@ -12,10 +12,11 @@ class ReflectionPass final : public RenderPass
 {
 public:
     ReflectionPass(
-        ForwardPass& forwardPass,
+        RHIDevice& device, ForwardPass& forwardPass,
         TranslucencyPass& translucencyPass)
         : m_ForwardPass(forwardPass)
         , m_TranslucencyPass(translucencyPass)
+        , m_Framebuffer(device)
     {
     }
 

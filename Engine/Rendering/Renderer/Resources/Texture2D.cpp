@@ -1,94 +1,48 @@
 // SPDX-License-Identifier: MIT
-/// @file Texture2D.cpp
-/// @brief 2D 纹理类的实现文件
-/// @details 该文件实现了 Texture2D 类的核心功能，包括从 PNG 文件加载纹理、绑定纹理到指定的纹理单元等。
-/// @author MaiX
-/// @date 2026-08-11
-
-
 #include "Engine/Rendering/Renderer/Resources/Texture2D.h"
-
-#include <iostream>
-#include <vector>
-
 #include "lodepng.h"
-#include "Engine/Rendering/Renderer/Diagnostics/RenderSubmissionStats.h"
-
+#include <iostream>
+#include <limits>
 Texture2D::~Texture2D()
 {
-    if (m_TextureID != 0)
-    {
-        glDeleteTextures(1, &m_TextureID);
-        m_TextureID = 0;
-    }
+    if (!m_DeviceLifetime.expired())
+        m_Device.DestroyTexture(m_TextureID);
 }
-
-std::shared_ptr<Texture2D> Texture2D::Load(
-    const std::string& filePath,
-    TextureColorSpace colorSpace)
+std::shared_ptr<Texture2D> Texture2D::Load(RHIDevice &device, const std::string &path,
+                                           TextureColorSpace space)
 {
-    std::vector<unsigned char> image;
-    unsigned int width = 0;
-    unsigned int height = 0;
-    const unsigned int error = lodepng::decode(image, width, height, filePath);
-
-    if (error != 0)
+    std::vector<unsigned char> pixels;
+    unsigned width = 0, height = 0;
+    const auto error = lodepng::decode(pixels, width, height, path);
+    if (error)
     {
-        std::cerr << "[Texture2D Error] " << lodepng_error_text(error)
-                  << " File: " << filePath << std::endl;
-        return nullptr;
+        std::cerr << "[Texture2D] " << path << ": " << lodepng_error_text(error) << '\n';
+        return {};
     }
-
-    return CreateRGBA8(width, height, image, colorSpace);
+    return CreateRGBA8(device, width, height, pixels, space);
 }
-
-std::shared_ptr<Texture2D> Texture2D::CreateRGBA8(
-    unsigned int width,
-    unsigned int height,
-    const std::vector<unsigned char>& pixels,
-    TextureColorSpace colorSpace)
+std::shared_ptr<Texture2D> Texture2D::CreateRGBA8(RHIDevice &device, unsigned width, unsigned height,
+                                                  const std::vector<unsigned char> &pixels,
+                                                  TextureColorSpace space)
 {
-    const std::size_t expectedSize =
-        static_cast<std::size_t>(width) * height * 4;
-    if (width == 0 || height == 0 || pixels.size() != expectedSize)
-    {
-        std::cerr
-            << "[Texture2D Error] Invalid RGBA8 texture extent or data size."
-            << std::endl;
-        return nullptr;
-    }
-
-    GLuint textureID = 0;
-    glGenTextures(1, &textureID);
-    glBindTexture(GL_TEXTURE_2D, textureID);
-
-    const GLint internalFormat = colorSpace == TextureColorSpace::SRGB
-        ? GL_SRGB8_ALPHA8
-        : GL_RGBA8;
-    glTexImage2D(
-        GL_TEXTURE_2D,
-        0,
-        internalFormat,
-        static_cast<GLsizei>(width),
-        static_cast<GLsizei>(height),
-        0,
-        GL_RGBA,
-        GL_UNSIGNED_BYTE,
-        pixels.data());
-    glGenerateMipmap(GL_TEXTURE_2D);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    return std::shared_ptr<Texture2D>(new Texture2D(textureID, colorSpace));
+    if (!width || !height || width > device.Capabilities().maxTextureSize ||
+        height > device.Capabilities().maxTextureSize ||
+        static_cast<std::size_t>(width) > std::numeric_limits<std::size_t>::max() / height / 4 ||
+        pixels.size() != static_cast<std::size_t>(width) * height * 4)
+        return {};
+    RHITextureDesc desc;
+    desc.width = width;
+    desc.height = height;
+    desc.mipmaps = true;
+    desc.format = space == TextureColorSpace::SRGB ? RHITextureFormat::SRGBA8 : RHITextureFormat::RGBA8;
+    const auto texture = device.CreateTexture(desc, {pixels.data()});
+    if (texture == 0)
+        return {};
+    return std::shared_ptr<Texture2D>(new Texture2D(device, texture, space));
 }
-
-void Texture2D::Bind(unsigned int textureUnit) const
+void Texture2D::Bind(RHIDevice& consumer, unsigned unit) const
 {
-    RenderSubmissionStats::Get().RecordTextureBind(
-        GL_TEXTURE_2D, textureUnit, m_TextureID);
-    glActiveTexture(GL_TEXTURE0 + textureUnit);
-    glBindTexture(GL_TEXTURE_2D, m_TextureID);
+    if (!IsValid())
+        throw RHIError("Texture belongs to a closed device");
+    consumer.Commands().BindTexture(m_TextureID, unit);
 }

@@ -178,7 +178,7 @@ void FrameResources::Bind(PassResourceId id, RenderResourceBinding binding)
     m_Produced[index] = binding.imported;
 }
 bool FrameResources::IsProduced(PassResourceId id) const { return m_Produced[Index(id)]; }
-std::uint32_t FrameResources::GetFinalTexture() const
+RHITextureHandle FrameResources::GetFinalTexture() const
 {
     return IsProduced(PassResourceId::FinalColor)
         ? m_Bindings[Index(PassResourceId::FinalColor)].texture : 0;

@@ -16,6 +16,7 @@ struct RenderItem;
 class ForwardPass final : public RenderPass
 {
 public:
+    explicit ForwardPass(RHIDevice& device) : m_Device(device), m_StandardShader(device), m_InstancedStandardShader(device), m_TessellationShader(device), m_SkyboxShader(device), m_GroundShader(device), m_Framebuffer(device), m_InstanceBuffer(device) {}
     ~ForwardPass() override;
 
     bool Init();
@@ -34,14 +35,15 @@ public:
         RenderPassContext& context,
         const cy::Matrix4f& view);
 
-    GLuint GetColorTexture() const { return m_Framebuffer.GetColorTexture(); }
+    RHITextureHandle GetColorTexture() const { return m_Framebuffer.GetColorTexture(); }
     const Framebuffer& GetTarget() const { return m_Framebuffer; }
-    GLuint GetDepthTexture() const { return m_Framebuffer.GetDepthTexture(); }
+    RHITextureHandle GetDepthTexture() const { return m_Framebuffer.GetDepthTexture(); }
     int GetTargetWidth() const { return m_Framebuffer.GetWidth(); }
     int GetTargetHeight() const { return m_Framebuffer.GetHeight(); }
 
 private:
-    static constexpr GLuint ForwardLightsBindingPoint = 0;
+    RHIDevice& m_Device;
+    static constexpr unsigned ForwardLightsBindingPoint = 0;
 
     bool BindForwardLightsBlock(const Shader& shader) const;
     LightUploadData UploadLights(
@@ -69,7 +71,7 @@ private:
     Shader m_GroundShader;
     Framebuffer m_Framebuffer;
     InstanceBuffer m_InstanceBuffer;
-    GLuint m_LightBuffer = 0;
+    RHIBufferHandle m_LightBuffer = 0;
     bool m_LightLimitWarningIssued = false;
     std::vector<InstanceTransformData> m_InstanceTransforms;
 };

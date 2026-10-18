@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include <glad/glad.h>
+#include "Engine/Rendering/RHI/RHITypes.h"
 
 #include "Engine/Rendering/Renderer/Pipeline/RenderPass.h"
 
@@ -45,11 +45,11 @@ public:
     void EndPass();
     void EndFrame();
 
-    void RecordShaderBind(GLuint program);
+    void RecordShaderBind(std::uint64_t program);
     void RecordMaterialBind(const void* material);
-    void RecordMeshDraw(GLuint vao);
-    void RecordMeshDrawInstanced(GLuint vao, std::size_t instanceCount);
-    void RecordTextureBind(GLenum target, unsigned int unit, GLuint texture);
+    void RecordMeshDraw(std::uint64_t vao);
+    void RecordMeshDrawInstanced(std::uint64_t vao, std::size_t instanceCount);
+    void RecordTextureBind(RHITextureKind target, unsigned int unit, std::uint64_t texture);
     void RecordDrawCall();
 
     /// @brief 返回最近一个完整帧的 CPU 提交统计，只读面板不参与统计生命周期。
@@ -62,7 +62,7 @@ private:
 
     struct TextureBinding
     {
-        GLuint texture = 0;
+        std::uint64_t texture = 0;
         bool known = false;
     };
 
@@ -72,8 +72,8 @@ private:
         std::array<TextureBinding, TextureTargetCount>,
         TextureUnitCount> m_TextureBindings{};
     RenderPassType m_CurrentPass = RenderPassType::Shadow;
-    GLuint m_LastProgram = 0;
-    GLuint m_LastVao = 0;
+    std::uint64_t m_LastProgram = 0;
+    std::uint64_t m_LastVao = 0;
     const void* m_LastMaterial = nullptr;
     bool m_PassActive = false;
     bool m_HasPrevious = false;

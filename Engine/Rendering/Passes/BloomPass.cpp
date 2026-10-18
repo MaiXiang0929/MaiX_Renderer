@@ -52,22 +52,20 @@ void BloomPass::Execute(RenderPassContext& context)
     if (!context.postProcess.bloomEnabled)
         return;
 
-    const GLboolean depthTestEnabled = glIsEnabled(GL_DEPTH_TEST);
-    const GLboolean blendEnabled = glIsEnabled(GL_BLEND);
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_BLEND);
+    RHIScopedPipelineState stateScope(m_Device.Commands());
+    auto state=stateScope.saved; state.depthTest=false; state.blend=false; state.cull=RHICull::None;
+    m_Device.Commands().SetPipelineState(state);
 
-    m_Highlights.Bind();
-    glClear(GL_COLOR_BUFFER_BIT);
+    m_Device.Commands().BeginTarget(m_Highlights.GetFramebufferId(),true,false,1);
     m_ExtractShader.Bind();
-    const GLuint sceneColorTexture = context.Resources().HdrTexture();
+    const RHITextureHandle sceneColorTexture = context.Resources().HdrTexture();
     BindTexture(sceneColorTexture, 0);
     m_ExtractShader.SetInt("sceneTexture", 0);
     m_ExtractShader.SetFloat(
         "threshold", context.postProcess.bloomThreshold);
     context.presentMesh.Draw();
 
-    GLuint sourceTexture = m_Highlights.GetColorTexture();
+    RHITextureHandle sourceTexture = m_Highlights.GetColorTexture();
     m_BlurShader.Bind();
     m_BlurShader.SetInt("sourceTexture", 0);
     const float inverseWidth = 1.0f / static_cast<float>(GetTargetWidth());
@@ -91,14 +89,10 @@ void BloomPass::Execute(RenderPassContext& context)
 
     context.Resources().EndTarget(PassResourceId::Bloom, false);
     context.Resources().Publish(PassResourceId::Bloom);
-    if (depthTestEnabled) glEnable(GL_DEPTH_TEST);
-    if (blendEnabled) glEnable(GL_BLEND);
+
 }
 
-void BloomPass::BindTexture(GLuint texture, unsigned int unit) const
+void BloomPass::BindTexture(RHITextureHandle texture, unsigned int unit) const
 {
-    glActiveTexture(GL_TEXTURE0 + unit);
-    RenderSubmissionStats::Get().RecordTextureBind(
-        GL_TEXTURE_2D, unit, texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
+    m_Device.Commands().BindTexture(texture,unit);
 }

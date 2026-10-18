@@ -1,35 +1,25 @@
 // SPDX-License-Identifier: MIT
 #pragma once
-#include <string>
-
-// First RHI slice: immediate fullscreen composition. Resource creation and
-// the remaining passes retain their current wrappers until Phase 1.
-class RHIPipeline
-{
-public:
-    virtual ~RHIPipeline() = default;
-    virtual void Bind() const = 0;
-    virtual void SetInt(const std::string& name, int value) = 0;
-};
-
-class RHITextureView
-{
-public:
-    virtual ~RHITextureView() = default;
-    virtual void Bind(unsigned int slot) const = 0;
-};
-
-class RHIBuffer
-{
-public:
-    virtual ~RHIBuffer() = default;
-    virtual void Draw() const = 0;
-};
-
+#include "Engine/Rendering/RHI/RHITypes.h"
 class RHICommandList
 {
-public:
+  public:
     virtual ~RHICommandList() = default;
-    virtual void Composite(RHIPipeline& pipeline, const RHITextureView& scene,
-        const RHITextureView& overlay, const RHIBuffer& geometry) = 0;
+    virtual void BeginTarget(RHITargetHandle, bool clearColor, bool clearDepth, float alpha) = 0;
+    virtual void EndTarget() = 0;
+    virtual void GenerateMipmaps(RHITextureHandle) = 0;
+    virtual void BindTexture(RHITextureHandle, unsigned slot, RHITextureKind = RHITextureKind::Texture2D) = 0;
+    virtual void BindProgram(RHIProgramHandle) = 0;
+    virtual void SetInt(RHIProgramHandle, const std::string &, int) = 0;
+    virtual void SetFloats(RHIProgramHandle, const std::string &, const float *, unsigned count) = 0;
+    virtual void BindUniformBuffer(RHIBufferHandle, unsigned slot, std::size_t offset, std::size_t size) = 0;
+    virtual void Draw(RHIVertexInputHandle, RHITopology, unsigned count, bool indexed,
+                      unsigned instances = 1) = 0;
+    virtual RHIPipelineState GetPipelineState() const = 0;
+    virtual void SetPipelineState(const RHIPipelineState &) = 0;
+    virtual void InvalidateState() = 0;
+    virtual void BeginQuery(RHIQueryHandle) = 0;
+    virtual void EndQuery() = 0;
+    virtual bool PushDebugGroup(const char *) = 0;
+    virtual void PopDebugGroup() = 0;
 };
