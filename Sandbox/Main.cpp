@@ -5,11 +5,14 @@
 #include "Engine/Runtime/Engine/SceneFrameBuilder.h"
 #include "Engine/Asset/Geometry/CubeGeometry.h"
 #include "Engine/Rendering/Renderer/Core/Renderer.h"
-#include "Engine/Rendering/RHI/OpenGL/OpenGLCommandList.h"
+#include "Engine/Rendering/RHI/OpenGL/OpenGLNativeBridge.h"
 #include <glad/glad.h>
 #include <cmath>
 #include <iostream>
 #include <stdexcept>
+#include <filesystem>
+#include <fstream>
+#include <chrono>
 
 namespace
 {
@@ -18,13 +21,76 @@ void Require(bool condition, const char* message)
     if (!condition) throw std::runtime_error(message);
 }
 
+PFNGLCREATESHADERPROC realCreateShader = nullptr;
+std::vector<GLuint> createdShaders;
+GLuint APIENTRY TrackShaderCreation(GLenum stage)
+{
+    const GLuint shader = realCreateShader(stage);
+    createdShaders.push_back(shader);
+    return shader;
+}
+
+PFNGLDRAWARRAYSPROC realDrawArrays = nullptr;
+bool injectedDrawFailure = false;
+void APIENTRY FailOneDraw(GLenum mode, GLint first, GLsizei count)
+{
+    realDrawArrays(mode, first, count);
+    if (!injectedDrawFailure)
+    {
+        injectedDrawFailure = true;
+        glEnable(0xffffffff); // Real backend error, consumed by RHI Draw.
+    }
+}
+
+void VerifyShaderFailureCleanup()
+{
+    auto device=CreateRHIDevice();
+    Shader shader(*device);
+    Require(shader.Load("Shaders/present/present.vert", "Shaders/present/present.frag"),
+        "Shader reload baseline failed");
+    const auto oldProgram = shader.GetProgramID();
+    const auto path = std::filesystem::temp_directory_path() /
+        ("maix-invalid-shader-" + std::to_string(
+            std::chrono::high_resolution_clock::now().time_since_epoch().count()) + ".glsl");
+    std::ofstream(path) << "#version 400 core\nintentional compile failure\n";
+    struct Restore
+    {
+        std::filesystem::path path;
+        ~Restore() { glad_glCreateShader = realCreateShader; std::filesystem::remove(path); }
+    } restore{path};
+    realCreateShader = glad_glCreateShader;
+    glad_glCreateShader = TrackShaderCreation;
+    for (bool invalidVertex : {false, true})
+    {
+        createdShaders.clear();
+        Require(!shader.Load(invalidVertex ? path.string() : "Shaders/present/present.vert",
+            invalidVertex ? "Shaders/present/present.frag" : path.string()),
+            "Invalid shader unexpectedly compiled");
+        Require(shader.GetProgramID() == oldProgram && glIsProgram(GetOpenGLProgram(*device,oldProgram)),
+            "Failed reload discarded the working program");
+        for (GLuint object : createdShaders)
+            Require(!glIsShader(object), "Failed reload leaked a compiled shader stage");
+    }
+    // Each stage compiles, but its interface disagrees with present.vert's vec2 UV.
+    std::ofstream(path) << "#version 330 core\nin vec3 fragTexCoord;\nout vec4 color;\n"
+        "void main(){ color=vec4(fragTexCoord,1); }\n";
+    createdShaders.clear();
+    Require(!shader.Load("Shaders/present/present.vert", path.string()),
+        "Mismatched shader interface unexpectedly linked");
+    Require(shader.GetProgramID() == oldProgram && glIsProgram(GetOpenGLProgram(*device, oldProgram)),
+        "Link failure discarded the working program");
+    for (GLuint object : createdShaders)
+        Require(!glIsShader(object), "Link failure leaked a compiled shader stage");
+}
+
 void VerifyComposition()
 {
-    auto scene = Texture2D::CreateRGBA8(1, 1, {64, 128, 192, 255}, TextureColorSpace::Linear);
+    auto device=CreateRHIDevice();
+    auto scene = Texture2D::CreateRGBA8(*device,1, 1, {64, 128, 192, 255}, TextureColorSpace::Linear);
     // Premultiplied red at alpha 128, as produced by EditorPrimitivePass.
-    auto overlay = Texture2D::CreateRGBA8(1, 1, {128, 0, 0, 128}, TextureColorSpace::Linear);
+    auto overlay = Texture2D::CreateRGBA8(*device,1, 1, {128, 0, 0, 128}, TextureColorSpace::Linear);
     Require(scene && overlay, "Composition input allocation failed");
-    Framebuffer target;
+    Framebuffer target(*device);
     FramebufferSpecification specification;
     specification.width = 8; specification.height = 8;
     specification.depthStencilEnabled = false; specification.mipmapsEnabled = false;
@@ -34,7 +100,7 @@ void VerifyComposition()
     Require(!target.Init(specification) && target.GetColorTexture() == oldTexture,
         "Failed resize discarded the valid target");
 
-    Shader pipeline;
+    Shader pipeline(*device);
     Require(pipeline.Load("Shaders/present/present.vert", "Shaders/present/present.frag"),
         "Present Shader failed to load from the new source/deployment path");
     std::vector<Vertex> vertices(6);
@@ -45,15 +111,16 @@ void VerifyComposition()
         vertices[i].Position = cy::Vec3f(positions[i][0], positions[i][1], 0);
         vertices[i].TexCoord = cy::Vec2f(positions[i][2], positions[i][3]);
     }
-    Mesh geometry;
+    Mesh geometry(*device);
     geometry.Upload(vertices);
     target.Bind();
     glViewport(0, 0, 8, 8);
     glDisable(GL_DEPTH_TEST); glDisable(GL_BLEND); glDisable(GL_CULL_FACE);
     glClearColor(0, 0, 0, 1); glClear(GL_COLOR_BUFFER_BIT);
-    OpenGLCommandList commands;
-    const OpenGLTextureView sceneView(scene->GetID()), overlayView(overlay->GetID());
-    commands.Composite(pipeline, sceneView, overlayView, geometry);
+    pipeline.Bind();
+    device->Commands().BindTexture(scene->GetID(),0); device->Commands().BindTexture(overlay->GetID(),1);
+    pipeline.SetInt("renderedTexture",0); pipeline.SetInt("editorOverlayTexture",1);
+    geometry.Draw();
     unsigned char pixel[4]{};
     glReadPixels(4, 4, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
     Require(std::abs(int(pixel[0]) - 160) <= 2 && std::abs(int(pixel[1]) - 64) <= 2 &&
@@ -107,6 +174,19 @@ void VerifySession()
         "Standalone frame consumed editor camera/overlay state");
     for (int i = 0; i < 3; ++i) engine.Render(frame);
     Require(renderer->GetFinalColorTexture() != 0, "Standalone engine produced no final texture");
+    realDrawArrays = glad_glDrawArrays;
+    glad_glDrawArrays = FailOneDraw;
+    struct RestoreDraw
+    {
+        ~RestoreDraw() { glad_glDrawArrays = realDrawArrays; }
+    } restoreDraw;
+    engine.Render(frame);
+    glad_glDrawArrays = realDrawArrays;
+    Require(injectedDrawFailure && renderer->GetFinalColorTexture() == 0,
+        "Failed frame exposed a final texture");
+    for (int i = 0; i < 4; ++i) engine.Render(frame);
+    Require(renderer->GetFinalColorTexture() != 0,
+        "Rendering did not recover after a failed frame");
     const auto overlayIndex = static_cast<std::size_t>(RenderPassType::EditorPrimitive);
     const auto hiddenOverlay = renderer->GetSubmissionSnapshot();
     Require(!frame.editorPrimitivesEnabled && hiddenOverlay.valid &&
@@ -143,6 +223,7 @@ int main()
             "Invalid context creation left a partial window");
         Require(context.Initialize(64, 48, "MaiX Sandbox", error, false), error.c_str());
         VerifyComposition();
+        VerifyShaderFailureCleanup();
         VerifySession();
         context.Shutdown();
         Require(!context.GetWindow(), "Context shutdown did not clear its window");

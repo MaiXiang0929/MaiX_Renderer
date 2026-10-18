@@ -8,6 +8,7 @@
 class OutlinePass final : public RenderPass
 {
 public:
+    explicit OutlinePass(RHIDevice& device) : m_Device(device), m_Shader(device) {}
     bool Init();
     bool ReloadShaders();
 
@@ -18,5 +19,6 @@ public:
     void Execute(RenderPassContext& context) override;
 
 private:
+    RHIDevice& m_Device;
     Shader m_Shader;
 };

@@ -41,29 +41,26 @@ bool SSAOPass::ReloadShaders()
         m_CompositeShader.Load("Shaders/postprocess/fullscreen.vert", "Shaders/postprocess/ssao_composite.frag");
 }
 
-void SSAOPass::BindTexture(GLuint texture, unsigned int unit) const
+void SSAOPass::BindTexture(RHITextureHandle texture, unsigned int unit) const
 {
-    glActiveTexture(GL_TEXTURE0 + unit);
-    RenderSubmissionStats::Get().RecordTextureBind(GL_TEXTURE_2D, unit, texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
+    m_Device.Commands().BindTexture(texture,unit);
 }
 
 void SSAOPass::Execute(RenderPassContext& context)
 {
     if (!context.postProcess.ssaoEnabled) return;
     const auto& depth = context.Resources().Read(PassResourceId::ForwardDepth);
-    const GLuint sceneColor = context.Resources().Texture(PassResourceId::SceneHdrColor);
+    const RHITextureHandle sceneColor = context.Resources().Texture(PassResourceId::SceneHdrColor);
 
-    const GLboolean depthTestEnabled = glIsEnabled(GL_DEPTH_TEST);
-    const GLboolean blendEnabled = glIsEnabled(GL_BLEND);
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_BLEND);
+    RHIScopedPipelineState stateScope(m_Device.Commands());
+    auto state=stateScope.saved; state.depthTest=false; state.blend=false; state.cull=RHICull::None;
+    m_Device.Commands().SetPipelineState(state);
 
     const cy::Matrix4f inverseProjection = context.mainView.projection.GetInverse();
     const float invW = 1.0f / static_cast<float>(depth.width);
     const float invH = 1.0f / static_cast<float>(depth.height);
 
-    m_Raw.Bind(); glClear(GL_COLOR_BUFFER_BIT); m_OcclusionShader.Bind();
+    m_Device.Commands().BeginTarget(m_Raw.GetFramebufferId(),true,false,1); m_OcclusionShader.Bind();
     BindTexture(depth.texture, 0);
     m_OcclusionShader.SetInt("depthTexture", 0);
     m_OcclusionShader.SetMatrix4("inverseProjection", &inverseProjection.cell[0]);
@@ -85,6 +82,5 @@ void SSAOPass::Execute(RenderPassContext& context)
     context.presentMesh.Draw(); context.Resources().EndTarget(PassResourceId::SsaoColor);
     context.Resources().Publish(PassResourceId::SsaoAO);
     context.Resources().Publish(PassResourceId::SsaoColor);
-    if (depthTestEnabled) glEnable(GL_DEPTH_TEST);
-    if (blendEnabled) glEnable(GL_BLEND);
+
 }

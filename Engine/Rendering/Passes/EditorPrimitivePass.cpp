@@ -4,7 +4,7 @@
 #include <cmath>
 #include <vector>
 
-#include "Engine/Rendering/Renderer/Core/OpenGLStateCache.h"
+
 #include "Engine/Rendering/Renderer/Diagnostics/RenderSubmissionStats.h"
 #include "Engine/Rendering/Renderer/Scene/LightSceneProxy.h"
 #include "Engine/Rendering/Renderer/View/RenderView.h"
@@ -18,10 +18,8 @@ constexpr int ConeSideCount = 8;
 
 EditorPrimitivePass::~EditorPrimitivePass()
 {
-    if (m_ConeVbo != 0) glDeleteBuffers(1, &m_ConeVbo);
-    if (m_ConeVao != 0) glDeleteVertexArrays(1, &m_ConeVao);
-    if (m_BillboardVbo != 0) glDeleteBuffers(1, &m_BillboardVbo);
-    if (m_BillboardVao != 0) glDeleteVertexArrays(1, &m_BillboardVao);
+    m_Device.DestroyVertexInput(m_ConeVao); m_Device.DestroyBuffer(m_ConeVbo);
+    m_Device.DestroyVertexInput(m_BillboardVao); m_Device.DestroyBuffer(m_BillboardVbo);
 }
 
 bool EditorPrimitivePass::Init()
@@ -65,32 +63,11 @@ void EditorPrimitivePass::Execute(RenderPassContext& context)
         return;
     }
 
-    const GLboolean depthTestEnabled = glIsEnabled(GL_DEPTH_TEST);
-    const GLboolean blendEnabled = glIsEnabled(GL_BLEND);
-    GLboolean depthWriteEnabled = GL_TRUE;
-    glGetBooleanv(GL_DEPTH_WRITEMASK, &depthWriteEnabled);
-    GLint blendSourceRgb = GL_ONE;
-    GLint blendDestinationRgb = GL_ZERO;
-    GLint blendSourceAlpha = GL_ONE;
-    GLint blendDestinationAlpha = GL_ZERO;
-    GLint blendEquationRgb = GL_FUNC_ADD;
-    GLint blendEquationAlpha = GL_FUNC_ADD;
-    glGetIntegerv(GL_BLEND_SRC_RGB, &blendSourceRgb);
-    glGetIntegerv(GL_BLEND_DST_RGB, &blendDestinationRgb);
-    glGetIntegerv(GL_BLEND_SRC_ALPHA, &blendSourceAlpha);
-    glGetIntegerv(GL_BLEND_DST_ALPHA, &blendDestinationAlpha);
-    glGetIntegerv(GL_BLEND_EQUATION_RGB, &blendEquationRgb);
-    glGetIntegerv(GL_BLEND_EQUATION_ALPHA, &blendEquationAlpha);
-
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glEnable(GL_BLEND);
-    glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
-    glBlendFuncSeparate(
-        GL_ONE,
-        GL_ONE_MINUS_SRC_ALPHA,
-        GL_ONE,
-        GL_ONE_MINUS_SRC_ALPHA);
+    RHIScopedPipelineState stateScope(m_Device.Commands());
+    auto state=stateScope.saved; state.depthTest=false; state.depthWrite=false; state.blend=true;
+    state.sourceRgb=state.sourceAlpha=RHIBlendFactor::One;
+    state.destinationRgb=state.destinationAlpha=RHIBlendFactor::OneMinusSrcAlpha;
+    m_Device.Commands().SetPipelineState(state);
 
     for (const LightSceneProxy& light : context.mainView.lights)
     {
@@ -101,14 +78,6 @@ void EditorPrimitivePass::Execute(RenderPassContext& context)
         if (light.type == LightType::Spot)
             DrawSpotCone(context, light);
     }
-
-    if (!blendEnabled) glDisable(GL_BLEND);
-    glBlendFuncSeparate(
-        blendSourceRgb, blendDestinationRgb,
-        blendSourceAlpha, blendDestinationAlpha);
-    glBlendEquationSeparate(blendEquationRgb, blendEquationAlpha);
-    if (depthTestEnabled) glEnable(GL_DEPTH_TEST);
-    glDepthMask(depthWriteEnabled);
 
     context.Resources().EndTarget(PassResourceId::Overlay);
     context.Resources().Publish(PassResourceId::Overlay);
@@ -125,18 +94,10 @@ void EditorPrimitivePass::CreateBillboardMesh()
          0.5f,  0.5f, 1.0f, 1.0f
     };
 
-    glGenVertexArrays(1, &m_BillboardVao);
-    glGenBuffers(1, &m_BillboardVbo);
-    glBindVertexArray(m_BillboardVao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_BillboardVbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), nullptr);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(
-        1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float),
-        reinterpret_cast<void*>(2 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-    glBindVertexArray(0);
+    m_BillboardVbo=m_Device.CreateBuffer({RHIBufferUsage::Vertex,sizeof(vertices)},vertices);
+    if(m_BillboardVbo==0) throw RHIError("Billboard buffer allocation failed");
+    m_BillboardVao=m_Device.CreateVertexInput({m_BillboardVbo,{},4*sizeof(float),{{0,2,0},{1,2,2*sizeof(float)}}});
+    if(m_BillboardVao==0) throw RHIError("Billboard vertex input failed");
 }
 
 void EditorPrimitivePass::CreateSpotConeMesh()
@@ -159,18 +120,11 @@ void EditorPrimitivePass::CreateSpotConeMesh()
             std::cos(angle), std::sin(angle), 1.0f });
     }
 
-    m_ConeVertexCount = static_cast<GLsizei>(vertices.size() / 3);
-    glGenVertexArrays(1, &m_ConeVao);
-    glGenBuffers(1, &m_ConeVbo);
-    glBindVertexArray(m_ConeVao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_ConeVbo);
-    glBufferData(
-        GL_ARRAY_BUFFER,
-        static_cast<GLsizeiptr>(vertices.size() * sizeof(float)),
-        vertices.data(), GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), nullptr);
-    glEnableVertexAttribArray(0);
-    glBindVertexArray(0);
+    m_ConeVertexCount=static_cast<unsigned>(vertices.size()/3);
+    m_ConeVbo=m_Device.CreateBuffer({RHIBufferUsage::Vertex,vertices.size()*sizeof(float)},vertices.data());
+    if(m_ConeVbo==0) throw RHIError("Cone buffer allocation failed");
+    m_ConeVao=m_Device.CreateVertexInput({m_ConeVbo,{},3*sizeof(float),{{0,3,0}}});
+    if(m_ConeVao==0) throw RHIError("Cone vertex input failed");
 }
 
 void EditorPrimitivePass::DrawBillboard(
@@ -188,9 +142,7 @@ void EditorPrimitivePass::DrawBillboard(
     m_BillboardShader.SetFloat(
         "viewportHeight", static_cast<float>(GetTargetHeight()));
     m_BillboardShader.SetFloat("iconSizePixels", 28.0f);
-    RenderSubmissionStats::Get().RecordMeshDraw(m_BillboardVao);
-    OpenGLStateCache::Get().BindVertexArray(m_BillboardVao);
-    glDrawArrays(GL_TRIANGLES, 0, 6);
+    m_Device.Commands().Draw(m_BillboardVao,RHITopology::Triangles,6,false);
 }
 
 void EditorPrimitivePass::DrawSpotCone(
@@ -208,7 +160,5 @@ void EditorPrimitivePass::DrawSpotCone(
         "lineColor", light.color.x, light.color.y, light.color.z);
     m_LineShader.SetFloat("lightRange", light.range);
     m_LineShader.SetFloat("outerConeAngle", light.outerConeAngle);
-    RenderSubmissionStats::Get().RecordMeshDraw(m_ConeVao);
-    OpenGLStateCache::Get().BindVertexArray(m_ConeVao);
-    glDrawArrays(GL_LINES, 0, m_ConeVertexCount);
+    m_Device.Commands().Draw(m_ConeVao,RHITopology::Lines,m_ConeVertexCount,false);
 }

@@ -11,19 +11,19 @@
 #include <cstddef>
 #include <cstdint>
 #include <vector>
-#include <glad/glad.h>
-#include "Engine/Rendering/RHI/RHICommandList.h"
+#include "Engine/Rendering/RHI/RHIDevice.h"
+
 #include "cyMatrix.h"
 #include "cyVector.h"
 
 /// @brief 顶点结构体，包含位置、法线和纹理坐标
 #include "Engine/Asset/Geometry/Vertex.h"
 
-class Mesh : public RHIBuffer {
+class Mesh {
 
 public:
 
-    Mesh();
+    explicit Mesh(RHIDevice& device) : m_Device(device) {}
 
     ~Mesh();
 
@@ -52,23 +52,17 @@ public:
 
 
 private:
+    RHIDevice& m_Device;
 
-    GLuint m_VAO = 0;
+    RHIVertexInputHandle m_VAO = 0;
 
-    GLuint m_VBO = 0;
+    RHIBufferHandle m_VBO = 0;
 
-    GLuint m_EBO = 0;
+    RHIBufferHandle m_EBO = 0;
 
     int m_VertexCount = 0;
 
     int m_IndexCount = 0;
 
-private:
-
-    /// @brief 创建 OpenGL Buffer
-    void CreateBuffers();
-
-    /// @brief 设置 Vertex Attribute Layout
-    void SetupVertexAttributes();
-
+    void Cleanup();
 };

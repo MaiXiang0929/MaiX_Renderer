@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <vector>
 
-#include <glad/glad.h>
+#include "Engine/Rendering/RHI/RHIDevice.h"
 
 #include "Engine/Rendering/Renderer/View/InstanceTransformData.h"
 
@@ -14,13 +14,13 @@ class InstanceBuffer
 {
 public:
     static constexpr std::size_t MaxInstancesPerDraw = 256;
-    static constexpr GLuint BindingPoint = 1;
+    static constexpr unsigned BindingPoint = 1;
 
     ~InstanceBuffer();
 
     InstanceBuffer(const InstanceBuffer&) = delete;
     InstanceBuffer& operator=(const InstanceBuffer&) = delete;
-    InstanceBuffer() = default;
+    explicit InstanceBuffer(RHIDevice& device) : m_Device(device) {}
 
     bool Init();
     bool BindShaderBlock(const Shader& shader) const;
@@ -30,11 +30,12 @@ public:
     void BindChunk(std::size_t chunkIndex) const;
 
 private:
+    RHIDevice& m_Device;
     static constexpr std::size_t BufferedRegionCount = 6;
 
     bool EnsureRegionCapacity(std::size_t requiredChunkCount);
 
-    GLuint m_Buffer = 0;
+    RHIBufferHandle m_Buffer = 0;
     std::size_t m_ChunkStride = 0;
     std::size_t m_RegionChunkCapacity = 0;
     std::size_t m_CurrentRegion = BufferedRegionCount - 1;

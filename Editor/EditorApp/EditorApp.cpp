@@ -9,6 +9,7 @@
 #include "Engine/Runtime/Engine/RenderSceneBridge.h"
 #include "Editor/Diagnostics/RendererStatisticsPanel.h"
 #include "Engine/Rendering/Renderer/Core/Renderer.h"
+#include "Engine/Rendering/RHI/OpenGL/OpenGLNativeBridge.h"
 #include "Engine/Runtime/Scene/InstanceGrid.h"
 #include "Engine/Runtime/Engine/SceneFrameBuilder.h"
 
@@ -58,6 +59,7 @@
 namespace
 {
 std::shared_ptr<Texture2D> CreateOrmCheckerTexture(
+    RHIDevice& device,
     unsigned char roughnessLow,
     unsigned char roughnessHigh,
     unsigned char metallic)
@@ -68,7 +70,7 @@ std::shared_ptr<Texture2D> CreateOrmCheckerTexture(
         210, roughnessHigh, metallic, 255,
         255, roughnessLow,  metallic, 255
     };
-    return Texture2D::CreateRGBA8(
+    return Texture2D::CreateRGBA8(device,
         2, 2, pixels, TextureColorSpace::Linear);
 }
 
@@ -231,10 +233,7 @@ bool EditorApp::Init() {
     m_ViewportController = std::make_unique<EditorViewportController>();
     m_SceneHierarchyPanel = std::make_unique<SceneHierarchyPanel>();
     m_InspectorPanel = std::make_unique<InspectorPanel>();
-    m_Workspace = std::make_unique<EditorWorkspace>();
-    m_Workspace->AddLog("MaiX Renderer initialized.");
-    if (!fontDiagnostic.empty())
-        m_Workspace->AddLog("[Warning] " + fontDiagnostic);
+
 
     // 主颜色目标和显示平面都跟随窗口 framebuffer 的像素宽高比。
     const float framebufferAspect =
@@ -265,6 +264,10 @@ bool EditorApp::Init() {
         return false;
     }
     m_Renderer = m_Engine.GetRenderer();
+    m_Workspace = std::make_unique<EditorWorkspace>(m_Renderer->Device());
+    m_Workspace->AddLog("MaiX Renderer initialized.");
+    if (!fontDiagnostic.empty())
+        m_Workspace->AddLog("[Warning] " + fontDiagnostic);
     std::string diagnostic;
     const auto scene = LoadStartupScene("assets/scenes/startup.json", diagnostic);
     std::cout << "[StartupScene] " << diagnostic << std::endl;
@@ -286,11 +289,11 @@ bool EditorApp::CreateStartupScene(const StartupSceneDefinition& scene)
     Material mainMaterial;
     mainMaterial.SetName("Default Material");
     if (!m_NormalMapPath.empty()) {
-        mainMaterial.SetNormalMap(Texture2D::Load(
+        mainMaterial.SetNormalMap(Texture2D::Load(m_Renderer->Device(),
             m_NormalMapPath, TextureColorSpace::Linear));
     }
     if (!m_DisplacementMapPath.empty()) {
-        mainMaterial.SetDisplacementMap(Texture2D::Load(
+        mainMaterial.SetDisplacementMap(Texture2D::Load(m_Renderer->Device(),
             m_DisplacementMapPath, TextureColorSpace::Linear));
     }
     PrimitiveBounds bounds;
@@ -390,9 +393,9 @@ bool EditorApp::CreateStartupScene(const StartupSceneDefinition& scene)
         };
 
         const std::shared_ptr<Texture2D> copperOrm =
-            CreateOrmCheckerTexture(42, 86, 255);
+            CreateOrmCheckerTexture(m_Renderer->Device(), 42, 86, 255);
         const std::shared_ptr<Texture2D> roughMetalOrm =
-            CreateOrmCheckerTexture(190, 235, 255);
+            CreateOrmCheckerTexture(m_Renderer->Device(), 190, 235, 255);
         const std::array<LabMaterialDescription, 4> descriptions = {{
             {"Copper", {0.95f, 0.42f, 0.18f}, 1.0f, 1.0f, 1.0f,
                 false, copperOrm},
@@ -676,7 +679,7 @@ void EditorApp::CreateTranslucencyTestScene()
         255, 255, 255, 255,  255, 255, 255, 64,
         255, 255, 255, 64,   255, 255, 255, 255
     };
-    const std::shared_ptr<Texture2D> alphaTexture = Texture2D::CreateRGBA8(
+    const std::shared_ptr<Texture2D> alphaTexture = Texture2D::CreateRGBA8(m_Renderer->Device(),
         2, 2, alphaChecker, TextureColorSpace::SRGB);
 
     for (const TestLayer& layer : layers)
@@ -754,7 +757,7 @@ bool EditorApp::CommitImportedModel(
                     importedTexture.name);
             }
 
-            textures[index] = Texture2D::CreateRGBA8(
+            textures[index] = Texture2D::CreateRGBA8(m_Renderer->Device(),
                 importedTexture.image.width,
                 importedTexture.image.height,
                 importedTexture.image.pixels,
@@ -1052,7 +1055,7 @@ bool EditorApp::LoadStartupFaceShadowDemo()
     }
 
     const std::shared_ptr<Texture2D> faceShadowTexture =
-        Texture2D::CreateRGBA8(
+        Texture2D::CreateRGBA8(m_Renderer->Device(),
             faceShadowImage.width,
             faceShadowImage.height,
             faceShadowImage.pixels,
@@ -1247,7 +1250,7 @@ void EditorApp::Render() {
         m_Engine.Render(frame);
 
     // GPU 最终纹理由 Renderer 持有；编辑器在同一帧将其显示到中央面板。
-    m_Workspace->DrawViewportImage(m_Renderer->GetFinalColorTexture());
+    m_Workspace->DrawViewportImage(GetOpenGLTexture(m_Renderer->Device(),m_Renderer->GetFinalColorTexture()));
     if (viewport.visible)
         m_ViewportController->Draw(
             m_Camera, m_EditorSelection, m_Engine.Scene().models,

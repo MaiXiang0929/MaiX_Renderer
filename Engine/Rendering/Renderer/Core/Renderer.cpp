@@ -15,12 +15,14 @@
 
 #include "Engine/Rendering/Renderer/View/RenderView.h"
 
-Renderer::Renderer() = default;
+Renderer::Renderer()
+    : m_Device(CreateRHIDevice()), m_PresentMesh(*m_Device), m_SkyboxMesh(*m_Device),
+      m_GroundMesh(*m_Device), m_Cubemap(*m_Device), m_RenderPipeline(*m_Device) {}
 Renderer::~Renderer() = default;
 
 bool Renderer::Init()
 {
-    glEnable(GL_DEPTH_TEST);
+    m_Device->Commands().SetPipelineState(RHIPipelineState{});
 
     if (!m_RenderPipeline.Init())
     {
@@ -72,7 +74,7 @@ MeshHandle Renderer::CreateMesh(const std::vector<Vertex>& vertices)
         return {};
     }
 
-    auto resource = std::make_unique<Mesh>();
+    auto resource = std::make_unique<Mesh>(*m_Device);
     resource->Upload(vertices);
     const MeshHandle handle{
         static_cast<RenderResourceId>(m_MeshResources.size())
@@ -92,7 +94,7 @@ MeshHandle Renderer::CreateMesh(
         return {};
     }
 
-    auto resource = std::make_unique<Mesh>();
+    auto resource = std::make_unique<Mesh>(*m_Device);
     resource->Upload(vertices, indices);
     const MeshHandle handle{
         static_cast<RenderResourceId>(m_MeshResources.size())
@@ -389,6 +391,7 @@ void Renderer::ExecutePipeline(RenderFrameData& frame)
     // Renderer 注入场景绘制资源；Pipeline 组织 Pass，并绑定各 Pass 自己拥有的渲染目标。
     RenderPassContext context{
         frame,
+        *m_Device,
         mainView,
         reflectionView,
         shadowView,

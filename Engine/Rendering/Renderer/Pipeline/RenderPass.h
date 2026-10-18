@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
-#include <glad/glad.h>
+#include "Engine/Rendering/RHI/RHIDevice.h"
 
 #include "cyMatrix.h"
 #include "cyVector.h"
@@ -44,6 +44,7 @@ struct RenderFrameData
 struct RenderPassContext
 {
     RenderFrameData& frame;
+    RHIDevice& device;
 
     RenderView& mainView;
     RenderView& reflectionView;

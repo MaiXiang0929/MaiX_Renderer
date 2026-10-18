@@ -7,6 +7,7 @@
 class SSAOPass final : public RenderPass
 {
 public:
+    explicit SSAOPass(RHIDevice& device) : m_Device(device), m_OcclusionShader(device), m_BlurShader(device), m_CompositeShader(device), m_Raw(device), m_Filtered(device), m_Composite(device) {}
     bool Init();
     bool Resize(unsigned int width, unsigned int height,
                 unsigned int compositeWidth, unsigned int compositeHeight);
@@ -23,7 +24,8 @@ public:
     const Framebuffer& GetTarget() const { return m_Composite; }
 
 private:
-    void BindTexture(GLuint texture, unsigned int unit) const;
+    RHIDevice& m_Device;
+    void BindTexture(RHITextureHandle texture, unsigned int unit) const;
     Shader m_OcclusionShader;
     Shader m_BlurShader;
     Shader m_CompositeShader;

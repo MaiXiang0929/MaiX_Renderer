@@ -48,14 +48,14 @@ void ShadowPass::Execute(RenderPassContext& context)
         return;
 
     context.Resources().BeginTarget(PassResourceId::ShadowDepth);
-    glEnable(GL_POLYGON_OFFSET_FILL);
-    glPolygonOffset(2.0f, 4.0f);
+    RHIScopedPipelineState stateScope(m_Device.Commands());
+    auto state=stateScope.saved; state.offsetFill=true; state.offsetFactor=2; state.offsetUnits=4;
+    m_Device.Commands().SetPipelineState(state);
 
     if (context.tessellation.enabled)
     {
         Shader& shader = m_TessellationShader;
         shader.Bind();
-        glPatchParameteri(GL_PATCH_VERTICES, 3);
         shader.SetFloat("tessellationLevel", context.tessellation.level);
         shader.SetFloat(
             "displacementScale", context.tessellation.displacementScale);
@@ -156,8 +156,8 @@ void ShadowPass::Execute(RenderPassContext& context)
 
         if (uploadChunkCount > 0)
         {
-            m_InstanceBuffer.UploadChunks(
-                m_InstanceTransforms.data(), uploadChunkCount);
+            if (!m_InstanceBuffer.UploadChunks(
+                m_InstanceTransforms.data(), uploadChunkCount)) throw RHIError("Shadow instance upload failed");
         }
 
         Shader* activeShader = nullptr;
@@ -231,7 +231,6 @@ void ShadowPass::Execute(RenderPassContext& context)
         }
     }
 
-    glDisable(GL_POLYGON_OFFSET_FILL);
     context.Resources().EndTarget(PassResourceId::ShadowDepth);
     context.Resources().Publish(PassResourceId::ShadowDepth);
 }

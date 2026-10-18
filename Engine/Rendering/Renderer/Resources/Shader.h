@@ -10,14 +10,14 @@
 
 #include <string>
 #include <vector>
-#include <glad/glad.h>
-#include "Engine/Rendering/RHI/RHICommandList.h"
+#include "Engine/Rendering/RHI/RHIDevice.h"
 
 
-class Shader : public RHIPipeline
+
+class Shader
 {
 public:
-	Shader();
+	explicit Shader(RHIDevice& device) : m_Device(device) {}
 
 	~Shader();
 
@@ -42,7 +42,8 @@ public:
 
 	void Unbind() const;
 
-	GLuint GetProgramID() const;
+	RHIProgramHandle GetProgramID() const;
+    RHIDevice& Device() const { return m_Device; }
 
 	void SetMatrix4(
 		const std::string& name,
@@ -67,7 +68,8 @@ public:
 	void SetFloat(const std::string& name, float value);
 
 private:
-	GLuint m_ProgramID = 0;
+    RHIDevice& m_Device;
+	RHIProgramHandle m_ProgramID = 0;
 
 private:
 
@@ -75,9 +77,4 @@ private:
 		const std::string& path
 	);
 
-	GLuint CompileShader(
-		GLenum type,
-		const char* source
-	);
-	bool LinkProgram(const std::vector<GLuint>& shaders);
 };

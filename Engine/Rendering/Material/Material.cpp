@@ -126,7 +126,7 @@ void Material::Bind(Shader& shader, unsigned int firstTextureUnit) const
     shader.SetInt("material.hasAlbedoMap", albedoMap ? 1 : 0);
     if (albedoMap)
     {
-        albedoMap->Bind(albedoUnit);
+        albedoMap->Bind(shader.Device(), albedoUnit);
         shader.SetInt("material.albedoMap", static_cast<int>(albedoUnit));
     }
 
@@ -135,12 +135,12 @@ void Material::Bind(Shader& shader, unsigned int firstTextureUnit) const
         "material.hasSpecularMap", !ormMap && specularMap ? 1 : 0);
     if (ormMap)
     {
-        ormMap->Bind(packedDataUnit);
+        ormMap->Bind(shader.Device(), packedDataUnit);
         shader.SetInt("material.ormMap", static_cast<int>(packedDataUnit));
     }
     else if (specularMap)
     {
-        specularMap->Bind(packedDataUnit);
+        specularMap->Bind(shader.Device(), packedDataUnit);
         shader.SetInt(
             "material.specularMap", static_cast<int>(packedDataUnit));
     }
@@ -148,7 +148,7 @@ void Material::Bind(Shader& shader, unsigned int firstTextureUnit) const
     shader.SetInt("material.hasNormalMap", normalMap ? 1 : 0);
     if (normalMap)
     {
-        normalMap->Bind(normalUnit);
+        normalMap->Bind(shader.Device(), normalUnit);
         shader.SetInt("material.normalMap", static_cast<int>(normalUnit));
     }
 
@@ -157,7 +157,7 @@ void Material::Bind(Shader& shader, unsigned int firstTextureUnit) const
     shader.SetInt("material.hasFaceShadowMap", faceShadowMap ? 1 : 0);
     if (faceShadowMap)
     {
-        faceShadowMap->Bind(faceShadowUnit);
+        faceShadowMap->Bind(shader.Device(), faceShadowUnit);
         shader.SetInt(
             "material.faceShadowMap",
             static_cast<int>(faceShadowUnit));
@@ -250,7 +250,7 @@ void Material::BindDisplacement(Shader& shader, unsigned int textureUnit) const
     if (!displacementMap)
         return;
 
-    displacementMap->Bind(textureUnit);
+    displacementMap->Bind(shader.Device(), textureUnit);
     shader.SetInt("material.displacementMap", static_cast<int>(textureUnit));
     shader.SetInt("displacementMap", static_cast<int>(textureUnit));
 }

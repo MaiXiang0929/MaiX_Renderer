@@ -8,12 +8,12 @@
 
 #pragma once
 
-#include <glad/glad.h>
+#include "Engine/Rendering/RHI/RHIDevice.h"
 
 /// @brief 管理聚光灯阴影贴图所需的深度纹理和深度专用 FBO
 class ShadowMap {
 public:
-    ShadowMap() = default;
+    explicit ShadowMap(RHIDevice& device) : m_Device(device) {}
     ~ShadowMap();
 
     ShadowMap(const ShadowMap&) = delete;
@@ -32,14 +32,15 @@ public:
     /// @brief 绑定回默认 FBO
     void Unbind() const;
 
-    GLuint GetDepthTexture() const { return m_DepthTexture; }
-    GLuint GetFramebufferId() const { return m_FBO; }
+    RHITextureHandle GetDepthTexture() const { return m_DepthTexture; }
+    RHITargetHandle GetFramebufferId() const { return m_FBO; }
     int GetWidth() const { return m_Width; }
     int GetHeight() const { return m_Height; }
 
 private:
-    GLuint m_FBO = 0;
-    GLuint m_DepthTexture = 0;
+    RHIDevice& m_Device;
+    RHITargetHandle m_FBO = 0;
+    RHITextureHandle m_DepthTexture = 0;
     int m_Width = 0;
     int m_Height = 0;
 };

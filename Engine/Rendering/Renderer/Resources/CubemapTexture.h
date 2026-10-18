@@ -9,14 +9,14 @@
 
 #include <string>
 
-#include <glad/glad.h>
+#include "Engine/Rendering/RHI/RHIDevice.h"
 
 class CubemapTexture
 {
 public:
     ~CubemapTexture();
 
-    CubemapTexture() = default;
+    explicit CubemapTexture(RHIDevice& device) : m_Device(device) {}
     CubemapTexture(const CubemapTexture&) = delete;
     CubemapTexture& operator=(const CubemapTexture&) = delete;
 
@@ -24,8 +24,9 @@ public:
     void Bind(unsigned int textureUnit) const;
 
     bool IsValid() const { return m_TextureID != 0; }
-    GLuint GetID() const { return m_TextureID; }
+    RHITextureHandle GetID() const { return m_TextureID; }
 
 private:
-    GLuint m_TextureID = 0;
+    RHIDevice& m_Device;
+    RHITextureHandle m_TextureID = 0;
 };

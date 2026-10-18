@@ -38,7 +38,7 @@ public:
         MaterialProperties properties;
         BlendMode blendMode = BlendMode::Opaque;
         std::array<bool, MaterialTextureSlotCount> hasTextures{};
-        std::array<unsigned int, MaterialTextureSlotCount> textureIds{};
+        std::array<RHITextureHandle, MaterialTextureSlotCount> textureIds{};
         std::array<std::string, MaterialTextureSlotCount> textureSources{};
     };
 
@@ -64,6 +64,7 @@ public:
     Renderer& operator=(const Renderer&) = delete;
 
     bool Init();
+    RHIDevice& Device() const { return *m_Device; }
 
     MeshHandle CreateMesh(const std::vector<Vertex>& vertices);
     MeshHandle CreateMesh(
@@ -128,7 +129,7 @@ public:
 
     void ExecutePipeline(RenderFrameData& frame);
     /// 编辑器只能在渲染目标未再次 Resize 的当前帧采样该纹理。
-    GLuint GetFinalColorTexture() const
+    RHITextureHandle GetFinalColorTexture() const
     {
         return m_RenderPipeline.GetFinalColorTexture();
     }
@@ -216,6 +217,7 @@ public:
 private:
     void LogMainViewStatsIfChanged(const RenderView& view);
 
+    std::unique_ptr<RHIDevice> m_Device; // Declared first: destroyed after all GPU resources.
     Mesh m_PresentMesh;
     Mesh m_SkyboxMesh;
     Mesh m_GroundMesh;

@@ -20,16 +20,18 @@
 class ShadowPass final : public RenderPass
 {
 public:
+    explicit ShadowPass(RHIDevice& device) : m_Device(device), m_StandardShader(device), m_InstancedStandardShader(device), m_TessellationShader(device), m_ShadowMap(device), m_InstanceBuffer(device) {}
     bool Init(unsigned int width, unsigned int height);
     bool ReloadShaders();
 
     RenderPassType GetType() const override { return RenderPassType::Shadow; }
     void Execute(RenderPassContext& context) override;
 
-    GLuint GetDepthTexture() const { return m_ShadowMap.GetDepthTexture(); }
+    RHITextureHandle GetDepthTexture() const { return m_ShadowMap.GetDepthTexture(); }
     const ShadowMap& GetTarget() const { return m_ShadowMap; }
 
 private:
+    RHIDevice& m_Device;
     Shader m_StandardShader;
     Shader m_InstancedStandardShader;
     Shader m_TessellationShader;

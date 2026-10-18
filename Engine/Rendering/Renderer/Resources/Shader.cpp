@@ -1,325 +1,82 @@
 // SPDX-License-Identifier: MIT
-/// @file Shader.cpp
-/// @brief Shader 类的实现文件
-/// @details 该文件实现了 Shader 类的核心功能，包括加载、编译、绑定着色器程序，以及设置 uniform 变量。
-/// @author MaiX
-/// @date 2026-08-02
-
-
 #include "Engine/Rendering/Renderer/Resources/Shader.h"
-
-#include <iostream>
 #include <fstream>
 #include <sstream>
-
-#include "Engine/Rendering/Renderer/Diagnostics/RenderSubmissionStats.h"
-
-Shader::Shader()
-{
-
-}
-
+#include <iostream>
 Shader::~Shader()
 {
-	if (m_ProgramID != 0)
-	{
-		glDeleteProgram(m_ProgramID);
-		m_ProgramID = 0;
-	}
+    m_Device.DestroyProgram(m_ProgramID);
 }
-
-bool Shader::Load(
-	const std::string& vertexPath,
-	const std::string& fragmentPath
-)
+std::string Shader::ReadFile(const std::string &path)
 {
-	std::string vertexCode = ReadFile(vertexPath);
-	std::string fragmentCode = ReadFile(fragmentPath);
-	if (vertexCode.empty() || fragmentCode.empty())
-	{
-		return false;
-	}
-
-	GLuint vertexShader = CompileShader(
-		GL_VERTEX_SHADER,
-		vertexCode.c_str()
-	);
-
-	GLuint fragmentShader = CompileShader(
-		GL_FRAGMENT_SHADER,
-		fragmentCode.c_str()
-	);
-
-	if(vertexShader == 0 || fragmentShader == 0)
-	{
-		return false;
-	}
-
-	GLuint program = glCreateProgram();
-
-	glAttachShader(
-		program,
-		vertexShader
-	);
-
-	glAttachShader(
-		program,
-		fragmentShader
-	);
-
-	glLinkProgram(program);
-
-	// 检查链接错误
-	GLint success = 0;
-	glGetProgramiv(program, GL_LINK_STATUS, &success);
-	if (!success)
-	{
-		char infoLog[512];
-		glGetProgramInfoLog(program, 512, nullptr, infoLog);
-		std::cerr << "[Shader Error] Linking failed: " << infoLog << std::endl;
-
-		// 链接失败时 program 不可用，两个独立 Shader 对象也不再需要。
-		glDeleteProgram(program);
-		glDeleteShader(vertexShader);
-		glDeleteShader(fragmentShader);
-
-		return false;
-	}
-
-	glDeleteShader(vertexShader);
-
-	glDeleteShader(fragmentShader);
-
-	// 热重载成功后再删除旧程序，避免加载失败时丢失当前可用的着色器。
-	if (m_ProgramID != 0)
-	{
-		glDeleteProgram(m_ProgramID);
-	}
-	m_ProgramID = program;
-
-	return true;
+    std::ifstream file(path);
+    if (!file)
+    {
+        std::cerr << "[Shader] Cannot open source: " << path << '\n';
+        return {};
+    }
+    std::ostringstream stream;
+    stream << file.rdbuf();
+    return stream.str();
 }
-
-bool Shader::LoadTessellation(
-	const std::string& vertexPath,
-	const std::string& tessControlPath,
-	const std::string& tessEvalPath,
-	const std::string& fragmentPath,
-	const std::string& geometryPath)
+bool Shader::Load(const std::string &vertex, const std::string &fragment)
 {
-	const std::string sources[] = {
-		ReadFile(vertexPath), ReadFile(tessControlPath), ReadFile(tessEvalPath),
-		ReadFile(fragmentPath), geometryPath.empty() ? std::string() : ReadFile(geometryPath)
-	};
-	for (int i = 0; i < 4; ++i) if (sources[i].empty()) return false;
-
-	std::vector<GLuint> shaders;
-	const GLenum types[] = { GL_VERTEX_SHADER, GL_TESS_CONTROL_SHADER,
-		GL_TESS_EVALUATION_SHADER, GL_FRAGMENT_SHADER, GL_GEOMETRY_SHADER };
-	for (int i = 0; i < (geometryPath.empty() ? 4 : 5); ++i) {
-		GLuint shader = CompileShader(types[i], sources[i].c_str());
-		if (shader == 0) {
-			for (GLuint s : shaders) glDeleteShader(s);
-			return false;
-		}
-		shaders.push_back(shader);
-	}
-	return LinkProgram(shaders);
+    const auto candidate = m_Device.CreateProgram({{RHIShaderStage::Vertex, ReadFile(vertex), vertex},
+                                                   {RHIShaderStage::Fragment, ReadFile(fragment), fragment}});
+    if (candidate == 0)
+        return false;
+    m_Device.DestroyProgram(m_ProgramID);
+    m_ProgramID = candidate;
+    return true;
 }
-
-bool Shader::LinkProgram(const std::vector<GLuint>& shaders)
+bool Shader::LoadTessellation(const std::string &vertex, const std::string &control,
+                              const std::string &evaluation, const std::string &fragment,
+                              const std::string &geometry)
 {
-	GLuint program = glCreateProgram();
-	for (GLuint shader : shaders) glAttachShader(program, shader);
-	glLinkProgram(program);
-	GLint success = 0;
-	glGetProgramiv(program, GL_LINK_STATUS, &success);
-	if (!success) {
-		char infoLog[1024];
-		glGetProgramInfoLog(program, sizeof(infoLog), nullptr, infoLog);
-		std::cerr << "[Shader Error] Linking failed: " << infoLog << std::endl;
-		glDeleteProgram(program);
-		for (GLuint shader : shaders) glDeleteShader(shader);
-		return false;
-	}
-	for (GLuint shader : shaders) glDeleteShader(shader);
-	if (m_ProgramID != 0) glDeleteProgram(m_ProgramID);
-	m_ProgramID = program;
-	return true;
+    std::vector<RHIShaderSource> sources = {
+        {RHIShaderStage::Vertex, ReadFile(vertex), vertex},
+        {RHIShaderStage::TessControl, ReadFile(control), control},
+        {RHIShaderStage::TessEvaluation, ReadFile(evaluation), evaluation},
+        {RHIShaderStage::Fragment, ReadFile(fragment), fragment}};
+    if (!geometry.empty())
+        sources.push_back({RHIShaderStage::Geometry, ReadFile(geometry), geometry});
+    const auto candidate = m_Device.CreateProgram(sources);
+    if (candidate == 0)
+        return false;
+    m_Device.DestroyProgram(m_ProgramID);
+    m_ProgramID = candidate;
+    return true;
 }
-
 void Shader::Bind() const
 {
-	RenderSubmissionStats::Get().RecordShaderBind(m_ProgramID);
-	glUseProgram(m_ProgramID);
+    m_Device.Commands().BindProgram(m_ProgramID);
 }
-
 void Shader::Unbind() const
 {
-	glUseProgram(0);
+    m_Device.Commands().BindProgram({});
 }
-
-GLuint Shader::GetProgramID() const
+RHIProgramHandle Shader::GetProgramID() const
 {
-	return m_ProgramID;
+    return m_ProgramID;
 }
-
-void Shader::SetMatrix4(
-	const std::string& name,
-	const float* data
-)
+void Shader::SetInt(const std::string &name, int value)
 {
-	GLint location =
-		glGetUniformLocation(
-			m_ProgramID,
-			name.c_str()
-		);
-
-	if (location == -1)
-	{
-		std::cerr
-			<< "[Shader Warning] Uniform not found: "
-			<< name
-			<< std::endl;
-
-		return;
-	}
-
-	glUniformMatrix4fv(
-		location,
-		1,
-		GL_FALSE,
-		data
-	);
+    m_Device.Commands().SetInt(m_ProgramID, name, value);
 }
-
-void Shader::SetVec3(
-	const std::string& name,
-	float x,
-	float y,
-	float z
-)
+void Shader::SetFloat(const std::string &name, float value)
 {
-	GLint location =
-		glGetUniformLocation(
-			m_ProgramID,
-			name.c_str()
-		);
-
-
-	glUniform3f(
-		location,
-		x,
-		y,
-		z
-	);
+    m_Device.Commands().SetFloats(m_ProgramID, name, &value, 1);
 }
-
-void Shader::SetInt(
-	const std::string& name,
-	int value
-)
+void Shader::SetVec3(const std::string &name, float x, float y, float z)
 {
-	GLint location =
-		glGetUniformLocation(
-			m_ProgramID,
-			name.c_str()
-		);
-
-
-	glUniform1i(
-		location,
-		value
-	);
+    const float values[] = {x, y, z};
+    m_Device.Commands().SetFloats(m_ProgramID, name, values, 3);
 }
-
-void Shader::SetMatrix3(
-	const std::string& name,
-	const float* data
-)
+void Shader::SetMatrix3(const std::string &name, const float *data)
 {
-	const GLint location = glGetUniformLocation(m_ProgramID, name.c_str());
-	if (location == -1)
-	{
-		std::cerr << "[Shader Warning] Uniform not found: " << name << std::endl;
-		return;
-	}
-	glUniformMatrix3fv(location, 1, GL_FALSE, data);
+    m_Device.Commands().SetFloats(m_ProgramID, name, data, 9);
 }
-
-void Shader::SetFloat(const std::string& name, float value)
+void Shader::SetMatrix4(const std::string &name, const float *data)
 {
-	glUniform1f(glGetUniformLocation(m_ProgramID, name.c_str()), value);
-}
-
-std::string Shader::ReadFile(
-	const std::string& path
-)
-{
-	std::ifstream file(path);
-
-	if (!file.is_open())
-	{
-		std::cerr
-			<< "[Shader Error] Cannot open file: "
-			<< path
-			<< std::endl;
-
-		return "";
-	}
-
-	std::stringstream ss;
-
-	ss << file.rdbuf();
-
-	return ss.str();
-}
-
-GLuint Shader::CompileShader(
-	GLenum type,
-	const char* source
-)
-{
-	GLuint shader = glCreateShader(type);
-
-	glShaderSource(
-		shader,
-		1,
-		&source,
-		nullptr
-	);
-
-	glCompileShader(shader);
-
-	// 检查编译错误
-	GLint success = 0;
-
-	glGetShaderiv(
-		shader,
-		GL_COMPILE_STATUS,
-		&success
-	);
-
-	if (!success)
-	{
-		char infoLog[512];
-
-		glGetShaderInfoLog(
-			shader,
-			512,
-			nullptr,
-			infoLog
-		);
-
-		std::cerr
-			<< "[Shader Error] Compilation failed: "
-			<< infoLog
-			<< std::endl;
-
-		glDeleteShader(shader);
-
-		return 0;
-	}
-
-	return shader;
+    m_Device.Commands().SetFloats(m_ProgramID, name, data, 16);
 }

@@ -18,6 +18,7 @@
 #include "Editor/Session/EditorMaterialSelection.h"
 #include "Engine/Core/Platform/Windows/FileDialog.h"
 #include "Engine/Rendering/Renderer/Core/Renderer.h"
+#include "Engine/Rendering/RHI/OpenGL/OpenGLNativeBridge.h"
 
 namespace
 {
@@ -273,7 +274,7 @@ void MaterialEditorPanel::Draw(
         if (snapshot.textureIds[index] != 0)
         {
             ImGui::Image(
-                static_cast<ImTextureID>(snapshot.textureIds[index]),
+                static_cast<ImTextureID>(GetOpenGLTexture(renderer.Device(),snapshot.textureIds[index])),
                 ImVec2(48.0f, 48.0f));
         }
         else
@@ -311,7 +312,7 @@ void MaterialEditorPanel::Draw(
                 else
                 {
                     std::shared_ptr<Texture2D> texture =
-                        Texture2D::CreateRGBA8(
+                        Texture2D::CreateRGBA8(renderer.Device(),
                             image.width,
                             image.height,
                             image.pixels,

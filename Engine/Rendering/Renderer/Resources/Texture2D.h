@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-#include <glad/glad.h>
+#include "Engine/Rendering/RHI/RHIDevice.h"
 
 #include "Engine/Rendering/Renderer/Resources/TextureTypes.h"
 
@@ -27,26 +27,28 @@ public:
     Texture2D& operator=(Texture2D&&) = delete;
 
     static std::shared_ptr<Texture2D> Load(
-        const std::string& filePath,
+        RHIDevice& device, const std::string& filePath,
         TextureColorSpace colorSpace = TextureColorSpace::Linear);
     static std::shared_ptr<Texture2D> CreateRGBA8(
-        unsigned int width,
+        RHIDevice& device, unsigned int width,
         unsigned int height,
         const std::vector<unsigned char>& pixels,
         TextureColorSpace colorSpace = TextureColorSpace::Linear);
 
-    void Bind(unsigned int textureUnit) const;
-    bool IsValid() const { return m_TextureID != 0; }
-    GLuint GetID() const { return m_TextureID; }
+    void Bind(RHIDevice& consumer, unsigned int textureUnit) const;
+    bool IsValid() const { return !m_DeviceLifetime.expired() && m_TextureID != 0; }
+    RHITextureHandle GetID() const { return IsValid() ? m_TextureID : RHITextureHandle{}; }
     TextureColorSpace GetColorSpace() const { return m_ColorSpace; }
 
 private:
-    Texture2D(GLuint textureID, TextureColorSpace colorSpace)
-        : m_TextureID(textureID)
+    RHIDevice& m_Device;
+    std::weak_ptr<void> m_DeviceLifetime;
+    Texture2D(RHIDevice& device, RHITextureHandle textureID, TextureColorSpace colorSpace)
+        : m_Device(device), m_DeviceLifetime(device.Lifetime()), m_TextureID(textureID)
         , m_ColorSpace(colorSpace)
     {
     }
 
-    GLuint m_TextureID = 0;
+    RHITextureHandle m_TextureID = 0;
     TextureColorSpace m_ColorSpace = TextureColorSpace::Linear;
 };

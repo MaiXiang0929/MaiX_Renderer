@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <stdexcept>
 #include <string>
+#include "Engine/Rendering/RHI/RHIDevice.h"
 
 #include "Engine/Rendering/Renderer/Pipeline/RenderPassType.h"
 
@@ -60,9 +61,9 @@ bool ValidatePassResourceSequence(const PassResourceContract* contracts, std::si
 // 纯 CPU 绑定快照；不拥有 GL 对象，也不跨帧缓存。depthTexture 用于检测附件反馈。
 struct RenderResourceBinding
 {
-    std::uint32_t texture = 0;
-    std::uint32_t framebuffer = 0;
-    std::uint32_t depthTexture = 0;
+    RHITextureHandle texture = 0;
+    RHITargetHandle framebuffer = 0;
+    RHITextureHandle depthTexture = 0;
     unsigned int width = 0;
     unsigned int height = 0;
     ResourceFormat format = ResourceFormat::RGBA8;
@@ -71,10 +72,10 @@ struct RenderResourceBinding
     bool mipmaps = false;
 };
 
-class ResourceContractError : public std::runtime_error
+class ResourceContractError : public RHIError
 {
 public:
-    using std::runtime_error::runtime_error;
+    using RHIError::RHIError;
 };
 
 class PassResources;
@@ -84,7 +85,7 @@ public:
     void BeginFrame(unsigned int width, unsigned int height);
     void Bind(PassResourceId id, RenderResourceBinding binding);
     bool IsProduced(PassResourceId id) const;
-    std::uint32_t GetFinalTexture() const;
+    RHITextureHandle GetFinalTexture() const;
 
 private:
     friend class PassResources;
@@ -98,14 +99,14 @@ private:
 class PassResources
 {
 public:
-    PassResources(FrameResources& frame, const PassResourceContract& contract)
-        : m_Frame(frame), m_Contract(contract) {}
+    PassResources(FrameResources& frame, const PassResourceContract& contract, RHICommandList* commands = nullptr)
+        : m_Frame(frame), m_Contract(contract), m_Commands(commands) {}
 
     void Validate() const;
     const RenderResourceBinding& Read(PassResourceId id, ResourceAccess access = ResourceAccess::Sample) const;
     const RenderResourceBinding& Output(PassResourceId id) const;
-    std::uint32_t Texture(PassResourceId id) const { return Read(id).texture; }
-    std::uint32_t HdrTexture() const { return Texture(m_Contract.hdrInput); }
+    RHITextureHandle Texture(PassResourceId id) const { return Read(id).texture; }
+    RHITextureHandle HdrTexture() const { return Texture(m_Contract.hdrInput); }
     void Publish(PassResourceId id);
     void Complete() const;
 
@@ -117,7 +118,9 @@ private:
     [[noreturn]] void Fail(PassResourceId id, const char* reason) const;
     void ValidateBinding(PassResourceId id, bool optional) const;
     const ResourceOutput& FindOutput(PassResourceId id) const;
+    RHICommandList& Commands() const;
     FrameResources& m_Frame;
     const PassResourceContract& m_Contract;
+    RHICommandList* m_Commands;
     std::array<bool, 3> m_Published{};
 };

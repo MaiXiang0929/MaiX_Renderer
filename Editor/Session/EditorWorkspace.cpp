@@ -1,3 +1,4 @@
+#include "Engine/Rendering/RHI/OpenGL/OpenGLNativeBridge.h"
 // SPDX-License-Identifier: MIT
 #include "Editor/Session/EditorWorkspace.h"
 
@@ -15,7 +16,7 @@
 
 namespace
 {
-std::shared_ptr<Texture2D> LoadSmallPreview(const std::filesystem::path& path)
+std::shared_ptr<Texture2D> LoadSmallPreview(RHIDevice& device, const std::filesystem::path& path)
 {
     std::vector<unsigned char> source;
     unsigned int width = 0;
@@ -38,13 +39,14 @@ std::shared_ptr<Texture2D> LoadSmallPreview(const std::filesystem::path& path)
         }
     }
     // 预览纹理只占 64² RGBA8，避免浏览高分辨率贴图时复制大量 GPU 资源。
-    return Texture2D::CreateRGBA8(
+    return Texture2D::CreateRGBA8(device,
         PreviewSize, PreviewSize, pixels, TextureColorSpace::Linear);
 }
 }
 
-EditorWorkspace::EditorWorkspace()
-    : m_AssetRoot(std::filesystem::current_path() / "assets")
+EditorWorkspace::EditorWorkspace(RHIDevice& device)
+    : m_Device(device)
+    , m_AssetRoot(std::filesystem::current_path() / "assets")
     , m_CurrentDirectory(m_AssetRoot)
 {
     RefreshAssets();
@@ -281,10 +283,10 @@ void EditorWorkspace::DrawContentBrowser(AssetImportPanel& assetImport, void* na
                 const std::string key = entry.path().string();
                 auto [previewIt, inserted] = m_Previews.try_emplace(key);
                 if (inserted)
-                    previewIt->second = LoadSmallPreview(entry.path());
+                    previewIt->second = LoadSmallPreview(m_Device,entry.path());
                 const auto& preview = previewIt->second;
                 if (preview)
-                    ImGui::Image(static_cast<ImTextureID>(preview->GetID()),
+                    ImGui::Image(static_cast<ImTextureID>(GetOpenGLTexture(m_Device,preview->GetID())),
                         ImVec2(80.0f, 72.0f), ImVec2(0.0f, 1.0f), ImVec2(1.0f, 0.0f));
                 else
                     ImGui::Button("[Image]", ImVec2(80.0f, 72.0f));

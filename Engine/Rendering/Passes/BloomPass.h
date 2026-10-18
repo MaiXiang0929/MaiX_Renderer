@@ -11,6 +11,7 @@
 class BloomPass final : public RenderPass
 {
 public:
+    explicit BloomPass(RHIDevice& device) : m_Device(device), m_ExtractShader(device), m_BlurShader(device), m_Highlights(device), m_BlurTargets{{Framebuffer(device), Framebuffer(device)}} {}
     bool Init();
     bool Resize(unsigned int width, unsigned int height);
     bool ReloadShaders();
@@ -24,9 +25,10 @@ public:
     const Framebuffer& GetTarget() const { return m_BlurTargets[(BlurPassCount - 1) % 2]; }
 
 private:
+    RHIDevice& m_Device;
     static constexpr int BlurPassCount = 8;
 
-    void BindTexture(GLuint texture, unsigned int unit) const;
+    void BindTexture(RHITextureHandle texture, unsigned int unit) const;
 
     Shader m_ExtractShader;
     Shader m_BlurShader;

@@ -27,12 +27,12 @@
 class RenderPipeline
 {
 public:
-    RenderPipeline();
+    explicit RenderPipeline(RHIDevice& device);
 
     bool Init();
     bool ReloadShaders();
     void Execute(RenderPassContext& context);
-    GLuint GetFinalColorTexture() const { return m_FinalColorTexture; }
+    RHITextureHandle GetFinalColorTexture() const { return m_FinalColorTexture; }
 
     const std::vector<RenderPass*>& GetPasses() const
     {
@@ -44,6 +44,7 @@ public:
     }
 
 private:
+    RHIDevice& m_Device;
     void BindFrameResources(FrameResources& resources, const RenderPassContext& context) const;
     bool EnsureRenderTargetExtents(
         unsigned int viewportWidth,
@@ -61,6 +62,6 @@ private:
     PresentPass m_PresentPass;
     GpuPassProfiler m_GpuProfiler;
     std::vector<RenderPass*> m_Passes;
-    GLuint m_FinalColorTexture = 0;
+    RHITextureHandle m_FinalColorTexture = 0;
     std::string m_LastResourceError;
 };

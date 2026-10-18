@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
-#include <glad/glad.h>
+#include "Engine/Rendering/RHI/RHIDevice.h"
 
 #include "Engine/Rendering/Renderer/Pipeline/RenderPass.h"
 #include "Engine/Rendering/Renderer/Resources/Framebuffer.h"
@@ -10,7 +10,7 @@
 class EditorPrimitivePass final : public RenderPass
 {
 public:
-    EditorPrimitivePass() = default;
+    explicit EditorPrimitivePass(RHIDevice& device) : m_Device(device), m_OverlayTarget(device), m_BillboardShader(device), m_LineShader(device) {}
     ~EditorPrimitivePass() override;
 
     EditorPrimitivePass(const EditorPrimitivePass&) = delete;
@@ -26,7 +26,7 @@ public:
     }
     void Execute(RenderPassContext& context) override;
 
-    GLuint GetColorTexture() const
+    RHITextureHandle GetColorTexture() const
     {
         return m_OverlayTarget.GetColorTexture();
     }
@@ -35,6 +35,7 @@ public:
     int GetTargetHeight() const { return m_OverlayTarget.GetHeight(); }
 
 private:
+    RHIDevice& m_Device;
     void CreateBillboardMesh();
     void CreateSpotConeMesh();
     void DrawBillboard(
@@ -48,9 +49,9 @@ private:
     Framebuffer m_OverlayTarget;
     Shader m_BillboardShader;
     Shader m_LineShader;
-    GLuint m_BillboardVao = 0;
-    GLuint m_BillboardVbo = 0;
-    GLuint m_ConeVao = 0;
-    GLuint m_ConeVbo = 0;
-    GLsizei m_ConeVertexCount = 0;
+    RHIVertexInputHandle m_BillboardVao = 0;
+    RHIBufferHandle m_BillboardVbo = 0;
+    RHIVertexInputHandle m_ConeVao = 0;
+    RHIBufferHandle m_ConeVbo = 0;
+    unsigned m_ConeVertexCount = 0;
 };

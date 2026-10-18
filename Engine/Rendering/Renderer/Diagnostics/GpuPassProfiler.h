@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include <glad/glad.h>
+#include "Engine/Rendering/RHI/RHIDevice.h"
 
 #include "Engine/Rendering/Renderer/Pipeline/RenderPass.h"
 
@@ -32,7 +32,7 @@ struct GpuTimingSnapshot
 class GpuPassProfiler
 {
 public:
-    GpuPassProfiler() = default;
+    explicit GpuPassProfiler(RHIDevice& device) : m_Device(device) {}
     ~GpuPassProfiler();
 
     GpuPassProfiler(const GpuPassProfiler&) = delete;
@@ -53,13 +53,15 @@ private:
 
     struct QueryFrame
     {
-        std::array<GLuint, GpuTimingSnapshot::PassCount> queries{};
+        std::array<RHIQueryHandle, GpuTimingSnapshot::PassCount> queries{};
+        std::array<bool, GpuTimingSnapshot::PassCount> issued{};
         bool pending = false;
     };
 
     bool TryResolve(QueryFrame& frame);
     void LogSnapshot() const;
 
+    RHIDevice& m_Device;
     std::array<QueryFrame, BufferedFrameCount> m_Frames{};
     GpuTimingSnapshot m_Snapshot;
     std::size_t m_WriteFrameIndex = 0;
