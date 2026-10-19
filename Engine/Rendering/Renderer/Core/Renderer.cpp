@@ -329,6 +329,11 @@ bool Renderer::UpdateLight(LightId id, const LightSceneProxy& light)
     return m_RenderScene.UpdateLight(id, light);
 }
 
+bool Renderer::RemoveLight(LightId id)
+{
+    return m_RenderScene.RemoveLight(id);
+}
+
 void Renderer::LoadCubemap(const std::string& directoryPath)
 {
     if (m_Cubemap.Load(directoryPath))

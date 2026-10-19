@@ -1,102 +1,80 @@
 // SPDX-License-Identifier: MIT
 #include "Editor/SceneHierarchy/SceneHierarchyPanel.h"
-
-#include <string>
-
-#include <imgui.h>
 #include "Editor/Session/EditorWidgets.h"
+#include <algorithm>
+#include <functional>
+#include <imgui.h>
 
-#include "Engine/Runtime/Scene/SceneLight.h"
-#include "Engine/Runtime/Scene/SceneModel.h"
-
-namespace
+ActorId SceneHierarchyPanel::Draw(EditorSelection &selection, SceneState &scene)
 {
-void SetEditorPanelPosition(float width, float offset)
-{
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    const float right = viewport->WorkPos.x + viewport->WorkSize.x;
-    const float x = right - width - offset;
-    ImGui::SetNextWindowPos(
-        ImVec2(x < viewport->WorkPos.x + 8.0f
-            ? viewport->WorkPos.x + 8.0f
-            : x,
-            viewport->WorkPos.y + 16.0f),
-        ImGuiCond_FirstUseEver);
-}
-}
-
-ModelId SceneHierarchyPanel::Draw(
-    EditorSelection& selection,
-    const std::vector<SceneModel>& models,
-    const std::vector<SceneLight>& lights, const SceneCamera* camera)
-{
-    SetEditorPanelPosition(300.0f, 380.0f);
-    ImGui::SetNextWindowSize(ImVec2(300.0f, 360.0f), ImGuiCond_FirstUseEver);
     if (!ImGui::Begin("Scene"))
     {
         ImGui::End();
         return {};
     }
-
-    ImGui::SeparatorText("Objects");
-    if (models.empty())
-    {
-        ImGui::TextUnformatted("No model loaded.");
-    }
-    else
-    {
-        for (const SceneModel& model : models)
+    ActorId removed, reparent, parent;
+    bool detach = false;
+    if (ImGui::Button("Create Empty"))
+        selection.SelectActor(scene.world.Create("Empty"), scene);
+    const auto selected = selection.ResolveActor(scene);
+    std::function<void(ActorId)> draw = [&](ActorId parentId) {
+        for (const auto &a : scene.world.Actors())
         {
-            const std::string label = model.name.empty() ? "Model" : model.name;
-            const std::string selectableLabel = "##Model" + std::to_string(model.id.value);
-            if (EditorWidgets::IconSelectable(selectableLabel.c_str(),EditorWidgets::Icon::Mesh,
-                    label.c_str(), selection.IsModelSelected(model.id)))
-                selection.SelectModel(model.id);
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s (%zu sections)",label.c_str(),model.sections.size());
-        }
-    }
-
-    ModelId removedModel;
-    if (selection.type == EditorSelectionType::Model &&
-        FindSceneModel(models, selection.modelId) != nullptr &&
-        ImGui::Button("Remove selected model"))
-        removedModel = selection.modelId;
-
-    if (ImGui::TreeNodeEx(
-            "Lights",
-            ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth))
-    {
-        if (lights.empty())
-        {
-            ImGui::TextUnformatted("No lights.");
-        }
-        for (const SceneLight& light : lights)
-        {
-            if (!light.IsValid())
+            if (a.parent != parentId)
                 continue;
-
-            const std::string label = light.name.empty()
-                ? "Light"
-                : light.name;
-            const std::string selectableLabel = "##Light" + std::to_string(light.proxy.id);
-            if (EditorWidgets::IconSelectable(selectableLabel.c_str(),EditorWidgets::Icon::Light,
-                    label.c_str(), selection.IsLightSelected(light.proxy.id)))
+            const bool hasChildren = std::any_of(scene.world.Actors().begin(), scene.world.Actors().end(),
+                                                 [&](const Actor &child) { return child.parent == a.id; });
+            auto flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
+            if (!hasChildren)
+                flags |= ImGuiTreeNodeFlags_Leaf;
+            if (a.id == selected)
+                flags |= ImGuiTreeNodeFlags_Selected;
+            const auto key = std::to_string(a.id.value);
+            ImGui::PushID(key.c_str());
+            const bool open = ImGui::TreeNodeEx("node", flags, "%s", a.name.c_str());
+            if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
+                selection.SelectActor(a.id, scene);
+            if (ImGui::BeginDragDropSource())
             {
-                selection.SelectLight(light.proxy.id);
+                ImGui::SetDragDropPayload("MAIX_ACTOR", &a.id, sizeof(a.id));
+                ImGui::TextUnformatted(a.name.c_str());
+                ImGui::EndDragDropSource();
             }
-            const char* typeName = light.proxy.type == LightType::Directional
-                ? "Directional"
-                : light.proxy.type == LightType::Spot
-                    ? "Spot"
-                    : "Point";
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s (%s)",label.c_str(),typeName);
+            if (ImGui::BeginDragDropTarget())
+            {
+                if (const auto *payload = ImGui::AcceptDragDropPayload("MAIX_ACTOR"))
+                {
+                    reparent = *static_cast<const ActorId *>(payload->Data);
+                    parent = a.id;
+                }
+                ImGui::EndDragDropTarget();
+            }
+            if (open)
+            {
+                draw(a.id);
+                ImGui::TreePop();
+            }
+            ImGui::PopID();
         }
-        ImGui::TreePop();
+    };
+    draw({});
+    ImGui::Separator();
+    ImGui::TextDisabled("Drag an object onto its parent.");
+    ImGui::BeginDisabled(!selected.IsValid());
+    if (ImGui::Button("Detach to Root"))
+    {
+        reparent = selected;
+        detach = true;
     }
-
-    if (camera && EditorWidgets::IconSelectable("##Camera",EditorWidgets::Icon::Camera,
-            camera->name.c_str(), selection.IsCameraSelected(camera->id)))
-        selection.SelectCamera(camera->id);
+    const auto count = scene.world.Subtree(selected).size();
+    const auto label = "Delete Subtree (" + std::to_string(count) + ")";
+    if (ImGui::Button(label.c_str()))
+        removed = selected;
+    ImGui::EndDisabled();
+    if (reparent.IsValid())
+        scene.world.Reparent(reparent, detach ? ActorId{} : parent, true, m_Error);
+    if (!m_Error.empty())
+        ImGui::TextWrapped("%s", m_Error.c_str());
     ImGui::End();
-    return removedModel;
+    return removed;
 }

@@ -2,20 +2,128 @@
 #include "Engine/Runtime/Engine/RenderSceneBridge.h"
 
 #include "Engine/Rendering/Renderer/Core/Renderer.h"
+#include "Engine/Runtime/Engine/SceneState.h"
+#include <algorithm>
 
-void ApplySceneModelTransform(SceneModel& model, Renderer& renderer)
+bool RegisterSceneActors(SceneState &scene)
 {
-    const cy::Matrix4f root = model.transform.ToMatrix();
-    for (const SceneModelSection& section : model.sections)
+    for (auto &model : scene.models)
     {
-        renderer.UpdatePrimitiveTransform(
-            section.primitiveId, root * section.localTransform);
+        if (!model.actor.IsValid())
+            model.actor = scene.world.Create(model.name, model.transform, ActorKind::Model, model.id.value);
+        if (!scene.world.Find(model.actor))
+            return false;
+    }
+    for (auto &light : scene.lights)
+    {
+        if (!light.actor.IsValid())
+            light.actor = scene.world.Create(light.name, light.transform, ActorKind::Light, light.proxy.id);
+        if (!scene.world.Find(light.actor))
+            return false;
+    }
+    if (scene.camera.id.IsValid())
+    {
+        if (!scene.camera.actor.IsValid())
+            scene.camera.actor = scene.world.Create(scene.camera.name, scene.camera.transform,
+                                                    ActorKind::Camera, scene.camera.id.value);
+        if (!scene.world.Find(scene.camera.actor))
+            return false;
+    }
+    return true;
+}
+
+void SynchronizeSceneActors(SceneState &scene, Renderer &renderer)
+{
+    auto changed = [](const Transform &a, const Transform &b) {
+        const auto x = a.ToMatrix(), y = b.ToMatrix();
+        for (int i = 0; i < 16; ++i)
+            if (x.cell[i] != y.cell[i])
+                return true;
+        return false;
+    };
+    for (auto &model : scene.models)
+        if (const auto *a = scene.world.Find(model.actor))
+        {
+            const bool update = changed(model.transform, a->world);
+            model.name = a->name;
+            model.transform = a->world;
+            if (update)
+                ApplySceneModelTransform(model, renderer);
+        }
+    for (auto &light : scene.lights)
+        if (const auto *a = scene.world.Find(light.actor))
+        {
+            const bool update = changed(light.transform, a->world);
+            light.name = a->name;
+            light.transform = a->world;
+            if (update)
+                ApplySceneLightTransform(light, renderer);
+        }
+    if (const auto *a = scene.world.Find(scene.camera.actor))
+    {
+        scene.camera.name = a->name;
+        scene.camera.transform = a->world;
     }
 }
 
-void DestroySceneModelResources(SceneModel& model, Renderer& renderer)
+bool DestroySceneActor(SceneState &scene, Renderer &renderer, ActorId actor)
 {
-    for (const SceneModelSection& section : model.sections)
+    const auto removed = scene.world.Subtree(actor);
+    if (removed.empty())
+        return false;
+    auto contains = [&](ActorId id) {
+        return std::find(removed.begin(), removed.end(), id) != removed.end();
+    };
+    // Release every proxy before shared GPU resources, including invisible children.
+    for (auto &model : scene.models)
+        if (contains(model.actor))
+        {
+            for (const auto &section : model.sections)
+                renderer.RemovePrimitive(section.primitiveId);
+            model.sections.clear();
+        }
+    for (const auto &light : scene.lights)
+        if (contains(light.actor))
+            renderer.RemoveLight(light.proxy.id);
+    for (const auto &model : scene.models)
+        if (contains(model.actor))
+            for (auto mesh : model.meshes)
+                renderer.DestroyMesh(mesh);
+    for (int instances = 1; instances >= 0; --instances)
+        for (const auto &model : scene.models)
+            if (contains(model.actor))
+                for (auto material : model.materials)
+                    if (renderer.IsMaterialInstance(material) == (instances != 0))
+                        renderer.DestroyMaterial(material);
+    for (const auto &model : scene.models)
+        if (contains(model.actor) && scene.defaultModelId == model.id)
+            scene.defaultModelId = {};
+    for (const auto &light : scene.lights)
+        if (contains(light.actor) && scene.mainLightId == light.proxy.id)
+            scene.mainLightId = InvalidLightId;
+    scene.models.erase(std::remove_if(scene.models.begin(), scene.models.end(),
+                                      [&](const SceneModel &m) { return contains(m.actor); }),
+                       scene.models.end());
+    scene.lights.erase(std::remove_if(scene.lights.begin(), scene.lights.end(),
+                                      [&](const SceneLight &l) { return contains(l.actor); }),
+                       scene.lights.end());
+    if (contains(scene.camera.actor))
+        scene.camera = SceneCamera{};
+    return scene.world.Destroy(actor);
+}
+
+void ApplySceneModelTransform(SceneModel &model, Renderer &renderer)
+{
+    const cy::Matrix4f root = model.transform.ToMatrix();
+    for (const SceneModelSection &section : model.sections)
+    {
+        renderer.UpdatePrimitiveTransform(section.primitiveId, root * section.localTransform);
+    }
+}
+
+void DestroySceneModelResources(SceneModel &model, Renderer &renderer)
+{
+    for (const SceneModelSection &section : model.sections)
         renderer.RemovePrimitive(section.primitiveId);
     for (const MeshHandle mesh : model.meshes)
         renderer.DestroyMesh(mesh);
@@ -31,18 +139,16 @@ void DestroySceneModelResources(SceneModel& model, Renderer& renderer)
     model.materials.clear();
 }
 
-
-void ApplySceneLightTransform(
-    SceneLight& light,
-    Renderer& renderer)
+void ApplySceneLightTransform(SceneLight &light, Renderer &renderer)
 {
     light.proxy.position = light.transform.position;
-    if (light.proxy.type == LightType::Directional)
+    if (light.proxy.type == LightType::Directional || light.proxy.type == LightType::Spot)
     {
         Transform rigid = light.transform;
-        rigid.position = cy::Vec3f(0.0f); rigid.scale = cy::Vec3f(1);
-        const auto direction = rigid.ToMatrix() * cy::Vec4f(0,0,-1,0);
-        light.proxy.direction = cy::Vec3f(direction.x,direction.y,direction.z).GetNormalized();
+        rigid.position = cy::Vec3f(0.0f);
+        rigid.scale = cy::Vec3f(1);
+        const auto direction = rigid.ToMatrix() * cy::Vec4f(0, 0, -1, 0);
+        light.proxy.direction = cy::Vec3f(direction.x, direction.y, direction.z).GetNormalized();
     }
     renderer.UpdateLight(light.proxy.id, light.proxy);
 }

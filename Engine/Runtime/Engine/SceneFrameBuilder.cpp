@@ -121,7 +121,7 @@ RenderFrameData BuildSceneFrame(SceneState& scene, Camera& camera,
                 light.proxy.direction * (range * 0.5f), radius);
         }
     }
-    if (!sceneCameraView && settings.editorPrimitivesEnabled)
+    if (!sceneCameraView && settings.editorPrimitivesEnabled && scene.camera.id.IsValid())
     {
         const float previewHeight = std::tan(scene.camera.fovDegrees * 3.14159265358979323846f / 360);
         const float previewAspect = width > 0 && height > 0 ? static_cast<float>(width)/height : 1;

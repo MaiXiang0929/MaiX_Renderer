@@ -96,7 +96,7 @@ Viewport 顶部工具栏提供移动、旋转、缩放与世界/局部空间切�
 | 鼠标左键点选 | 选择模型、可见灯光或相机图标 |
 | Scene 中点选模型 | 按模型独立选择；Inspector 和 Gizmo 只修改当前模型 |
 | Inspector 中点击材质 | 激活同一区域的 Material Editor 标签，编辑该模型实际使用的材质 |
-| Scene 中 `Remove selected model` | 移除选中模型及其 Primitive、Mesh、Material 资源 |
+| Scene 中 `Delete Subtree (N)` | 删除选中对象及后代，清理组件与渲染资源 |
 | `Alt` + 左键拖动 | Orbit 相机 |
 | `Alt` + 中键拖动 | Pan 相机 |
 | `Alt` + 右键拖动或滚轮 | Dolly 相机 |
@@ -108,6 +108,10 @@ Viewport 顶部工具栏提供移动、旋转、缩放与世界/局部空间切�
 | `F6` | 重新加载 GLSL Shader |
 | `Esc` | 退出程序 |
 
+Scene 显示实际对象层级。`Create Empty` 创建组合根节点；把模型、灯光或相机拖到另一个对象上，或在 Inspector 的 `Parent` 中选择父级。换父级和 `Detach to Root` 保持世界变换。Inspector 的 `Local Transform` 编辑相对父级的位置、旋转和缩放，视口 Gizmo 编辑世界变换，`F` 可聚焦空对象。`Name` 输入后按 Enter 改名。
+
+父级修改会同步子模型、灯光、相机、阴影、包围体和拾取。当前支持能表示为 TRS 的层级变换；非均匀缩放配合旋转若产生剪切，或输入非有限/奇异变换，操作会完整拒绝并显示原因。`Delete Subtree (N)` 删除选中对象及全部后代，并清理渲染引用；删除活动场景相机后返回编辑器视图。场景层级暂不保存到磁盘。
+
 Material Editor 默认跟随所选模型，显示所属模型名称和材质列表。`All materials (debug)` 可查看全部场景材质；点击 Inspector 中的材质会返回模型范围。删除正在编辑的模型后会清理材质选择。
 
 基础材质可通过 `Create Instance` 创建并绑定到当前模型分段。实例支持参数 Override、纹理继承/替换/禁用、重置覆盖和 `Edit Parent`；`Use Parent Material` 恢复基础材质。使用 `--material-instance-lab` 启动父材质与两个实例的共享 Mesh 验收场景。
@@ -118,8 +122,8 @@ Material Editor 默认跟随所选模型，显示所属模型名称和材质列�
 Engine/
 ├─ Core/                 CPU 数学、平台窗口与文件对话框
 ├─ Runtime/
-│  ├─ Component/         现有 Camera；完整组件体系留待 Phase 2
-│  ├─ Scene/             CPU 模型、灯光、场景相机、启动数据
+│  ├─ Component/         编辑器导航 Camera
+│  ├─ Scene/             World/Actor 层级、模型/灯光/相机组件、启动数据
 │  └─ Engine/            EngineSession、SceneState、RenderSceneBridge、SceneFrameBuilder
 ├─ Asset/
 │  ├─ Geometry/          CPU Vertex 与程序化几何

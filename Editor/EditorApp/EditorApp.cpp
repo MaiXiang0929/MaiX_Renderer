@@ -297,7 +297,7 @@ bool EditorApp::Init() {
     std::string diagnostic;
     const auto scene = LoadStartupScene("assets/scenes/startup.json", diagnostic);
     std::cout << "[StartupScene] " << diagnostic << std::endl;
-    return CreateStartupScene(scene);
+    return CreateStartupScene(scene) && RegisterSceneActors(m_Engine.Scene());
 }
 
 bool EditorApp::CreateStartupScene(const StartupSceneDefinition& scene)
@@ -1189,6 +1189,11 @@ bool EditorApp::RemoveModel(ModelId id)
         [id](const SceneModel& model) { return model.id == id; });
     if (found == m_Engine.Scene().models.end())
         return false;
+    if (found->actor.IsValid()) {
+        const bool removed=DestroySceneActor(m_Engine.Scene(),*m_Renderer,found->actor);
+        if (!m_EditorSelection.ResolveActor(m_Engine.Scene()).IsValid()) m_EditorSelection.Clear();
+        return removed;
+    }
     if (m_EditorSelection.IsModelSelected(id))
         m_EditorSelection.Clear();
     if (m_Engine.Scene().defaultModelId == id)
@@ -1228,6 +1233,7 @@ void EditorApp::Update() {
     ModelId importedId;
     if (CommitImportedModel(completedImport->model, error, importedId))
     {
+        RegisterSceneActors(m_Engine.Scene());
         m_EditorSelection.SelectModel(importedId);
         m_SceneCameraView = false;
         m_PendingFocusSelection = m_EditorSelection;
@@ -1249,6 +1255,8 @@ void EditorApp::Update() {
 /// @brief 渲染应用程序
 void EditorApp::Render() {
     // 先建立 ImGui 布局，取得中央视口的实际像素尺寸，再提交渲染帧。
+    SynchronizeSceneActors(m_Engine.Scene(),*m_Renderer);
+    if (!m_Engine.Scene().camera.id.IsValid()) m_SceneCameraView=false;
     UpdateAppearance();
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
@@ -1266,7 +1274,7 @@ void EditorApp::Render() {
         if (m_PendingFocusSelection.type != EditorSelectionType::None)
         {
             m_ViewportController->FocusSelection(m_Camera, m_PendingFocusSelection,
-                m_Engine.Scene().models, m_Engine.Scene().lights, &m_Engine.Scene().camera);
+                m_Engine.Scene().models, m_Engine.Scene().lights, &m_Engine.Scene().camera, &m_Engine.Scene().world);
             m_PendingFocusSelection.Clear();
         }
     }
@@ -1282,22 +1290,24 @@ void EditorApp::Render() {
     m_Workspace->DrawViewportImage(GetOpenGLTexture(m_Renderer->Device(),m_Renderer->GetFinalColorTexture()));
     if (viewport.visible)
         m_ViewportController->Draw(
-            m_Camera, m_EditorSelection, m_Engine.Scene().models,
-            m_Engine.Scene().lights, *m_Renderer, viewport, &m_Engine.Scene().camera, m_SceneCameraView);
+            m_Camera, m_EditorSelection, m_Engine.Scene(), *m_Renderer, viewport, &m_Engine.Scene().camera, m_SceneCameraView);
     m_Workspace->EndViewport();
 
     m_AssetImportPanel->Draw(nativeWindowHandle);
     if (m_Workspace->ShowStatistics())
         m_StatisticsPanel->Draw(*m_Renderer);
-    const ModelId removedModel = m_SceneHierarchyPanel->Draw(
-        m_EditorSelection, m_Engine.Scene().models, m_Engine.Scene().lights, &m_Engine.Scene().camera);
-    if (removedModel.IsValid())
-        RemoveModel(removedModel);
+    const auto removedActor=m_SceneHierarchyPanel->Draw(m_EditorSelection,m_Engine.Scene());
+    if (removedActor.IsValid()) {
+        DestroySceneActor(m_Engine.Scene(),*m_Renderer,removedActor);
+        if (!m_EditorSelection.ResolveActor(m_Engine.Scene()).IsValid()) m_EditorSelection.Clear();
+        if (!m_PendingFocusSelection.ResolveActor(m_Engine.Scene()).IsValid()) m_PendingFocusSelection.Clear();
+        if (!m_Engine.Scene().camera.id.IsValid()) m_SceneCameraView=false;
+    }
     // 先应用场景选择/删除，再同步材质身份；即使材质面板关闭也清理失效选择。
     m_MaterialSelection.Synchronize(
         m_EditorSelection, m_Engine.Scene().models, m_Renderer->GetMaterialHandles());
     if (m_InspectorPanel->Draw(
-            m_EditorSelection, m_Engine.Scene().models, m_Engine.Scene().lights, m_Engine.Scene().camera, m_SceneCameraView, *m_Renderer,
+            m_EditorSelection, m_Engine.Scene(), m_SceneCameraView, *m_Renderer,
             m_MaterialSelection))
         m_Workspace->OpenMaterialEditor();
     if (m_Workspace->ShowMaterialEditor())
@@ -1462,9 +1472,13 @@ void EditorApp::CursorPositionCallback(
         SceneLight* mainLight = app->FindSceneLight(app->m_Engine.Scene().mainLightId);
         if (mainLight)
         {
-            mainLight->transform.rotationDegrees.x += deltaY * 0.5f;
-            mainLight->transform.rotationDegrees.y += deltaX * 0.5f;
-            ApplySceneLightTransform(*mainLight, *app->m_Renderer);
+            auto transform=mainLight->transform;
+            transform.rotationDegrees.x+=deltaY*0.5f;
+            transform.rotationDegrees.y+=deltaX*0.5f;
+            std::string error;
+            if (!app->m_Engine.Scene().world.SetWorld(mainLight->actor,transform.ToMatrix(),error))
+                app->m_Workspace->AddLog(error);
+            SynchronizeSceneActors(app->m_Engine.Scene(),*app->m_Renderer);
         }
     }
 }

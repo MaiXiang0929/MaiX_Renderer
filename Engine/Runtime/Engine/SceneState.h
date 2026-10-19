@@ -6,10 +6,11 @@
 #include <limits>
 #include <vector>
 
-// Transitional scene values and render bindings; no UI state or GPU ownership.
-// World / Actor / Component replace this organization in Phase 2.
+// World owns identity/local transforms; typed component records below expose
+// derived world transforms to the existing render bridge. No UI/GPU ownership.
 struct SceneState
 {
+    World world;
     std::vector<SceneModel> models;
     std::vector<SceneLight> lights;
     SceneCamera camera;

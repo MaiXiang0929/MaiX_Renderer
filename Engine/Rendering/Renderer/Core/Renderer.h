@@ -124,6 +124,7 @@ public:
 
     LightId AddLight(LightSceneProxy light);
     bool UpdateLight(LightId id, const LightSceneProxy& light);
+    bool RemoveLight(LightId id);
 
     void LoadCubemap(const std::string& directoryPath);
 

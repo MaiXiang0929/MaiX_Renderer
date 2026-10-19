@@ -46,7 +46,8 @@ public:
         Camera& camera,
         const EditorSelection& selection,
         const std::vector<SceneModel>& models,
-        const std::vector<SceneLight>& lights, const SceneCamera* sceneCamera = nullptr) const;
+        const std::vector<SceneLight>& lights, const SceneCamera* sceneCamera = nullptr,
+        const World* world = nullptr) const;
 
     bool IsLeftDown() const { return m_LeftDown; }
     bool HasPointerButtonDown() const { return m_LeftDown || m_MiddleDown || m_RightDown; }
@@ -58,12 +59,12 @@ public:
     void Draw(
         Camera& camera,
         EditorSelection& selection,
-        std::vector<SceneModel>& models,
-        std::vector<SceneLight>& lights,
+        SceneState& scene,
         Renderer& renderer,
         const EditorViewportRegion& viewport, SceneCamera* sceneCamera = nullptr, bool cameraView = false);
 
 private:
+    std::string m_TransformError;
     bool m_LeftDown = false;
     bool m_MiddleDown = false;
     bool m_RightDown = false;
