@@ -207,7 +207,7 @@ void EditorViewportController::Draw(Camera &camera, EditorSelection &selection, 
 
     const auto actorId = selection.ResolveActor(scene);
     const auto *actor = scene.world.Find(actorId);
-    if (actor && !(selectedCamera && cameraView))
+    if (actor && scene.world.IsVisible(actorId) && !(selectedCamera && cameraView))
     {
         auto matrix = actor->world.ToMatrix();
         if (ImGuizmo::Manipulate(view.cell, projection.cell,
@@ -221,7 +221,7 @@ void EditorViewportController::Draw(Camera &camera, EditorSelection &selection, 
         ImGui::GetWindowDrawList()->AddText(ImVec2(viewport.min.x + 12, viewport.min.y + 35),
                                             IM_COL32(255, 180, 100, 255), m_TransformError.c_str());
 
-    if (sceneCamera && !cameraView && renderer.AreEditorPrimitivesEnabled())
+    if (sceneCamera && sceneCamera->visible && !cameraView && renderer.AreEditorPrimitivesEnabled())
     {
         const auto rigid = sceneCamera->GetViewMatrix().GetInverse();
         const auto vp = projection * view;
@@ -271,7 +271,7 @@ void EditorViewportController::Draw(Camera &camera, EditorSelection &selection, 
                 PickEditorObject(framebufferX, framebufferY, static_cast<float>(viewport.pixelWidth),
                                  static_cast<float>(viewport.pixelHeight), projection, view, models, lights);
             float cameraDepth;
-            if (sceneCamera && !cameraView && renderer.AreEditorPrimitivesEnabled() &&
+            if (sceneCamera && sceneCamera->visible && !cameraView && renderer.AreEditorPrimitivesEnabled() &&
                 HitTestLightIcon(framebufferX, framebufferY, static_cast<float>(viewport.pixelWidth),
                                  static_cast<float>(viewport.pixelHeight), projection * view,
                                  sceneCamera->transform.position, 12, cameraDepth))

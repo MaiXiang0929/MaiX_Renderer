@@ -13,6 +13,7 @@ class RenderScene
 public:
     PrimitiveId AddPrimitive(PrimitiveSceneProxy proxy);
     bool RemovePrimitive(PrimitiveId id);
+    bool UpdatePrimitiveVisibility(PrimitiveId id, bool visible);
     bool HasMeshReference(RenderResourceId meshId) const;
     bool HasMaterialReference(RenderResourceId materialId) const;
     bool ReplacePrimitiveMaterials(const std::vector<PrimitiveId>& ids,

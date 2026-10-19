@@ -31,6 +31,7 @@ struct SceneModelSection
 struct SceneModel
 {
     ActorId actor;
+    bool visible = true; // Derived from World, including hidden ancestors.
     ModelId id;
     std::string name;
     Transform transform;

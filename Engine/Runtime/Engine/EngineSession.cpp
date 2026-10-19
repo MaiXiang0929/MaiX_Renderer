@@ -2,29 +2,56 @@
 #include "Engine/Runtime/Engine/EngineSession.h"
 #include "Engine/Runtime/Engine/RenderSceneBridge.h"
 #include "Engine/Rendering/Renderer/Core/Renderer.h"
+#include "Engine/Runtime/Engine/SceneFrameBuilder.h"
+#include <iostream>
 
 EngineSession::EngineSession() = default;
-EngineSession::~EngineSession() { Shutdown(); }
+EngineSession::~EngineSession()
+{
+    Shutdown();
+}
 
 bool EngineSession::Initialize()
 {
-    if (m_Renderer) return true;
+    if (m_Renderer)
+        return true;
     auto candidate = std::make_unique<Renderer>();
-    if (!candidate->Init()) return false;
+    if (!candidate->Init())
+        return false;
     m_Renderer = std::move(candidate);
     return true;
 }
 
-void EngineSession::Render(RenderFrameData& frame)
+void EngineSession::Render(RenderFrameData &frame)
 {
-    if (m_Renderer) m_Renderer->ExecutePipeline(frame);
+    if (m_Renderer)
+        m_Renderer->ExecutePipeline(frame);
+}
+
+RenderFrameData EngineSession::PrepareFrame(Camera &camera, unsigned width, unsigned height,
+                                            bool sceneCameraView, const SceneFrameSettings &settings)
+{
+    if (!m_Renderer)
+        return {};
+    if (!RegisterSceneActors(m_Scene))
+    {
+        if (!m_RegistrationFailed)
+            std::cerr << "[Scene] Actor registration failed; frame rejected.\n";
+        m_RegistrationFailed = true;
+        return {};
+    }
+    m_RegistrationFailed = false;
+    SynchronizeSceneActors(m_Scene, *m_Renderer);
+    return BuildSceneFrame(m_Scene, camera, width, height, sceneCameraView && m_Scene.camera.id.IsValid(),
+                           settings);
 }
 
 void EngineSession::Shutdown()
 {
     if (m_Renderer)
-        for (auto& model : m_Scene.models)
+        for (auto &model : m_Scene.models)
             DestroySceneModelResources(model, *m_Renderer);
     m_Scene = SceneState{};
+    m_RegistrationFailed = false;
     m_Renderer.reset();
 }

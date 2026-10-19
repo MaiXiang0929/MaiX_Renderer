@@ -74,6 +74,7 @@ bool HitTestEditableModel(
     const SceneModel& model,
     float& distance)
 {
+    if (!model.visible) return false;
     const cy::Matrix4f root = model.transform.ToMatrix();
     bool hit = false;
     distance = std::numeric_limits<float>::max();
@@ -141,7 +142,7 @@ EditorPickResult PickEditorObject(
     const cy::Matrix4f viewProjection = projection * view;
     for (const SceneLight& light : lights)
     {
-        if (!light.IsValid() || light.proxy.type == LightType::Directional)
+        if (!light.IsValid() || !light.proxy.visible || light.proxy.type == LightType::Directional)
             continue;
 
         float depth = 0.0f;

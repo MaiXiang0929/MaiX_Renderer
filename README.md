@@ -39,7 +39,7 @@ MaiX_Renderer 当前是一个基于 C++17 与 OpenGL 4.0 Core Profile 的实时�
 EditorApp（输入、编辑器相机与面板） / Sandbox（独立验证宿主）
     ▼
 EngineSession（场景状态与 Renderer 生命周期）
-    │ SceneFrameBuilder 准备 RenderFrameData
+    │ PrepareFrame 注册并同步 World，再由 SceneFrameBuilder 准备 RenderFrameData
     ▼
 Renderer（GPU 资源所有者）
     ├─ RenderScene：Primitive / Light Scene Proxy
@@ -109,6 +109,10 @@ Viewport 顶部工具栏提供移动、旋转、缩放与世界/局部空间切�
 | `Esc` | 退出程序 |
 
 Scene 显示实际对象层级。`Create Empty` 创建组合根节点；把模型、灯光或相机拖到另一个对象上，或在 Inspector 的 `Parent` 中选择父级。换父级和 `Detach to Root` 保持世界变换。Inspector 的 `Local Transform` 编辑相对父级的位置、旋转和缩放，视口 Gizmo 编辑世界变换，`F` 可聚焦空对象。`Name` 输入后按 Enter 改名。
+
+Inspector 的 `Visible` 控制对象自己的显示开关；父级隐藏会作用于整棵子树，Scene 树用 `(hidden)` 标识有效隐藏对象，`Hidden by parent` 表示开关虽开启但被祖先隐藏。恢复父级不会覆盖子对象自己的开关。隐藏模型不进入主视图、反射或阴影，隐藏灯光不参与照明与阴影；隐藏对象不显示辅助图标/Gizmo，也不参与视口拾取，仍可在 Scene 树选中并通过 Inspector 编辑。相机隐藏只影响编辑图标，其取景仍可使用。
+
+隐藏不会卸载模型或材质，也不会取消资源引用保护。隐藏期间的变换继续由 World 同步，恢复后保留最新位置。EngineSession 的 `PrepareFrame` 统一完成注册、状态同步与多视图帧准备，失效 Actor/组件绑定会拒绝该帧输出。
 
 父级修改会同步子模型、灯光、相机、阴影、包围体和拾取。当前支持能表示为 TRS 的层级变换；非均匀缩放配合旋转若产生剪切，或输入非有限/奇异变换，操作会完整拒绝并显示原因。`Delete Subtree (N)` 删除选中对象及全部后代，并清理渲染引用；删除活动场景相机后返回编辑器视图。场景层级暂不保存到磁盘。
 

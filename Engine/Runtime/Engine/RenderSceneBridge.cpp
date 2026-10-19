@@ -11,14 +11,16 @@ bool RegisterSceneActors(SceneState &scene)
     {
         if (!model.actor.IsValid())
             model.actor = scene.world.Create(model.name, model.transform, ActorKind::Model, model.id.value);
-        if (!scene.world.Find(model.actor))
+        const auto *actor = scene.world.Find(model.actor);
+        if (!actor || actor->kind != ActorKind::Model || actor->componentId != model.id.value)
             return false;
     }
     for (auto &light : scene.lights)
     {
         if (!light.actor.IsValid())
             light.actor = scene.world.Create(light.name, light.transform, ActorKind::Light, light.proxy.id);
-        if (!scene.world.Find(light.actor))
+        const auto *actor = scene.world.Find(light.actor);
+        if (!actor || actor->kind != ActorKind::Light || actor->componentId != light.proxy.id)
             return false;
     }
     if (scene.camera.id.IsValid())
@@ -26,7 +28,8 @@ bool RegisterSceneActors(SceneState &scene)
         if (!scene.camera.actor.IsValid())
             scene.camera.actor = scene.world.Create(scene.camera.name, scene.camera.transform,
                                                     ActorKind::Camera, scene.camera.id.value);
-        if (!scene.world.Find(scene.camera.actor))
+        const auto *actor = scene.world.Find(scene.camera.actor);
+        if (!actor || actor->kind != ActorKind::Camera || actor->componentId != scene.camera.id.value)
             return false;
     }
     return true;
@@ -45,6 +48,11 @@ void SynchronizeSceneActors(SceneState &scene, Renderer &renderer)
         if (const auto *a = scene.world.Find(model.actor))
         {
             const bool update = changed(model.transform, a->world);
+            const bool visible = scene.world.IsVisible(a->id);
+            if (model.visible != visible)
+                for (const auto &section : model.sections)
+                    renderer.UpdatePrimitiveVisibility(section.primitiveId, visible);
+            model.visible = visible;
             model.name = a->name;
             model.transform = a->world;
             if (update)
@@ -53,7 +61,9 @@ void SynchronizeSceneActors(SceneState &scene, Renderer &renderer)
     for (auto &light : scene.lights)
         if (const auto *a = scene.world.Find(light.actor))
         {
-            const bool update = changed(light.transform, a->world);
+            const bool visible = scene.world.IsVisible(a->id);
+            const bool update = changed(light.transform, a->world) || light.proxy.visible != visible;
+            light.proxy.visible = visible;
             light.name = a->name;
             light.transform = a->world;
             if (update)
@@ -62,6 +72,7 @@ void SynchronizeSceneActors(SceneState &scene, Renderer &renderer)
     if (const auto *a = scene.world.Find(scene.camera.actor))
     {
         scene.camera.name = a->name;
+        scene.camera.visible = scene.world.IsVisible(a->id);
         scene.camera.transform = a->world;
     }
 }

@@ -118,6 +118,6 @@ PrimitiveBounds GetSceneWorldBounds(const std::vector<SceneModel>& models)
     PrimitiveBounds result;
     bool initialized = false;
     for (const SceneModel& model : models)
-        MergeBounds(result, initialized, model.GetWorldBounds());
+        if (model.visible) MergeBounds(result, initialized, model.GetWorldBounds());
     return result;
 }

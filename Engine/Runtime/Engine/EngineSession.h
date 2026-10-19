@@ -5,6 +5,8 @@
 
 class Renderer;
 struct RenderFrameData;
+struct SceneFrameSettings;
+class Camera;
 
 // The host owns the context; this session owns scene values and the renderer.
 // Initialize / Render / Shutdown must run with that context current.
@@ -16,6 +18,8 @@ public:
     EngineSession(const EngineSession&) = delete;
     EngineSession& operator=(const EngineSession&) = delete;
     bool Initialize();
+    RenderFrameData PrepareFrame(Camera& camera, unsigned width, unsigned height,
+        bool sceneCameraView, const SceneFrameSettings& settings);
     void Render(RenderFrameData& frame);
     void Shutdown();
     Renderer* GetRenderer() const { return m_Renderer.get(); }
@@ -24,4 +28,5 @@ public:
 private:
     SceneState m_Scene;
     std::unique_ptr<Renderer> m_Renderer;
+    bool m_RegistrationFailed = false;
 };

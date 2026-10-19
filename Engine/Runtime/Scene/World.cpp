@@ -42,6 +42,26 @@ bool World::Rename(ActorId id, std::string name)
             a.name = std::move(name);
     return true;
 }
+bool World::SetVisible(ActorId id, bool visible)
+{
+    for (auto &actor : m_Actors)
+        if (actor.id == id)
+        {
+            actor.visible = visible;
+            return true;
+        }
+    return false;
+}
+bool World::IsVisible(ActorId id) const
+{
+    const auto *actor = Find(id);
+    if (!actor)
+        return false;
+    for (; actor; actor = Find(actor->parent))
+        if (!actor->visible)
+            return false;
+    return true;
+}
 bool World::Commit(std::vector<Actor> &candidate, std::string &error)
 {
     std::vector<unsigned char> state(candidate.size());

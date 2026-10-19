@@ -324,6 +324,11 @@ LightId Renderer::AddLight(LightSceneProxy light)
     return m_RenderScene.AddLight(light);
 }
 
+bool Renderer::UpdatePrimitiveVisibility(PrimitiveId id, bool visible)
+{
+    return m_RenderScene.UpdatePrimitiveVisibility(id,visible);
+}
+
 bool Renderer::UpdateLight(LightId id, const LightSceneProxy& light)
 {
     return m_RenderScene.UpdateLight(id, light);
