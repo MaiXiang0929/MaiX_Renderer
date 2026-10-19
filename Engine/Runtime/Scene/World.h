@@ -35,6 +35,7 @@ struct Actor
     Transform local, world;
     ActorKind kind = ActorKind::Empty;
     std::uint64_t componentId = 0;
+    bool visible = true;
 };
 
 // CPU scene identity and transform owner. Component payloads live in SceneState;
@@ -55,6 +56,8 @@ class World
         return m_Actors;
     }
     bool Rename(ActorId id, std::string name);
+    bool SetVisible(ActorId id, bool visible);
+    bool IsVisible(ActorId id) const;
     bool SetLocal(ActorId id, const Transform &value, std::string &error);
     bool SetWorld(ActorId id, const cy::Matrix4f &value, std::string &error);
     bool Reparent(ActorId id, ActorId parent, bool keepWorld, std::string &error);

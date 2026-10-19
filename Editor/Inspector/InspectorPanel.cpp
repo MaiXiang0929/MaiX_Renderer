@@ -75,6 +75,11 @@ bool InspectorPanel::Draw(EditorSelection &selection, SceneState &scene, bool &c
         ImGui::End();
         return false;
     }
+    bool visible = actor->visible;
+    if (ImGui::Checkbox("Visible", &visible))
+        scene.world.SetVisible(actorId, visible);
+    if (visible && !scene.world.IsVisible(actorId))
+        ImGui::TextDisabled("Hidden by parent");
     std::array<char, 256> name{};
     std::snprintf(name.data(), name.size(), "%s", actor->name.c_str());
     if (ImGui::InputText("Name", name.data(), name.size(), ImGuiInputTextFlags_EnterReturnsTrue))

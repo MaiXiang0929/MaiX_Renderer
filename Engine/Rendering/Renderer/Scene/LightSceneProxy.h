@@ -28,4 +28,5 @@ struct LightSceneProxy
     float innerConeAngle = 20.0f * 3.14159265358979323846f / 180.0f;
     float outerConeAngle = 30.0f * 3.14159265358979323846f / 180.0f;
     bool castsShadow = true;
+    bool visible = true;
 };

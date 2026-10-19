@@ -20,6 +20,7 @@ struct CameraId
 struct SceneCamera
 {
     ActorId actor;
+    bool visible = true; // Editor representation only; does not disable camera view.
     CameraId id;
     std::string name;
     Transform transform;

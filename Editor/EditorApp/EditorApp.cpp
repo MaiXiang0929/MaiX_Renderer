@@ -297,7 +297,7 @@ bool EditorApp::Init() {
     std::string diagnostic;
     const auto scene = LoadStartupScene("assets/scenes/startup.json", diagnostic);
     std::cout << "[StartupScene] " << diagnostic << std::endl;
-    return CreateStartupScene(scene) && RegisterSceneActors(m_Engine.Scene());
+    return CreateStartupScene(scene);
 }
 
 bool EditorApp::CreateStartupScene(const StartupSceneDefinition& scene)
@@ -1233,7 +1233,6 @@ void EditorApp::Update() {
     ModelId importedId;
     if (CommitImportedModel(completedImport->model, error, importedId))
     {
-        RegisterSceneActors(m_Engine.Scene());
         m_EditorSelection.SelectModel(importedId);
         m_SceneCameraView = false;
         m_PendingFocusSelection = m_EditorSelection;
@@ -1255,7 +1254,6 @@ void EditorApp::Update() {
 /// @brief 渲染应用程序
 void EditorApp::Render() {
     // 先建立 ImGui 布局，取得中央视口的实际像素尺寸，再提交渲染帧。
-    SynchronizeSceneActors(m_Engine.Scene(),*m_Renderer);
     if (!m_Engine.Scene().camera.id.IsValid()) m_SceneCameraView=false;
     UpdateAppearance();
     ImGui_ImplOpenGL3_NewFrame();
@@ -1281,7 +1279,7 @@ void EditorApp::Render() {
 
     const SceneFrameSettings frameSettings{m_Renderer->IsTessellationEnabled(),
         m_Renderer->GetDisplacementScale(), m_Renderer->AreEditorPrimitivesEnabled()};
-    RenderFrameData frame = BuildSceneFrame(m_Engine.Scene(), m_Camera,
+    RenderFrameData frame = m_Engine.PrepareFrame(m_Camera,
         viewport.pixelWidth, viewport.pixelHeight, m_SceneCameraView, frameSettings);
     if (viewport.visible && m_Width > 0 && m_Height > 0)
         m_Engine.Render(frame);

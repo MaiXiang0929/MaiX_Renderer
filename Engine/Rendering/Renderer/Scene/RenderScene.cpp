@@ -109,6 +109,12 @@ bool RenderScene::RemovePrimitive(PrimitiveId id)
     return true;
 }
 
+bool RenderScene::UpdatePrimitiveVisibility(PrimitiveId id, bool visible)
+{
+    for (auto& proxy:m_Primitives) if (proxy.id==id) { proxy.visible=visible; return true; }
+    return false;
+}
+
 bool RenderScene::HasMeshReference(RenderResourceId meshId) const
 {
     return std::any_of(
@@ -275,5 +281,5 @@ void RenderScene::BuildRenderView(RenderView& view) const
     view.opaqueBatches = BuildOpaqueRenderBatches(view.opaqueItems);
     view.opaqueBatchCount = view.opaqueBatches.size();
 
-    view.lights = m_Lights;
+    for (const auto& light:m_Lights) if (light.visible) view.lights.push_back(light);
 }

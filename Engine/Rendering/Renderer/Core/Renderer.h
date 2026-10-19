@@ -121,6 +121,7 @@ public:
         PrimitiveId id,
         const cy::Matrix4f& localToWorld);
     bool RemovePrimitive(PrimitiveId id);
+    bool UpdatePrimitiveVisibility(PrimitiveId id, bool visible);
 
     LightId AddLight(LightSceneProxy light);
     bool UpdateLight(LightId id, const LightSceneProxy& light);

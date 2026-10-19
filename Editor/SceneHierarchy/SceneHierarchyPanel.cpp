@@ -31,7 +31,8 @@ ActorId SceneHierarchyPanel::Draw(EditorSelection &selection, SceneState &scene)
                 flags |= ImGuiTreeNodeFlags_Selected;
             const auto key = std::to_string(a.id.value);
             ImGui::PushID(key.c_str());
-            const bool open = ImGui::TreeNodeEx("node", flags, "%s", a.name.c_str());
+            const bool open = ImGui::TreeNodeEx("node", flags, "%s%s", a.name.c_str(),
+                scene.world.IsVisible(a.id)?"":" (hidden)");
             if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
                 selection.SelectActor(a.id, scene);
             if (ImGui::BeginDragDropSource())
