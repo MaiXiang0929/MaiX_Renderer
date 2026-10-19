@@ -15,9 +15,9 @@ class InspectorPanel
 public:
     bool Draw(
         EditorSelection& selection,
-        std::vector<SceneModel>& models,
-        std::vector<SceneLight>& lights,
-        SceneCamera& camera, bool& cameraView,
+        SceneState& scene, bool& cameraView,
         Renderer& renderer,
         EditorMaterialSelection& materialSelection);
+private:
+    std::string m_Error;
 };

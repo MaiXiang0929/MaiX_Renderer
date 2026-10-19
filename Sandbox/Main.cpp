@@ -202,8 +202,41 @@ void VerifySession()
     Require(!frame.editorPrimitivesEnabled &&
         renderer->GetSubmissionSnapshot().passes[overlayIndex].drawCalls == 0,
         "Renderer overlay toggle did not disable editor draws");
-    // All scene bindings must go before their parent material and shared mesh.
-    DestroySceneModelResources(scene.models.front(), *renderer);
+    scene.camera.id=CameraId{1};
+    Require(RegisterSceneActors(scene),"Scene actor registration failed");
+    const auto group=scene.world.Create("Group");
+    const auto modelActor=scene.models.front().actor;
+    std::string hierarchyError;
+    Require(scene.world.Reparent(modelActor,group,true,hierarchyError),"Model attach failed");
+    Require(scene.world.Reparent(scene.lights.front().actor,group,true,hierarchyError),"Light attach failed");
+    Require(scene.world.Reparent(scene.camera.actor,group,true,hierarchyError),"Camera attach failed");
+    const float initialModelX=scene.models.front().transform.position.x;
+    const auto initialCamera=scene.camera.transform;
+    Transform groupTransform; groupTransform.position={100,0,0}; groupTransform.rotationDegrees={0,30,0};
+    Require(scene.world.SetLocal(group,groupTransform,hierarchyError),"Group edit failed");
+    SynchronizeSceneActors(scene,*renderer);
+    Require(std::abs(scene.models.front().transform.position.x-initialModelX-100)<0.001f,
+        "Group did not update model component");
+    Require((scene.camera.transform.position-initialCamera.position).Length()>90,
+        "Group did not update camera component");
+    Require((scene.lights.front().proxy.direction-light.proxy.direction).Length()>0.1f,
+        "Group did not update light direction");
+    const auto boundsAfter=scene.models.front().GetWorldBounds();
+    Require(boundsAfter.center.x>90,"World bounds did not follow group");
+    frame=BuildSceneFrame(scene,navigation,64,48,false,{false,0,false});
+    engine.Render(frame);
+    Require(renderer->GetStatisticsSnapshot().visiblePrimitiveCount==0,
+        "Moved model proxy stayed in the editor frustum");
+    frame=BuildSceneFrame(scene,navigation,64,48,true,{false,0,false});
+    engine.Render(frame);
+    Require(renderer->GetFinalColorTexture()!=0 && renderer->GetStatisticsSnapshot().visiblePrimitiveCount==1,
+        "Parented scene camera lost its model");
+    const auto deletedLight=scene.lights.front().proxy.id;
+    Require(DestroySceneActor(scene,*renderer,group),"Group deletion failed");
+    Require(scene.models.empty() && !scene.camera.id.IsValid() && !scene.world.Find(modelActor),
+        "Group deletion left typed components or actors");
+    Require(!renderer->RemoveLight(deletedLight) && !renderer->UpdatePrimitiveTransform(primitive,cy::Matrix4f::Identity()),
+        "Group deletion left render proxies");
     Require(!renderer->DestroyMesh(mesh) && !renderer->DestroyMaterial(child) &&
         !renderer->DestroyMaterial(parent), "Bridge did not release tracked resources");
     engine.Shutdown();

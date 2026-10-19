@@ -12,8 +12,7 @@ struct ModelId;
 class SceneHierarchyPanel
 {
 public:
-    ModelId Draw(
-        EditorSelection& selection,
-        const std::vector<SceneModel>& models,
-        const std::vector<SceneLight>& lights, const SceneCamera* camera);
+    ActorId Draw(EditorSelection& selection, SceneState& scene);
+private:
+    std::string m_Error;
 };

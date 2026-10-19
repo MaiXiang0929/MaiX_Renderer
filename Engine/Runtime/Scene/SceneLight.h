@@ -5,10 +5,12 @@
 #include <vector>
 
 #include "Engine/Core/Math/Transform.h"
+#include "Engine/Runtime/Scene/World.h"
 #include "Engine/Rendering/Renderer/Scene/LightSceneProxy.h"
 
 struct SceneLight
 {
+    ActorId actor;
     std::string name;
     Transform transform;
     LightSceneProxy proxy;

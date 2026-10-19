@@ -45,7 +45,7 @@ target_link_libraries(MaiXAsset PUBLIC MaiXCore)
 # Transitional CPU records keep value-only proxy/handle contracts, not Renderer implementation.
 add_library(MaiXRuntime STATIC Engine/Runtime/Component/Camera.cpp
     Engine/Runtime/Scene/StartupScene.cpp Engine/Runtime/Scene/InstanceGrid.cpp
-    Engine/Runtime/Scene/SceneModel.cpp Engine/Runtime/Scene/SceneLight.cpp
+    Engine/Runtime/Scene/SceneModel.cpp Engine/Runtime/Scene/SceneLight.cpp Engine/Runtime/Scene/World.cpp
     Engine/Runtime/Engine/ApplicationOptions.cpp)
 target_link_libraries(MaiXRuntime PUBLIC MaiXCore)
 
@@ -152,8 +152,23 @@ if(BUILD_TESTING AND EXISTS "${PROJECT_ROOT}/tests/Renderer/RHITests.cpp")
     add_test(NAME RHITests COMMAND RHITests)
 endif()
 
+if(BUILD_TESTING AND EXISTS "${PROJECT_ROOT}/tests/Runtime/WorldTests.cpp")
+    add_executable(WorldTests tests/Runtime/WorldTests.cpp)
+    target_link_libraries(WorldTests PRIVATE MaiXRuntime)
+    add_test(NAME WorldTests COMMAND WorldTests)
+    add_test(NAME WorldRuntimeSmoke COMMAND MaiX_Sandbox)
+    set_tests_properties(WorldRuntimeSmoke PROPERTIES WORKING_DIRECTORY "$<TARGET_FILE_DIR:MaiX_Renderer>")
+endif()
+if(BUILD_TESTING AND EXISTS "${PROJECT_ROOT}/tests/Editor/WorldEditorTests.cpp")
+    add_executable(WorldEditorTests tests/Editor/WorldEditorTests.cpp
+        Editor/Viewport/EditorViewportController.cpp Editor/Viewport/ViewportPicking.cpp
+        Editor/Session/EditorWidgets.cpp Editor/Session/EditorTheme.cpp)
+    target_link_libraries(WorldEditorTests PRIVATE MaiXEngine MaiXPlatform MaiXEditorUI)
+    add_test(NAME WorldEditorTests COMMAND WorldEditorTests)
+endif()
+
 if(BUILD_TESTING AND NOT EXISTS "${PROJECT_ROOT}/tests/Core/StartupSceneTests.cpp")
-    message(STATUS "Local tests directory is absent; skipping test targets.")
+    message(STATUS "Legacy local test suite is absent; skipping its targets.")
     set(BUILD_TESTING OFF)
 endif()
 

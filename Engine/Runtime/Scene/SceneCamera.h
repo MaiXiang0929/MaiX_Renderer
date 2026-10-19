@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 #include "Engine/Core/Math/Transform.h"
+#include "Engine/Runtime/Scene/World.h"
 #include <cstdint>
 #include <string>
 struct CameraId
@@ -18,6 +19,7 @@ struct CameraId
 // CPU scene record; Renderer consumes matrices and does not own a camera resource.
 struct SceneCamera
 {
+    ActorId actor;
     CameraId id;
     std::string name;
     Transform transform;

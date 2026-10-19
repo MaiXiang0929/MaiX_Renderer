@@ -12,3 +12,6 @@ struct Transform
 
     cy::Matrix4f ToMatrix() const;
 };
+
+// Reject singular/nonfinite matrices and shear instead of approximating an edit.
+bool TryDecomposeTransform(const cy::Matrix4f& matrix, Transform& result);

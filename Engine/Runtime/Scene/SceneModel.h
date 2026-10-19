@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "Engine/Core/Math/Transform.h"
+#include "Engine/Runtime/Scene/World.h"
 #include "Engine/Rendering/Renderer/Scene/PrimitiveSceneProxy.h"
 
 struct ModelId
@@ -29,6 +30,7 @@ struct SceneModelSection
 
 struct SceneModel
 {
+    ActorId actor;
     ModelId id;
     std::string name;
     Transform transform;
