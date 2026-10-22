@@ -224,7 +224,8 @@ bool EditorApp::Init() {
     if (!m_ImGuiIniPath.empty())
         ImGui::LoadIniSettingsFromDisk(m_ImGuiIniPath.c_str());
     if (m_Project->Initialize())
-        std::cout << "[Project] Assets: " << m_Project->AssetsRoot().u8string() << std::endl;
+        std::cout << "[Project] " << (m_Project->StartupProjectFile().empty()?"Assets: ":"Pending project: ") <<
+            (m_Project->StartupProjectFile().empty()?m_Project->AssetsRoot():m_Project->StartupProjectFile()).u8string() << std::endl;
     else
         std::cerr << "[Project] " << m_Project->Diagnostic() << std::endl;
     const bool imguiPlatformInitialized =
@@ -289,6 +290,7 @@ bool EditorApp::Init() {
     }
     m_Renderer = m_Engine.GetRenderer();
     m_Workspace = std::make_unique<EditorWorkspace>(m_Renderer->Device(), *m_Project);
+    m_Workspace->SetSceneFileMenu([this] { DrawSceneFileMenu(); });
     m_Workspace->AddLog("MaiX Renderer initialized.");
     if (!m_Project->Diagnostic().empty())
         m_Workspace->AddLog("[Project] " + m_Project->Diagnostic());
@@ -297,7 +299,12 @@ bool EditorApp::Init() {
     std::string diagnostic;
     const auto scene = LoadStartupScene("assets/scenes/startup.json", diagnostic);
     std::cout << "[StartupScene] " << diagnostic << std::endl;
-    return CreateStartupScene(scene);
+    if (!CreateStartupScene(scene)) return false;
+    if (!m_Project->StartupProjectFile().empty()&&!m_MaterialLab&&!m_MaterialInstanceLab&&
+        !m_TranslucencyTest&&m_InstanceGridSize==0&&m_FaceShadowDemoModelPath.empty()&&
+        m_NormalMapPath.empty()&&m_DisplacementMapPath.empty())
+        OpenProjectFile(m_Project->StartupProjectFile());
+    return true;
 }
 
 bool EditorApp::CreateStartupScene(const StartupSceneDefinition& scene)
@@ -349,6 +356,8 @@ bool EditorApp::CreateStartupScene(const StartupSceneDefinition& scene)
 
     m_Engine.Scene().models.emplace_back();
     SceneModel& defaultModel = m_Engine.Scene().models.back();
+    defaultModel.sourceCubeEdge = scene.cubeEdgeLength;
+    defaultModel.sourceMeshNames = {"Cube"};
     defaultModel.transform = scene.cubeTransform;
     const cy::Matrix4f defaultRoot = defaultModel.transform.ToMatrix();
     m_Renderer->SetSsaoRadius(0.5f);
@@ -757,6 +766,8 @@ bool EditorApp::CommitImportedModel(
     pendingModel.name = model.name;
     pendingModel.importedSizeMeters = model.boundsMax - model.boundsMin;
     pendingModel.sourceUnitMeters = model.sourceUnitMeters;
+    pendingModel.sourcePath = std::filesystem::absolute(model.sourcePath);
+    for (const auto& mesh : model.meshes) pendingModel.sourceMeshNames.push_back(mesh.name);
     pendingModel.meshes.reserve(model.meshes.size());
     pendingModel.materials.reserve(model.materials.size());
     pendingModel.sections.reserve(model.meshes.size());
@@ -794,6 +805,8 @@ bool EditorApp::CommitImportedModel(
                     "GPU texture creation failed: " +
                     importedTexture.name);
             }
+            textures[index]->SetSource(std::filesystem::absolute(importedTexture.embedded ? model.sourcePath : importedTexture.sourcePath),
+                importedTexture.embedded ? importedTexture.sourceId : 0);
         }
 
         for (const AssetImport::ImportedMaterialData& importedMaterial :
@@ -1093,6 +1106,7 @@ bool EditorApp::LoadStartupFaceShadowDemo()
             << std::endl;
         return false;
     }
+    faceShadowTexture->SetSource(std::filesystem::absolute(faceShadowPath));
 
     const MaterialHandle materialHandle =
         demoModel->materials[materialIndex];
@@ -1262,6 +1276,7 @@ void EditorApp::Render() {
     ImGuizmo::BeginFrame();
     void* nativeWindowHandle = GetNativeWindowHandle(m_Window);
     m_Workspace->BeginFrame(*m_AssetImportPanel, nativeWindowHandle, m_Appearance);
+    HandleSceneFileActions(nativeWindowHandle);
     const EditorViewportRegion viewport = m_Workspace->BeginViewport([&] {
         m_ViewportController->DrawToolbar(m_EditorSelection, m_Engine.Scene().lights, m_SceneCameraView);
     });

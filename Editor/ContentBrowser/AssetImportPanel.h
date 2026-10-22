@@ -25,6 +25,7 @@ public:
     void OpenImportDialog(void* nativeWindowHandle);
     // Loads the source into the scene; does not copy files into project Assets.
     void BeginImport(const std::filesystem::path& path);
+    bool IsBusy() const { return m_Status == Status::Parsing || m_Status == Status::AwaitingCommit; }
 
     std::optional<AssetImport::ModelImportResult> TakeCompletedImport();
     void ReportCommitSuccess(

@@ -36,10 +36,13 @@ public:
         std::array<TextureOverrideMode, MaterialTextureSlotCount> textureModes{};
         std::string name;
         MaterialProperties properties;
+        MaterialProperties overrideValues;
         BlendMode blendMode = BlendMode::Opaque;
         std::array<bool, MaterialTextureSlotCount> hasTextures{};
         std::array<RHITextureHandle, MaterialTextureSlotCount> textureIds{};
         std::array<std::string, MaterialTextureSlotCount> textureSources{};
+        std::array<std::filesystem::path, MaterialTextureSlotCount> textureFiles{};
+        std::array<std::uint64_t, MaterialTextureSlotCount> embeddedTextureIds{};
     };
 
     struct StatisticsSnapshot
@@ -151,6 +154,15 @@ public:
 
     std::size_t GetMeshResourceCount() const;
     std::size_t GetMaterialResourceCount() const;
+    struct SceneResourceSnapshot
+    {
+        std::vector<MeshHandle> meshes;
+        std::vector<MaterialHandle> materials;
+        std::vector<PrimitiveId> primitives;
+        std::vector<LightId> lights;
+    };
+    SceneResourceSnapshot GetSceneResources() const;
+    bool GetPrimitiveBinding(PrimitiveId, MeshHandle&, MaterialHandle&, bool& castsShadow) const;
 
     void SetShadowsEnabled(bool enabled) { m_ShadowsEnabled = enabled; }
     bool IsShadowsEnabled() const { return m_ShadowsEnabled; }

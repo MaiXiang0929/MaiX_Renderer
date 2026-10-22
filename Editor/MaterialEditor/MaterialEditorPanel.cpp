@@ -318,6 +318,7 @@ void MaterialEditorPanel::Draw(
                             image.height,
                             image.pixels,
                             GetRequiredMaterialTextureColorSpace(slot));
+                    if (texture) texture->SetSource(std::filesystem::absolute(*selected));
                     if (!texture || !renderer.UpdateMaterialTexture(
                             handle,
                             slot,

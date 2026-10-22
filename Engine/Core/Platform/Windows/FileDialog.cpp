@@ -49,15 +49,15 @@ std::optional<std::filesystem::path> OpenFile(
     const COMDLG_FILTERSPEC* filters,
     std::size_t filterCount,
     bool pickDirectory = false,
-    const std::filesystem::path& initialDirectory = {})
+    const std::filesystem::path& initialDirectory = {}, bool saveFile = false)
 {
     ScopedComInitialization comInitialization;
     if (!comInitialization.IsAvailable())
         return std::nullopt;
 
-    ComPtr<IFileOpenDialog> dialog;
+    ComPtr<IFileDialog> dialog;
     const HRESULT createResult = CoCreateInstance(
-        CLSID_FileOpenDialog,
+        saveFile ? CLSID_FileSaveDialog : CLSID_FileOpenDialog,
         nullptr,
         CLSCTX_INPROC_SERVER,
         IID_PPV_ARGS(dialog.GetAddressOf()));
@@ -71,7 +71,8 @@ std::optional<std::filesystem::path> OpenFile(
     options |= FOS_FORCEFILESYSTEM |
                FOS_PATHMUSTEXIST |
                FOS_NOCHANGEDIR;
-    options |= pickDirectory ? FOS_PICKFOLDERS : FOS_FILEMUSTEXIST;
+    options |= pickDirectory ? FOS_PICKFOLDERS : saveFile ? FOS_OVERWRITEPROMPT : FOS_FILEMUSTEXIST;
+    if (saveFile) { dialog->SetDefaultExtension(L"maixscene"); dialog->SetFileName(L"Scene.maixscene"); }
 
     if (FAILED(dialog->SetOptions(options)) ||
         (filterCount != 0 && FAILED(dialog->SetFileTypes(static_cast<UINT>(filterCount), filters))) ||
@@ -110,6 +111,24 @@ std::optional<std::filesystem::path> OpenFile(
 
 namespace FileDialog
 {
+std::optional<std::filesystem::path> OpenProjectFile(NativeWindowHandle ownerWindow,
+    const std::filesystem::path& initialDirectory)
+{
+    static constexpr COMDLG_FILTERSPEC filters[]={{L"MaiX Project (*.maixproject)",L"*.maixproject"}};
+    return OpenFile(ownerWindow,L"Open Project",filters,std::size(filters),false,initialDirectory);
+}
+std::optional<std::filesystem::path> OpenSceneFile(NativeWindowHandle ownerWindow,
+    const std::filesystem::path& initialDirectory)
+{
+    static constexpr COMDLG_FILTERSPEC filters[]={{L"MaiX Scene (*.maixscene)",L"*.maixscene"}};
+    return OpenFile(ownerWindow,L"Open Scene",filters,std::size(filters),false,initialDirectory);
+}
+std::optional<std::filesystem::path> SaveSceneFile(NativeWindowHandle ownerWindow,
+    const std::filesystem::path& initialDirectory)
+{
+    static constexpr COMDLG_FILTERSPEC filters[]={{L"MaiX Scene (*.maixscene)",L"*.maixscene"}};
+    return OpenFile(ownerWindow,L"Save Scene As",filters,std::size(filters),false,initialDirectory,true);
+}
 std::optional<std::filesystem::path> OpenDirectory(NativeWindowHandle ownerWindow,
     const std::filesystem::path& initialDirectory)
 {

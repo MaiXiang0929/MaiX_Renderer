@@ -66,12 +66,20 @@ void EditorProject::RegisterSettings()
     handler.ReadInitFn = [](ImGuiContext*, ImGuiSettingsHandler* h) {
         auto& project = *static_cast<EditorProject*>(h->UserData);
         project.m_RequestedRoot.clear();
+        project.m_RequestedFile.clear();
         project.m_HasSavedRoot = false;
     };
     handler.ReadOpenFn = [](ImGuiContext*, ImGuiSettingsHandler* h, const char* name) -> void* {
         return std::strcmp(name, "Editor") == 0 ? h->UserData : nullptr;
     };
     handler.ReadLineFn = [](ImGuiContext*, ImGuiSettingsHandler*, void* entry, const char* line) {
+        if(std::strncmp(line,"File=",5)==0)
+        {
+            auto& project=*static_cast<EditorProject*>(entry);
+            try { project.m_RequestedFile=std::filesystem::u8path(line+5); }
+            catch(...) { project.m_RequestedFile.clear(); }
+            return;
+        }
         if (std::strncmp(line, "Root=", 5) != 0) return;
         auto& project = *static_cast<EditorProject*>(entry);
         project.m_HasSavedRoot = true;
@@ -81,7 +89,8 @@ void EditorProject::RegisterSettings()
     handler.WriteAllFn = [](ImGuiContext*, ImGuiSettingsHandler* h, ImGuiTextBuffer* buffer) {
         const auto& project = *static_cast<EditorProject*>(h->UserData);
         if (project.m_HasSavedRoot)
-            buffer->appendf("[MaiXProject][Editor]\nRoot=%s\n\n", project.m_RequestedRoot.u8string().c_str());
+            buffer->appendf("[MaiXProject][Editor]\nRoot=%s\nFile=%s\n\n", project.m_RequestedRoot.u8string().c_str(),
+                (project.m_ProjectFile.empty()?project.m_StartupProjectFile:project.m_ProjectFile).u8string().c_str());
     };
     ImGui::AddSettingsHandler(&handler);
 }
@@ -90,7 +99,47 @@ bool EditorProject::Initialize()
 {
     m_Root.clear();
     m_AssetsRoot.clear();
-    const auto requested = m_HasSavedRoot ? m_RequestedRoot : m_DefaultRoot;
+    m_ProjectFile.clear(); m_DefaultScene.clear(); m_Name.clear(); m_StartupProjectFile.clear();
+    auto requested = m_HasSavedRoot ? m_RequestedRoot : m_DefaultRoot;
+    try
+    {
+        auto file=m_RequestedFile.empty()?FindProjectDocument(requested):m_RequestedFile;
+        if(file.empty()&&requested.is_absolute())
+        {
+            const auto canonical=std::filesystem::weakly_canonical(requested);
+            const auto defaultRoot=m_DefaultRoot.empty()?std::filesystem::path{}:
+                std::filesystem::weakly_canonical(m_DefaultRoot);
+            // Older folder selection could persist the content directory as Root.
+            // Recover only with an authoritative descriptor or the known default root.
+            // An explicitly described project named Assets has already been found above.
+            const bool isDefault=!defaultRoot.empty()&&IsWithin(canonical,defaultRoot)&&IsWithin(defaultRoot,canonical);
+            if(SameComponent(canonical.filename(),"Assets")&&!isDefault)
+            {
+                bool recovered=false;
+                for(auto child=canonical;SameComponent(child.filename(),"Assets");child=child.parent_path())
+                {
+                    const auto parent=child.parent_path();
+                    auto parentFile=FindProjectDocument(parent);
+                    if(!parentFile.empty()||(!defaultRoot.empty()&&IsWithin(parent,defaultRoot)&&IsWithin(defaultRoot,parent)))
+                    {
+                        requested=parent; file=std::move(parentFile); recovered=true; break;
+                    }
+                }
+                if(!recovered)
+                {
+                    m_Diagnostic="The saved project folder points to Assets. Open its .maixproject file, or initialize the parent project folder.\n"+canonical.u8string();
+                    return false;
+                }
+            }
+        }
+        if(!file.empty())
+        {
+            ProjectDocument candidate;
+            if(!PrepareOpen(file,candidate,m_Diagnostic)) return false;
+            m_StartupProjectFile=std::move(candidate.file); return true;
+        }
+    }
+    catch(const std::exception& e) { m_Diagnostic=e.what(); return false; }
     return TryOpen(requested, !m_HasSavedRoot);
 }
 
@@ -136,6 +185,7 @@ bool EditorProject::TryOpen(const std::filesystem::path& requested, bool createP
     if (!CanWriteFiles(assets)) return fail("The project's Assets folder is not writable.");
     m_Root = root;
     m_AssetsRoot = assets;
+    m_Name=root.filename().u8string(); m_ProjectFile.clear(); m_DefaultScene.clear();
     m_RequestedRoot = root;
     m_HasSavedRoot = true;
     m_Diagnostic.clear();
@@ -147,6 +197,19 @@ bool EditorProject::IsReady() const
 {
     std::error_code error;
     return !m_AssetsRoot.empty() && std::filesystem::is_directory(m_AssetsRoot, error) && !error;
+}
+bool EditorProject::PrepareOpen(const std::filesystem::path& file,ProjectDocument& document,std::string& error) const
+{
+    return ReadProjectDocument(file,m_ProtectedDirectories,document,error);
+}
+void EditorProject::Activate(ProjectDocument&& document) noexcept
+{
+    m_Root.swap(document.root); m_AssetsRoot.swap(document.assets);
+    m_StartupProjectFile.clear();
+    m_ProjectFile.swap(document.file); m_DefaultScene.swap(document.sceneFile);
+    m_RequestedRoot.swap(document.settingsRoot); m_Name.swap(document.name);
+    m_HasSavedRoot=true; m_Diagnostic.clear();
+    if(ImGui::GetCurrentContext()) ImGui::MarkIniSettingsDirty();
 }
 
 bool EditorProject::ContainsAssetPath(const std::filesystem::path& path) const

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #include "Engine/Runtime/Engine/EngineSession.h"
 #include "Engine/Runtime/Engine/RenderSceneBridge.h"
+#include "Engine/Runtime/Engine/ScenePersistence.h"
 #include "Engine/Rendering/Renderer/Core/Renderer.h"
 #include "Engine/Runtime/Engine/SceneFrameBuilder.h"
 #include <iostream>
@@ -49,8 +50,7 @@ RenderFrameData EngineSession::PrepareFrame(Camera &camera, unsigned width, unsi
 void EngineSession::Shutdown()
 {
     if (m_Renderer)
-        for (auto &model : m_Scene.models)
-            DestroySceneModelResources(model, *m_Renderer);
+        DestroySceneResources(m_Scene, *m_Renderer);
     m_Scene = SceneState{};
     m_RegistrationFailed = false;
     m_Renderer.reset();

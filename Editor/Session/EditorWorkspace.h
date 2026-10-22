@@ -48,6 +48,8 @@ public:
     void EndViewport();
     void DrawBottomPanels(AssetImportPanel& assetImport);
     void AddLog(std::string message);
+    void SynchronizeProject();
+    void SetSceneFileMenu(std::function<void()> draw) { m_SceneFileMenu = std::move(draw); }
 
     bool ShowMaterialEditor() const { return m_ShowMaterialEditor; }
     void OpenMaterialEditor();
@@ -63,7 +65,6 @@ private:
     void DrawDirectoryNode(const std::filesystem::path& path, int depth);
     void DrawContentBrowser(AssetImportPanel& assetImport);
     void DrawConsole();
-    void ChooseProjectFolder(void* nativeWindowHandle);
 
     bool m_LayoutChecked = false;
     bool m_ResetLayout = false;
@@ -79,9 +80,9 @@ private:
     std::filesystem::path m_AssetRoot;
     std::filesystem::path m_CurrentDirectory;
     std::optional<std::filesystem::path> m_PendingDirectory;
-    std::optional<std::filesystem::path> m_PendingProjectRoot;
     std::string m_BrowserError;
     std::vector<std::filesystem::directory_entry> m_Entries;
     std::unordered_map<std::string, std::shared_ptr<Texture2D>> m_Previews;
     std::deque<std::string> m_Log;
+    std::function<void()> m_SceneFileMenu;
 };

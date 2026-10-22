@@ -24,6 +24,7 @@ struct ImportedTextureData
     std::filesystem::path sourcePath;
     ImageData image;
     bool embedded = false;
+    std::uint64_t sourceId = 0; // Stable ufbx element identity + 1, independent of decoded array order.
 };
 
 struct ImportedMaterialData
@@ -65,6 +66,14 @@ struct ImportedModelData
     std::size_t animationStackCount = 0;
     std::vector<std::string> warnings;
 };
+
+inline const ImportedTextureData* FindEmbeddedTexture(const ImportedModelData& model,std::uint64_t identity)
+{
+    if (!identity) return nullptr;
+    for (const auto& texture:model.textures)
+        if (texture.embedded&&texture.sourceId==identity) return &texture;
+    return nullptr;
+}
 
 struct ModelImportResult
 {

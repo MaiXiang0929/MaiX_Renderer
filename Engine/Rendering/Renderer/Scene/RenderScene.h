@@ -31,6 +31,9 @@ public:
     bool RemoveLight(LightId id);
 
     void BuildRenderView(RenderView& view) const;
+    const PrimitiveSceneProxy* FindPrimitive(PrimitiveId id) const;
+    std::vector<PrimitiveId> PrimitiveIds() const;
+    std::vector<LightId> LightIds() const;
 
 private:
     std::vector<PrimitiveSceneProxy> m_Primitives;
