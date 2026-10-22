@@ -16,6 +16,8 @@ public:
     // Register before loading ImGui settings; the object outlives the context.
     void RegisterSettings();
     bool Initialize();
+    // Folder requests share startup resolution. Described projects are staged in
+    // StartupProjectFile for OpenProjectSession; they do not activate identity here.
     bool Open(const std::filesystem::path& existingProjectRoot);
     bool IsReady() const;
     bool ContainsAssetPath(const std::filesystem::path& path) const;

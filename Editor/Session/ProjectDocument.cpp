@@ -27,6 +27,19 @@ bool Within(const fs::path& root,const fs::path& path)
     return true;
 }
 std::string Lower(std::string s) { for(auto& c:s) c=static_cast<char>(std::tolower(static_cast<unsigned char>(c))); return s; }
+fs::path ContainingContentProject(const fs::path& path)
+{
+    for(auto child=path;!child.empty();child=child.parent_path())
+    {
+        const auto parent=child.parent_path();
+        if(parent==child||parent.empty()) break;
+        // Only the parent of an Assets component can establish content ownership.
+        // Unrelated ancestor project files must not affect the requested folder.
+        if(Lower(child.filename().u8string())=="assets"&&!FindProjectDocument(parent).empty()&&
+            Within(fs::weakly_canonical(parent/"Assets"),path)) return parent;
+    }
+    return {};
+}
 void Name(const std::string& name)
 {
     Check(!name.empty()&&name.size()<=128&&name.find_first_of("<>:\"/\\|?*\r\n\t")==std::string::npos&&name.find('\0')==std::string::npos,"Invalid project name.");
@@ -85,6 +98,7 @@ bool Initialize(const fs::path& root,const std::string& name,const fs::path& exi
     {
         Name(name); auto d=Location(root,name,protectedDirectories);
         Check(newProject?!fs::exists(d.root):fs::is_directory(d.root),newProject?"Project folder already exists; choose another name.":"Project folder does not exist.");
+        if(newProject) Check(ContainingContentProject(d.root).empty(),"Choose a project location outside another project's Assets.");
         if(newProject) created.Directory(d.root);
         Check(FindProjectDocument(d.root).empty(),"This directory already contains a project descriptor.");
         d.file=d.root/fs::u8path(name+".maixproject");
@@ -121,6 +135,28 @@ std::filesystem::path FindProjectDocument(const std::filesystem::path& root)
         if(entry.is_regular_file()&&Lower(entry.path().extension().string())==".maixproject")
         { Check(result.empty(),"Multiple project descriptors found. Open a .maixproject file explicitly."); result=entry.path(); }
     return result;
+}
+std::filesystem::path ResolveProjectFolder(const std::filesystem::path& requested,
+    const std::vector<std::filesystem::path>& knownRoots)
+{
+    Check(requested.is_absolute(),"Choose an absolute project folder.");
+    const auto root=fs::weakly_canonical(requested);
+    // A described project named Assets is a project, not its parent's content.
+    if(!FindProjectDocument(root).empty()) return root;
+    for(const auto& entry:knownRoots) if(!entry.empty())
+    {
+        const auto canonical=fs::weakly_canonical(entry);
+        if(Within(root,canonical)&&Within(canonical,root)) return root;
+    }
+    const auto containing=ContainingContentProject(root);
+    if(!containing.empty()) return containing;
+    for(const auto& entry:knownRoots) if(!entry.empty())
+    {
+        const auto canonical=fs::weakly_canonical(entry);
+        if(Within(fs::weakly_canonical(canonical/"Assets"),root)) return canonical;
+    }
+    Check(Lower(root.filename().u8string())!="assets","This folder points to Assets. Open its .maixproject file, or select the parent project folder.");
+    return root;
 }
 bool ReadProjectDocument(const fs::path& file,const std::vector<fs::path>& protectedDirectories,ProjectDocument& output,std::string& error)
 {
@@ -162,10 +198,12 @@ bool InitializeLegacyProject(const fs::path& root,const fs::path& existing,const
     try
     {
         const auto canonical=fs::weakly_canonical(root);
-        // Selecting the content root of a known project must not create Assets/Assets.
-        if(Lower(canonical.filename().u8string())=="assets"&&!FindProjectDocument(canonical.parent_path()).empty())
+        // Initialization must not silently target a different directory. Ask the
+        // caller to select the recovered project root, or open its descriptor.
+        const auto resolved=ResolveProjectFolder(root);
+        if(!Within(canonical,resolved)||!Within(resolved,canonical))
         {
-            error="This is a project's Assets folder. Open the project in: "+canonical.parent_path().u8string();
+            error="This is a project's Assets folder. Open the project in: "+resolved.u8string();
             return false;
         }
     }

@@ -38,6 +38,11 @@ void EditorApp::ExecuteProjectAction(ProjectAction action)
     if (action.kind==SceneFileAction::OpenProject) { OpenProjectFile(action.path); return; }
     try
     {
+        if(m_Project->ContainsAssetPath(action.path))
+        {
+            ReportSceneFileError("Select a project location outside the current project's Assets: "+m_Project->Root().u8string());
+            return;
+        }
         SceneDocument initial; ProjectDocument created; std::string error;
         // Choosing an existing scene does not require the default template assets.
         if (action.existingScene.empty()&&!BuildDefaultProjectScene(

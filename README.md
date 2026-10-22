@@ -94,7 +94,7 @@ Viewport 顶部工具栏提供移动、旋转、缩放与世界/局部空间切�
 
 `File → Open Project...` 选择 `.maixproject`，同时加载该项目的默认场景和资源浏览目录；全部加载成功才切换，失败保留原项目、场景及资源。当前场景有未保存修改时，可选择 Save and Continue、Discard and Continue 或 Cancel；保存操作写入切换前的项目。项目文件记录格式版本、名称和相对 Assets 的默认场景路径。File 菜单显示当前项目、根目录与场景路径；Content Browser 顶部显示项目名称，悬停可查看根目录。
 
-旧版只有 `Assets/` 的目录通过 `File → Initialize Project Folder...` 显式初始化：选择项目根目录（Assets 的上一级），再选择 Assets 内已有 `.maixscene` 作为默认场景，或创建默认 Main。已有文件不会覆盖，已有项目描述文件的目录不会重复初始化。首次启动仍兼容 Windows“文档”实际位置下的 `MaiX Projects/DefaultProject/Assets` 和旧版 Root 配置；旧配置误记默认项目的 Assets 目录时，启动会恢复到已知项目根目录，已有文件保持原位。其他误记 Assets 的配置只有找到父级项目描述文件才恢复，否则显示提示，不再创建 Assets/Assets。上次项目路径保存在用户目录的 `MaiX_Renderer/imgui.ini` 中。
+旧版只有 `Assets/` 的目录通过 `File → Initialize Project Folder...` 显式初始化：选择项目根目录（Assets 的上一级），再选择 Assets 内已有 `.maixscene` 作为默认场景，或创建默认 Main。已有文件不会覆盖，已有项目描述文件的目录不会重复初始化。启动恢复与目录打开共用路径解析：选中已知默认项目、当前项目或带描述文件项目的 Assets 及其子目录时，定位所属项目；描述项目仍须场景加载成功才切换身份。未知的 Assets 根目录拒绝打开或初始化，提示选择上一级项目根目录；已有描述文件、名称恰好为 Assets 的项目仍可正常打开。新建与初始化也拒绝在已识别项目的资产目录内嵌套创建项目。仅仅有某个祖先目录叫 Assets 不会禁止在其中存放独立项目。历史嵌套目录不会自动迁移或删除。首次启动仍兼容 Windows“文档”实际位置下的 `MaiX Projects/DefaultProject/Assets`；上次项目路径保存在用户目录的 `MaiX_Renderer/imgui.ini` 中。
 
 场景里的 Ground/Monkey 使用内置模型引用，不会复制模型进项目。Content Browser 显示当前子目录路径，过滤框仅过滤当前目录；通过左侧目录树切换目录或返回 `Assets` 根目录。双击项目中的 FBX 可加载到当前场景；`File → Import FBX...` 也可选择外部源文件。加载操作不自动复制模型或贴图依赖。
 
