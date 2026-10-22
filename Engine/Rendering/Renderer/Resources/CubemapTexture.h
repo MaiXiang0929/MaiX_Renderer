@@ -10,23 +10,28 @@
 #include <string>
 
 #include "Engine/Rendering/RHI/RHIDevice.h"
+#include "Engine/Rendering/Renderer/Resources/EnvironmentLighting.h"
 
 class CubemapTexture
 {
 public:
     ~CubemapTexture();
 
-    explicit CubemapTexture(RHIDevice& device) : m_Device(device) {}
+    explicit CubemapTexture(RHIDevice& device) : m_Device(device), m_Lighting(device) {}
     CubemapTexture(const CubemapTexture&) = delete;
     CubemapTexture& operator=(const CubemapTexture&) = delete;
 
     bool Load(const std::string& directoryPath);
+    bool RebuildLighting() { return m_Lighting.Build(m_TextureID,m_Size); }
     void Bind(unsigned int textureUnit) const;
 
     bool IsValid() const { return m_TextureID != 0; }
     RHITextureHandle GetID() const { return m_TextureID; }
+    const EnvironmentLighting& Lighting() const { return m_Lighting; }
 
 private:
     RHIDevice& m_Device;
     RHITextureHandle m_TextureID = 0;
+    unsigned m_Size = 0;
+    EnvironmentLighting m_Lighting;
 };

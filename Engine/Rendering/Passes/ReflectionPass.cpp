@@ -14,7 +14,7 @@ bool ReflectionPass::Resize(unsigned int width, unsigned int height)
     return m_Framebuffer.Init(
         static_cast<int>(width),
         static_cast<int>(height),
-        FramebufferColorFormat::RGBA8);
+        FramebufferColorFormat::RGBA16F);
 }
 
 bool ReflectionPass::ReloadShaders()

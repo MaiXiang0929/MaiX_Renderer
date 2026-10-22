@@ -671,6 +671,28 @@ class OpenGLDevice final : public RHIDevice, public RHICommandList
         glBindTexture(target, texture.object);
         glGenerateMipmap(target);
     }
+    void CopyTargetToCubemap(RHITargetHandle source, RHITextureHandle destination,
+                             unsigned face, unsigned mip) override
+    {
+        const auto& target = Find(m_Targets, source);
+        const auto& texture = Find(m_Textures, destination);
+        unsigned maxMip = 0;
+        if (texture.desc.mipmaps)
+            for (unsigned size = texture.desc.width; size > 1; size >>= 1) ++maxMip;
+        if (texture.desc.kind != RHITextureKind::Cubemap || texture.attachment || face >= 6 ||
+            mip > maxMip || !target.handles.color ||
+            target.desc.colorFormat != texture.desc.format ||
+            target.desc.width != (texture.desc.width >> mip) ||
+            target.desc.height != (texture.desc.height >> mip))
+            throw RHIError("Invalid target-to-cubemap copy face, mip, extent or format");
+        Bindings saved;
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, target.object);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, texture.object);
+        glCopyTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, mip, 0, 0, 0, 0,
+                            target.desc.width, target.desc.height);
+        if (glGetError() != GL_NO_ERROR)
+            throw RHIError("GPU target-to-cubemap copy failed");
+    }
     void BindTexture(RHITextureHandle handle, unsigned slot, RHITextureKind kind) override
     {
         if (slot >= m_Caps.maxTextureUnits)
@@ -783,6 +805,7 @@ class OpenGLDevice final : public RHIDevice, public RHICommandList
     RHIPipelineState GetPipelineState() const override
     {
         RHIPipelineState state;
+        state.seamlessCubemap = glIsEnabled(GL_TEXTURE_CUBE_MAP_SEAMLESS);
         state.depthTest = glIsEnabled(GL_DEPTH_TEST);
         state.blend = glIsEnabled(GL_BLEND);
         GLboolean depth;
@@ -816,6 +839,7 @@ class OpenGLDevice final : public RHIDevice, public RHICommandList
     }
     void SetPipelineState(const RHIPipelineState &state) override
     {
+        Enable(GL_TEXTURE_CUBE_MAP_SEAMLESS, state.seamlessCubemap);
         Enable(GL_DEPTH_TEST, state.depthTest);
         glDepthMask(state.depthWrite);
         glDepthFunc(state.depthCompare == RHICompare::LessEqual ? GL_LEQUAL

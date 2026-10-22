@@ -80,6 +80,7 @@ add_library(MaiXRendering STATIC
     Engine/Rendering/Renderer/Pipeline/PassResources.cpp
     Engine/Rendering/Renderer/Pipeline/RenderPipeline.cpp
     Engine/Rendering/Renderer/Resources/CubemapTexture.cpp
+    Engine/Rendering/Renderer/Resources/EnvironmentLighting.cpp
     Engine/Rendering/Renderer/Resources/Framebuffer.cpp
     Engine/Rendering/Renderer/Resources/InstanceBuffer.cpp
     Engine/Rendering/Renderer/Resources/Mesh.cpp
@@ -154,6 +155,14 @@ target_link_libraries(MaiX_Sandbox PRIVATE MaiXEngine MaiXPlatform)
 target_compile_options(MaiX_Sandbox PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
 target_link_options(MaiX_Sandbox PRIVATE $<$<CONFIG:Debug>:LINKER:/NODEFAULTLIB:MSVCRT>)
 add_dependencies(MaiX_Sandbox MaiXEditorAssets)
+
+if(BUILD_TESTING AND EXISTS "${PROJECT_ROOT}/tests/Renderer/IBLTests.cpp")
+    add_executable(IBLTests tests/Renderer/IBLTests.cpp)
+    target_link_libraries(IBLTests PRIVATE MaiXRendering MaiXPlatform)
+    target_compile_options(IBLTests PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
+    add_test(NAME IBLTests COMMAND IBLTests)
+    set_tests_properties(IBLTests PROPERTIES WORKING_DIRECTORY "${PROJECT_ROOT}")
+endif()
 
 if(BUILD_TESTING AND EXISTS "${PROJECT_ROOT}/tests/Renderer/RHITests.cpp")
     add_executable(RHITests tests/Renderer/RHITests.cpp)

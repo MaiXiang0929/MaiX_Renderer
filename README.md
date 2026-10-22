@@ -12,7 +12,10 @@ MaiX_Renderer 当前是一个基于 C++17 与 OpenGL 4.0 Core Profile 的实时�
 
 - 使用 Cook-Torrance metallic/roughness BRDF，支持 Base Color、Normal、ORM 和 Displacement 纹理。ORM 通道约定为 R=AO、G=Roughness、B=Metallic。
 - 对颜色纹理与数据纹理分别使用 sRGB/Linear 语义；标准网格、Instancing 和 Tessellation/Displacement 路径共用 PBR 光照。
+- 环境加载时由 GPU 生成漫反射辐照度、GGX 粗糙度预过滤 Cubemap 与 BRDF LUT；主视图、平面反射及透明 PBR 共用 IBL，浮点环境资源与反射结果由最终后处理统一曝光和色调映射。
 - `--material-lab` 使用共享 Mesh 展示铜、塑料、陶瓷和粗糙金属四种材质。Material Editor 可在运行时修改材质参数与纹理。
+
+IBL 当前使用内置六面 sRGB PNG 天空，不包含 HDR/EXR 环境文件导入或动态反射探针。预计算在加载环境或 F6 重载时执行；Roughness 控制环境反射模糊程度，Metallic 控制漫反射与镜面分配，Environment Reflectivity 保留为环境镜面强度，AO 作用于间接光。可用 `--material-lab` 对照粗糙度与金属度，并旋转视角检查反射方向；画面效果仍需用户验收。
 
 ### NPR 与透明渲染
 

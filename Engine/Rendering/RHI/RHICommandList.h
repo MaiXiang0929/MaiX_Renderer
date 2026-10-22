@@ -8,6 +8,8 @@ class RHICommandList
     virtual void BeginTarget(RHITargetHandle, bool clearColor, bool clearDepth, float alpha) = 0;
     virtual void EndTarget() = 0;
     virtual void GenerateMipmaps(RHITextureHandle) = 0;
+    // Copy a color target to one existing cubemap face/mip; extents and formats must match.
+    virtual void CopyTargetToCubemap(RHITargetHandle, RHITextureHandle, unsigned face, unsigned mip) = 0;
     virtual void BindTexture(RHITextureHandle, unsigned slot, RHITextureKind = RHITextureKind::Texture2D) = 0;
     virtual void BindProgram(RHIProgramHandle) = 0;
     virtual void SetInt(RHIProgramHandle, const std::string &, int) = 0;

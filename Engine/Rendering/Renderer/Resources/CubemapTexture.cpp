@@ -16,6 +16,7 @@ bool CubemapTexture::Load(const std::string &directory)
     desc.kind = RHITextureKind::Cubemap;
     desc.format = RHITextureFormat::SRGBA8;
     desc.wrap = RHIWrap::ClampEdge;
+    desc.mipmaps = true; // Source mip chain used by solid-angle IBL sampling.
     for (unsigned face = 0; face < 6; ++face)
     {
         unsigned width = 0, height = 0;
@@ -38,8 +39,20 @@ bool CubemapTexture::Load(const std::string &directory)
     const auto candidate = m_Device.CreateTexture(desc, data);
     if (candidate == 0)
         return false;
+    struct ReleaseCandidate
+    {
+        RHIDevice& device; RHITextureHandle texture;
+        ~ReleaseCandidate() { device.DestroyTexture(texture); }
+    } release{m_Device,candidate};
+    if (!m_Lighting.Build(candidate,desc.width))
+    {
+        std::cerr << "[Cubemap] IBL generation failed: " << directory << '\n';
+        return false;
+    }
     m_Device.DestroyTexture(m_TextureID);
     m_TextureID = candidate;
+    m_Size = desc.width;
+    release.texture = 0;
     return true;
 }
 void CubemapTexture::Bind(unsigned unit) const

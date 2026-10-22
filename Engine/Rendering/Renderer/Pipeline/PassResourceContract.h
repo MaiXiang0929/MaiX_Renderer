@@ -13,11 +13,12 @@
 // 阶段名表示内容已经执行到哪里；三个主颜色阶段借用同一个 FBO，不分配新纹理。
 enum class PassResourceId
 {
-    Environment, ShadowDepth, ReflectionColor, ForwardColor, ForwardDepth,
+    Environment, Irradiance, PrefilteredEnvironment, BrdfLut,
+    ShadowDepth, ReflectionColor, ForwardColor, ForwardDepth,
     OutlinedColor, SceneHdrColor, SsaoAO, SsaoColor, Bloom,
     PostColor, Overlay, FinalColor, Count
 };
-enum class ResourceFormat { RGBA8, RGBA16F, R8, Depth24, Depth24Stencil8, Cubemap };
+enum class ResourceFormat { RGBA8, RGBA16F, R8, Depth24, Depth24Stencil8, Cubemap, Cubemap16F };
 enum class ResourceAccess { Sample, PreserveColor, DepthTest, ColorWrite, DepthWrite };
 enum class AttachmentLoad { None, Clear, Preserve };
 
@@ -47,7 +48,7 @@ struct ResourceOutput
 struct PassResourceContract
 {
     RenderPassType pass = RenderPassType::Count;
-    std::array<ResourceInput, 6> inputs{};
+    std::array<ResourceInput, 9> inputs{};
     std::array<ResourceOutput, 3> outputs{};
     std::size_t inputCount = 0;
     std::size_t outputCount = 0;

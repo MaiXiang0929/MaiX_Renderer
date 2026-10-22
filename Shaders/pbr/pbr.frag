@@ -69,7 +69,10 @@ layout(std140) uniform ForwardLights
 uniform int lightCount;
 uniform int shadowLightIndex;
 uniform int keyLightIndex;
-uniform samplerCube cubemap;
+uniform samplerCube irradianceMap;
+uniform samplerCube prefilterMap;
+uniform sampler2D brdfLut;
+uniform float prefilterMaxLod;
 uniform mat3 viewToWorld;
 uniform sampler2DShadow shadowMap;
 uniform bool shadowsEnabled;
@@ -325,15 +328,20 @@ void main()
             radiance * nDotL * visibility;
     }
 
-    vec3 ambient = vec3(0.03) * albedo * ao;
     vec3 reflectDirView = reflect(-V, N);
-    vec3 reflectDirWorld = viewToWorld * reflectDirView;
-    vec3 envReflection = texture(cubemap, reflectDirWorld).rgb;
-    vec3 environmentFresnel = FresnelSchlick(nDotV, f0);
-    vec3 environmentSpecular = envReflection * environmentFresnel *
-        material.environmentReflectivity * (1.0 - roughness * 0.75);
+    vec3 reflectDirWorld = normalize(viewToWorld * reflectDirView);
+    vec3 normalWorld = normalize(viewToWorld * N);
+    vec3 environmentFresnel = f0 + (max(vec3(1.0-roughness),f0)-f0) * pow(1.0-nDotV,5.0);
+    vec3 diffuseWeight = (vec3(1.0)-environmentFresnel)*(1.0-metallic);
+    // Irradiance map stores E/pi. All IBL textures contain linear scene radiance.
+    vec3 environmentDiffuse = texture(irradianceMap,normalWorld).rgb * albedo * diffuseWeight;
+    vec3 envReflection = textureLod(prefilterMap,reflectDirWorld,roughness*prefilterMaxLod).rgb;
+    vec2 integratedBrdf = texture(brdfLut,vec2(nDotV,roughness)).rg;
+    vec3 environmentSpecular = envReflection * (f0*integratedBrdf.x+integratedBrdf.y) *
+        material.environmentReflectivity;
+    vec3 ambient = (environmentDiffuse + environmentSpecular) * ao;
 
     color = vec4(
-        ambient + directLighting + environmentSpecular,
+        ambient + directLighting,
         clamp(material.opacity * albedoSample.a, 0.0, 1.0));
 }
