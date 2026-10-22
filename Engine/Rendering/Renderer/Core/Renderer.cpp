@@ -428,7 +428,7 @@ void Renderer::ExecutePipeline(RenderFrameData& frame)
         m_GroundMesh,
         m_Cubemap,
         m_Tessellation,
-        m_PostProcess
+        frame.postProcess
     };
     m_RenderPipeline.Execute(context);
 }
@@ -487,34 +487,4 @@ void Renderer::SetTessellationLevel(float level)
 void Renderer::SetDisplacementScale(float scale)
 {
     m_Tessellation.displacementScale = std::max(scale, 0.0f);
-}
-
-void Renderer::SetExposureCompensation(float exposure)
-{
-    m_PostProcess.exposureCompensation = ClampExposureCompensation(exposure);
-}
-
-void Renderer::SetBloomThreshold(float threshold)
-{
-    m_PostProcess.bloomThreshold = ClampBloomThreshold(threshold);
-}
-
-void Renderer::SetBloomIntensity(float intensity)
-{
-    m_PostProcess.bloomIntensity = ClampBloomIntensity(intensity);
-}
-
-void Renderer::SetSsaoRadius(float radius)
-{
-    m_PostProcess.ssaoRadius = ClampSsaoRadius(radius);
-}
-
-void Renderer::SetSsaoIntensity(float intensity)
-{
-    m_PostProcess.ssaoIntensity = ClampSsaoIntensity(intensity);
-}
-
-void Renderer::SetSsaoBias(float bias)
-{
-    m_PostProcess.ssaoBias = ClampSsaoBias(bias);
 }

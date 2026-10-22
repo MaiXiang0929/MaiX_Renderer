@@ -55,6 +55,7 @@ public:
     void OpenMaterialEditor();
     void PrepareMaterialEditor();
     bool ShowStatistics() const { return m_ShowStatistics; }
+    bool ShowRenderSettings() const { return m_ShowRenderSettings; }
     const EditorViewportRegion& GetViewportRegion() const { return m_ViewportRegion; }
 
 private:
@@ -73,6 +74,7 @@ private:
     bool m_MaterialDockChecked = false;
     bool m_MaterialFocusRequested = false;
     bool m_ShowStatistics = false;
+    bool m_ShowRenderSettings = false;
     bool m_ViewportOpen = false;
     bool m_ContentFocusRequested = false;
     char m_AssetFilter[128]{};

@@ -120,6 +120,7 @@ add_executable(MaiX_Renderer
     Editor/EditorApp/EditorAppProject.cpp
     Editor/EditorApp/Main.cpp
     Editor/Inspector/InspectorPanel.cpp
+    Editor/Inspector/RenderSettingsPanel.cpp
     Editor/MaterialEditor/MaterialEditorPanel.cpp
     Editor/SceneHierarchy/SceneHierarchyPanel.cpp
     Editor/Session/EditorFonts.cpp
@@ -190,6 +191,12 @@ if(BUILD_TESTING AND EXISTS "${PROJECT_ROOT}/tests/Runtime/SceneDocumentTests.cp
     target_link_libraries(SceneDocumentTests PRIVATE MaiXRuntime)
     target_compile_options(SceneDocumentTests PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
     add_test(NAME SceneDocumentTests COMMAND SceneDocumentTests)
+endif()
+if(BUILD_TESTING AND EXISTS "${PROJECT_ROOT}/tests/Editor/RenderSettingsPanelTests.cpp")
+    add_executable(RenderSettingsPanelTests tests/Editor/RenderSettingsPanelTests.cpp Editor/Inspector/RenderSettingsPanel.cpp)
+    target_link_libraries(RenderSettingsPanelTests PRIVATE MaiXRuntime MaiXEditorUI)
+    target_compile_options(RenderSettingsPanelTests PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
+    add_test(NAME RenderSettingsPanelTests COMMAND RenderSettingsPanelTests)
 endif()
 if(BUILD_TESTING AND EXISTS "${PROJECT_ROOT}/tests/Editor/SceneFileDialogsTests.cpp")
     add_executable(SceneFileDialogsTests tests/Editor/SceneFileDialogsTests.cpp Editor/Session/SceneFileDialogs.cpp)

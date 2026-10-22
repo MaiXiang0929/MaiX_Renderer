@@ -3,6 +3,7 @@
 #include "Engine/Runtime/Scene/SceneCamera.h"
 #include "Engine/Runtime/Scene/SceneLight.h"
 #include "Engine/Runtime/Scene/SceneModel.h"
+#include "Engine/Rendering/Renderer/Pipeline/RenderSettings.h"
 #include <limits>
 #include <vector>
 
@@ -10,6 +11,7 @@
 // derived world transforms to the existing render bridge. No UI/GPU ownership.
 struct SceneState
 {
+    PostProcessSettings postProcess;
     World world;
     std::vector<SceneModel> models;
     std::vector<SceneLight> lights;

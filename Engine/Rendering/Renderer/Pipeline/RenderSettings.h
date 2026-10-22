@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #pragma once
+#include <cmath>
 
 struct TessellationSettings
 {
@@ -80,4 +81,19 @@ constexpr float ClampBloomIntensity(float intensity)
         : intensity > MaximumBloomIntensity
             ? MaximumBloomIntensity
             : intensity;
+}
+
+// Shared by scene files and frame submission; invalid authored values are rejected,
+// never silently clamped while loading a scene.
+inline bool IsValidPostProcessSettings(const PostProcessSettings& settings)
+{
+    const auto within = [](float value, float minimum, float maximum) {
+        return std::isfinite(value) && value >= minimum && value <= maximum;
+    };
+    return within(settings.exposureCompensation, MinimumExposureCompensation, MaximumExposureCompensation) &&
+        within(settings.bloomThreshold, MinimumBloomThreshold, MaximumBloomThreshold) &&
+        within(settings.bloomIntensity, MinimumBloomIntensity, MaximumBloomIntensity) &&
+        within(settings.ssaoRadius, MinimumSsaoRadius, MaximumSsaoRadius) &&
+        within(settings.ssaoIntensity, MinimumSsaoIntensity, MaximumSsaoIntensity) &&
+        within(settings.ssaoBias, MinimumSsaoBias, MaximumSsaoBias);
 }

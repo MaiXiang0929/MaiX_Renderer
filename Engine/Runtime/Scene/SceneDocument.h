@@ -5,6 +5,7 @@
 #include "Engine/Runtime/Scene/SceneCamera.h"
 #include "Engine/Rendering/Material/MaterialProperties.h"
 #include "Engine/Rendering/Renderer/Scene/LightSceneProxy.h"
+#include "Engine/Rendering/Renderer/Pipeline/RenderSettings.h"
 #include <filesystem>
 #include <array>
 #include <optional>
@@ -62,6 +63,7 @@ struct SceneActorRecord
 };
 struct SceneDocument
 {
+    PostProcessSettings postProcess;
     std::vector<SceneActorRecord> actors;
     std::vector<SceneMaterialRecord> materials;
     std::uint64_t defaultModel = 0, mainLight = 0;

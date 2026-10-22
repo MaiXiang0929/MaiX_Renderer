@@ -8,6 +8,7 @@
 #include"Editor/EditorApp/EditorApp.h"
 #include "Engine/Runtime/Engine/RenderSceneBridge.h"
 #include "Editor/Diagnostics/RendererStatisticsPanel.h"
+#include "Editor/Inspector/RenderSettingsPanel.h"
 #include "Engine/Rendering/Renderer/Core/Renderer.h"
 #include "Engine/Rendering/RHI/OpenGL/OpenGLNativeBridge.h"
 #include "Engine/Runtime/Scene/InstanceGrid.h"
@@ -360,8 +361,8 @@ bool EditorApp::CreateStartupScene(const StartupSceneDefinition& scene)
     defaultModel.sourceMeshNames = {"Cube"};
     defaultModel.transform = scene.cubeTransform;
     const cy::Matrix4f defaultRoot = defaultModel.transform.ToMatrix();
-    m_Renderer->SetSsaoRadius(0.5f);
-    m_Renderer->SetSsaoBias(0.025f);
+    m_Engine.Scene().postProcess.ssaoRadius = 0.5f;
+    m_Engine.Scene().postProcess.ssaoBias = 0.025f;
     defaultModel.id = ModelId{m_Engine.Scene().nextModelId++};
     m_Engine.Scene().defaultModelId = defaultModel.id;
     defaultModel.name = m_MaterialInstanceLab ? "Material Instance Lab" :
@@ -623,8 +624,8 @@ bool EditorApp::CreateBasicStartupScene(const StartupSceneDefinition& definition
     // The visible FBX floor is an ordinary PBR primitive, without the legacy
     // mirror ground used by material/instancing validation modes.
     scene.reflectionGroundEnabled = false;
-    m_Renderer->SetSsaoRadius(0.5f);
-    m_Renderer->SetSsaoBias(0.025f);
+    m_Engine.Scene().postProcess.ssaoRadius = 0.5f;
+    m_Engine.Scene().postProcess.ssaoBias = 0.025f;
 
     SceneLight light;
     light.name = basic.pointLightName;
@@ -1291,6 +1292,9 @@ void EditorApp::Render() {
             m_PendingFocusSelection.Clear();
         }
     }
+
+    if (m_Workspace->ShowRenderSettings())
+        DrawRenderSettingsPanel(m_Engine.Scene().postProcess);
 
     const SceneFrameSettings frameSettings{m_Renderer->IsTessellationEnabled(),
         m_Renderer->GetDisplacementScale(), m_Renderer->AreEditorPrimitivesEnabled()};

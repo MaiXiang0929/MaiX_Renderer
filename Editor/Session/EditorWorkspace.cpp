@@ -89,6 +89,7 @@ void EditorWorkspace::BuildDefaultLayout(ImGuiID dockspaceId)
     ImGui::DockBuilderDockWindow("Inspector", inspector);
     // 共用现有 Inspector 节点，不新增分区，也不改变其他面板的比例。
     ImGui::DockBuilderDockWindow("Material Editor", inspector);
+    ImGui::DockBuilderDockWindow("Render Settings", inspector);
     ImGui::DockBuilderFinish(dockspaceId);
     m_MaterialDockChecked = false;
     m_ContentFocusRequested = true;
@@ -171,6 +172,7 @@ void EditorWorkspace::BeginFrame(AssetImportPanel& assetImport, void* nativeWind
                 m_ShowMaterialEditor)
                 OpenMaterialEditor();
             ImGui::MenuItem("Renderer Statistics", nullptr, &m_ShowStatistics);
+            ImGui::MenuItem("Render Settings", nullptr, &m_ShowRenderSettings);
             ImGui::Separator();
             if (ImGui::MenuItem("Reset Layout"))
                 m_ResetLayout = true;

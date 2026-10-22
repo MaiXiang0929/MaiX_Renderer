@@ -142,6 +142,7 @@ RenderFrameData BuildSceneFrame(SceneState &scene, Camera &camera, unsigned int 
 
     // Engine frame builder 只提交强类型帧数据，不再创建任何 Pass callback。
     RenderFrameData frame;
+    frame.postProcess = scene.postProcess;
     frame.editorPrimitivesEnabled = settings.editorPrimitivesEnabled;
     frame.viewportWidth = width;
     frame.viewportHeight = height;

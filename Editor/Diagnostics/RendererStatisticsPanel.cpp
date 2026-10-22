@@ -96,51 +96,6 @@ void RendererStatisticsPanel::Draw(Renderer& renderer)
     if (ImGui::Checkbox("Shadows", &shadows)) renderer.SetShadowsEnabled(shadows);
     bool editor = renderer.AreEditorPrimitivesEnabled();
     if (ImGui::Checkbox("Editor primitives", &editor)) renderer.SetEditorPrimitivesEnabled(editor);
-    bool toneMapping = renderer.IsToneMappingEnabled();
-    if (ImGui::Checkbox("Tone mapping", &toneMapping)) renderer.SetToneMappingEnabled(toneMapping);
-    bool bloom = renderer.IsBloomEnabled();
-    if (ImGui::Checkbox("Bloom", &bloom)) renderer.SetBloomEnabled(bloom);
-    if (bloom)
-    {
-        float threshold = renderer.GetBloomThreshold();
-        if (ImGui::SliderFloat(
-                "Bloom threshold", &threshold,
-                MinimumBloomThreshold, MaximumBloomThreshold, "%.2f"))
-            renderer.SetBloomThreshold(threshold);
-        float intensity = renderer.GetBloomIntensity();
-        if (ImGui::SliderFloat(
-                "Bloom intensity", &intensity,
-                MinimumBloomIntensity, MaximumBloomIntensity, "%.2f"))
-            renderer.SetBloomIntensity(intensity);
-    }
-    bool ssao = renderer.IsSsaoEnabled();
-    if (ImGui::Checkbox("SSAO", &ssao)) renderer.SetSsaoEnabled(ssao);
-    if (ssao)
-    {
-        float radius = renderer.GetSsaoRadius();
-        if (ImGui::SliderFloat(
-                "SSAO radius", &radius,
-                MinimumSsaoRadius, MaximumSsaoRadius, "%.4f", ImGuiSliderFlags_Logarithmic))
-            renderer.SetSsaoRadius(radius);
-        float intensity = renderer.GetSsaoIntensity();
-        if (ImGui::SliderFloat(
-                "SSAO intensity", &intensity,
-                MinimumSsaoIntensity, MaximumSsaoIntensity, "%.2f"))
-            renderer.SetSsaoIntensity(intensity);
-        float bias = renderer.GetSsaoBias();
-        if (ImGui::SliderFloat(
-                "SSAO bias", &bias,
-                MinimumSsaoBias, MaximumSsaoBias, "%.5f", ImGuiSliderFlags_Logarithmic))
-            renderer.SetSsaoBias(bias);
-    }
-    float exposure = renderer.GetExposureCompensation();
-    if (ImGui::SliderFloat(
-            "Exposure (EV)",
-            &exposure,
-            MinimumExposureCompensation,
-            MaximumExposureCompensation,
-            "%+.2f"))
-        renderer.SetExposureCompensation(exposure);
     bool tessellation = renderer.IsTessellationEnabled();
     if (ImGui::Checkbox("Tessellation", &tessellation)) renderer.SetTessellationEnabled(tessellation);
     bool wireframe = renderer.IsTessellationWireframe();

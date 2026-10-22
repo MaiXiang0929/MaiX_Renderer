@@ -7,17 +7,18 @@
 #include "cyVector.h"
 #include "Engine/Rendering/Renderer/Scene/LightSceneProxy.h"
 #include "Engine/Rendering/Renderer/Pipeline/PassResourceContract.h"
+#include "Engine/Rendering/Renderer/Pipeline/RenderSettings.h"
 
 class CubemapTexture;
 class Mesh;
 struct RenderView;
 struct TessellationSettings;
-struct PostProcessSettings;
 
 /// @brief EditorApp 每帧提交给渲染器的纯场景数据。
 /// @details 这里只保存矩阵、光源和视口等 CPU 数据，不持有任何 OpenGL 资源。
 struct RenderFrameData
 {
+    PostProcessSettings postProcess; // Value snapshot; the scene remains the authoring owner.
     unsigned int viewportWidth = 0;
     unsigned int viewportHeight = 0;
 
