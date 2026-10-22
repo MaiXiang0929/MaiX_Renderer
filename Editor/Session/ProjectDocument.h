@@ -17,3 +17,7 @@ bool InitializeLegacyProject(const std::filesystem::path& root, const std::files
     const SceneDocument& initialScene, const std::vector<std::filesystem::path>& protectedDirectories,
     ProjectDocument&, std::string& error);
 std::filesystem::path FindProjectDocument(const std::filesystem::path& root);
+// Canonicalize folder requests without creating anything. A descriptor or a known
+// legacy project root is required to recover an Assets content path or subfolder.
+std::filesystem::path ResolveProjectFolder(const std::filesystem::path& requested,
+    const std::vector<std::filesystem::path>& knownRoots = {});

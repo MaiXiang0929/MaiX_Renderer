@@ -103,35 +103,7 @@ bool EditorProject::Initialize()
     auto requested = m_HasSavedRoot ? m_RequestedRoot : m_DefaultRoot;
     try
     {
-        auto file=m_RequestedFile.empty()?FindProjectDocument(requested):m_RequestedFile;
-        if(file.empty()&&requested.is_absolute())
-        {
-            const auto canonical=std::filesystem::weakly_canonical(requested);
-            const auto defaultRoot=m_DefaultRoot.empty()?std::filesystem::path{}:
-                std::filesystem::weakly_canonical(m_DefaultRoot);
-            // Older folder selection could persist the content directory as Root.
-            // Recover only with an authoritative descriptor or the known default root.
-            // An explicitly described project named Assets has already been found above.
-            const bool isDefault=!defaultRoot.empty()&&IsWithin(canonical,defaultRoot)&&IsWithin(defaultRoot,canonical);
-            if(SameComponent(canonical.filename(),"Assets")&&!isDefault)
-            {
-                bool recovered=false;
-                for(auto child=canonical;SameComponent(child.filename(),"Assets");child=child.parent_path())
-                {
-                    const auto parent=child.parent_path();
-                    auto parentFile=FindProjectDocument(parent);
-                    if(!parentFile.empty()||(!defaultRoot.empty()&&IsWithin(parent,defaultRoot)&&IsWithin(defaultRoot,parent)))
-                    {
-                        requested=parent; file=std::move(parentFile); recovered=true; break;
-                    }
-                }
-                if(!recovered)
-                {
-                    m_Diagnostic="The saved project folder points to Assets. Open its .maixproject file, or initialize the parent project folder.\n"+canonical.u8string();
-                    return false;
-                }
-            }
-        }
+        const auto& file=m_RequestedFile;
         if(!file.empty())
         {
             ProjectDocument candidate;
@@ -170,8 +142,23 @@ bool EditorProject::TryOpen(const std::filesystem::path& requested, bool createP
     if (requested.empty() || !requested.is_absolute())
         return fail("Choose an absolute project folder. The Documents location may be unavailable.");
     std::error_code error;
-    const auto root = fs::weakly_canonical(requested, error);
-    if (error) return fail("Cannot resolve the project folder: " + error.message());
+    fs::path root;
+    try
+    {
+        root = ResolveProjectFolder(requested, {m_DefaultRoot, m_Root});
+        const auto file = FindProjectDocument(root);
+        if (!file.empty())
+        {
+            ProjectDocument candidate;
+            if (!PrepareOpen(file, candidate, m_Diagnostic)) return false;
+            // The scene must be reconstructed by OpenProjectSession before
+            // activating the project identity, even for folder-based requests.
+            m_StartupProjectFile = std::move(candidate.file);
+            m_Diagnostic.clear();
+            return true;
+        }
+    }
+    catch (const std::exception& e) { return fail(e.what()); }
     const auto assets = fs::weakly_canonical(root / "Assets", error);
     if (error) return fail("Cannot resolve the project Assets folder: " + error.message());
     if (IsProtected(root) || IsProtected(assets))
@@ -183,6 +170,7 @@ bool EditorProject::TryOpen(const std::filesystem::path& requested, bool createP
     if (error || !fs::is_directory(assets, error))
         return fail("Cannot create or open the project's Assets folder: " + error.message());
     if (!CanWriteFiles(assets)) return fail("The project's Assets folder is not writable.");
+    m_StartupProjectFile.clear();
     m_Root = root;
     m_AssetsRoot = assets;
     m_Name=root.filename().u8string(); m_ProjectFile.clear(); m_DefaultScene.clear();
