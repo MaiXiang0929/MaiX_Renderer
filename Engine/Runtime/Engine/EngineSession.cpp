@@ -34,10 +34,10 @@ RenderFrameData EngineSession::PrepareFrame(Camera &camera, unsigned width, unsi
 {
     if (!m_Renderer)
         return {};
-    if (!RegisterSceneActors(m_Scene))
+    if (!IsValidPostProcessSettings(m_Scene.postProcess) || !RegisterSceneActors(m_Scene))
     {
         if (!m_RegistrationFailed)
-            std::cerr << "[Scene] Actor registration failed; frame rejected.\n";
+            std::cerr << "[Scene] Invalid scene settings or actor registration failed; frame rejected.\n";
         m_RegistrationFailed = true;
         return {};
     }

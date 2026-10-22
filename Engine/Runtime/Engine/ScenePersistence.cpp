@@ -49,6 +49,7 @@ bool CaptureSceneDocument(SceneState& scene,const Renderer& renderer,const Scene
         Require(RegisterSceneActors(scene),"Cannot register scene actors before saving.");
         const auto resources=renderer.GetSceneResources();
         SceneDocument d;
+        d.postProcess=scene.postProcess;
         std::unordered_map<RenderResourceId,std::uint64_t> materials;
         std::unordered_map<std::uint64_t,std::uint64_t> actors;
         std::unordered_set<PrimitiveId> primitives;
@@ -137,6 +138,7 @@ bool ReplaceSceneFromDocument(SceneState& active,Renderer& renderer,const SceneA
 {
     if (!ValidateSceneDocument(d,error)) return false;
     SceneState candidate;
+    candidate.postProcess=d.postProcess;
     struct Rollback
     {
         SceneState& scene; Renderer& renderer;

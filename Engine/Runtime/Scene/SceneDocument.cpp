@@ -222,6 +222,7 @@ bool ValidateSceneDocument(const SceneDocument& d, std::string& error)
         Check(!d.defaultModel || (records.count(d.defaultModel)&&records.at(d.defaultModel)->model),"Invalid default model reference.");
         Check(!d.mainLight || (records.count(d.mainLight)&&records.at(d.mainLight)->light),"Invalid main light reference.");
         Check(std::isfinite(d.groundY)&&std::isfinite(d.sceneRadius)&&d.sceneRadius>0&&std::isfinite(d.modelDiameter)&&d.modelDiameter>=0&&Finite(d.defaultBoundsMin)&&Finite(d.defaultBoundsMax)&&Finite(d.objCenter),"Invalid scene framing values.");
+        Check(IsValidPostProcessSettings(d.postProcess),"Invalid scene post-process settings (non-finite or out of range).");
         error.clear(); return true;
     }
     catch (const std::exception& e) { error=e.what(); return false; }
@@ -232,10 +233,14 @@ bool EncodeSceneDocument(const SceneDocument& d,std::string& text,std::string& e
     if (!ValidateSceneDocument(d,error)) return false;
     try
     {
-        J j={{"format","MaiX Scene"},{"version",1},{"actors",J::array()},{"materials",J::array()},
+        J j={{"format","MaiX Scene"},{"version",2},{"actors",J::array()},{"materials",J::array()},
             {"defaultModel",d.defaultModel},{"mainLight",d.mainLight},{"reflectionGroundEnabled",d.reflectionGroundEnabled},
             {"groundY",d.groundY},{"modelDiameter",d.modelDiameter},{"sceneRadius",d.sceneRadius},
             {"defaultBoundsMin",Vec(d.defaultBoundsMin)},{"defaultBoundsMax",Vec(d.defaultBoundsMax)},{"objCenter",Vec(d.objCenter)}};
+        const auto& p=d.postProcess;
+        j["postProcess"]={{"toneMappingEnabled",p.toneMappingEnabled},{"exposureCompensation",p.exposureCompensation},
+            {"bloomEnabled",p.bloomEnabled},{"bloomThreshold",p.bloomThreshold},{"bloomIntensity",p.bloomIntensity},
+            {"ssaoEnabled",p.ssaoEnabled},{"ssaoRadius",p.ssaoRadius},{"ssaoIntensity",p.ssaoIntensity},{"ssaoBias",p.ssaoBias}};
         for (const auto& m:d.materials)
         {
             J value={{"id",m.id},{"parent",m.parent},{"name",m.name},{"properties",Properties(m.properties)},
@@ -291,9 +296,26 @@ bool DecodeSceneDocument(const std::string& text,SceneDocument& output,std::stri
             return true;
         });
         Fields(j,{"format","version","actors","materials","defaultModel","mainLight","reflectionGroundEnabled","groundY",
-            "modelDiameter","sceneRadius","defaultBoundsMin","defaultBoundsMax","objCenter"});
-        Check(j.at("format")=="MaiX Scene"&&Key(j.at("version"))==1,"Unsupported scene format/version.");
+            "modelDiameter","sceneRadius","defaultBoundsMin","defaultBoundsMax","objCenter","postProcess"});
+        const auto version=Key(j.at("version"));
+        Check(j.at("format")=="MaiX Scene"&&(version==1||version==2),"Unsupported scene format/version.");
         SceneDocument d;
+        if (version==2)
+        {
+            const auto& p=j.at("postProcess");
+            Fields(p,{"toneMappingEnabled","exposureCompensation","bloomEnabled","bloomThreshold","bloomIntensity",
+                "ssaoEnabled","ssaoRadius","ssaoIntensity","ssaoBias"});
+            d.postProcess.toneMappingEnabled=p.at("toneMappingEnabled").get<bool>();
+            d.postProcess.exposureCompensation=Number(p.at("exposureCompensation"));
+            d.postProcess.bloomEnabled=p.at("bloomEnabled").get<bool>();
+            d.postProcess.bloomThreshold=Number(p.at("bloomThreshold"));
+            d.postProcess.bloomIntensity=Number(p.at("bloomIntensity"));
+            d.postProcess.ssaoEnabled=p.at("ssaoEnabled").get<bool>();
+            d.postProcess.ssaoRadius=Number(p.at("ssaoRadius"));
+            d.postProcess.ssaoIntensity=Number(p.at("ssaoIntensity"));
+            d.postProcess.ssaoBias=Number(p.at("ssaoBias"));
+        }
+        else Check(!j.contains("postProcess"),"Version 1 scenes cannot contain post-process settings.");
         const auto& actors=j.at("actors"); const auto& materials=j.at("materials");
         Check(actors.is_array()&&materials.is_array()&&actors.size()<=10000&&materials.size()<=10000,"Invalid scene record arrays.");
         for (const auto& v:materials)

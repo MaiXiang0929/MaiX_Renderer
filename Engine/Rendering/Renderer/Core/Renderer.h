@@ -200,33 +200,6 @@ public:
         return m_Tessellation.wireframe;
     }
 
-    void SetToneMappingEnabled(bool enabled)
-    {
-        m_PostProcess.toneMappingEnabled = enabled;
-    }
-    bool IsToneMappingEnabled() const
-    {
-        return m_PostProcess.toneMappingEnabled;
-    }
-    void SetExposureCompensation(float exposure);
-    float GetExposureCompensation() const
-    {
-        return m_PostProcess.exposureCompensation;
-    }
-    void SetBloomEnabled(bool enabled) { m_PostProcess.bloomEnabled = enabled; }
-    bool IsBloomEnabled() const { return m_PostProcess.bloomEnabled; }
-    void SetBloomThreshold(float threshold);
-    float GetBloomThreshold() const { return m_PostProcess.bloomThreshold; }
-    void SetBloomIntensity(float intensity);
-    float GetBloomIntensity() const { return m_PostProcess.bloomIntensity; }
-    void SetSsaoEnabled(bool enabled) { m_PostProcess.ssaoEnabled = enabled; }
-    bool IsSsaoEnabled() const { return m_PostProcess.ssaoEnabled; }
-    void SetSsaoRadius(float radius);
-    float GetSsaoRadius() const { return m_PostProcess.ssaoRadius; }
-    void SetSsaoIntensity(float intensity);
-    float GetSsaoIntensity() const { return m_PostProcess.ssaoIntensity; }
-    void SetSsaoBias(float bias);
-    float GetSsaoBias() const { return m_PostProcess.ssaoBias; }
 
 private:
     void LogMainViewStatsIfChanged(const RenderView& view);
@@ -243,7 +216,6 @@ private:
     CubemapTexture m_Cubemap;
     RenderPipeline m_RenderPipeline;
     TessellationSettings m_Tessellation;
-    PostProcessSettings m_PostProcess;
     StatisticsSnapshot m_StatisticsSnapshot;
     std::array<std::size_t, 10> m_LastMainViewStats{};
     bool m_HasMainViewStats = false;
