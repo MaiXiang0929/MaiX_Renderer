@@ -256,6 +256,8 @@ std::uint32_t ImportTexture(
         return existing->second;
 
     ImportedTextureData result;
+    result.sourceId=static_cast<std::uint64_t>(fileTexture->video ?
+        fileTexture->video->element_id : fileTexture->element_id)+1;
     std::string sourceName = ToString(fileTexture->relative_filename);
     if (sourceName.empty())
         sourceName = ToString(fileTexture->filename);

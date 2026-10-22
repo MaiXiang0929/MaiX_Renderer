@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstdint>
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <vector>
@@ -42,6 +43,10 @@ struct SceneModel
     // Import diagnostics are values: no ownership of importer or GPU objects.
     std::optional<cy::Vec3f> importedSizeMeters;
     std::optional<double> sourceUnitMeters;
+    // Reload provenance, independent of runtime handles and display names.
+    std::filesystem::path sourcePath;
+    std::vector<std::string> sourceMeshNames;
+    float sourceCubeEdge = 0.0f;
 
     bool IsValid() const { return !sections.empty(); }
     PrimitiveBounds GetWorldBounds() const;

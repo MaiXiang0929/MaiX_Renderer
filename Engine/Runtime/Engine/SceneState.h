@@ -13,6 +13,8 @@ struct SceneState
     World world;
     std::vector<SceneModel> models;
     std::vector<SceneLight> lights;
+    // Scene-file material table includes unbound bases and parents of instances.
+    std::vector<MaterialHandle> sceneMaterials;
     SceneCamera camera;
     std::uint64_t nextModelId = 1;
     ModelId defaultModelId;

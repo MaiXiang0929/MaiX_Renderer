@@ -19,7 +19,9 @@ std::shared_ptr<Texture2D> Texture2D::Load(RHIDevice &device, const std::string 
         std::cerr << "[Texture2D] " << path << ": " << lodepng_error_text(error) << '\n';
         return {};
     }
-    return CreateRGBA8(device, width, height, pixels, space);
+    auto result = CreateRGBA8(device, width, height, pixels, space);
+    if (result) result->SetSource(std::filesystem::absolute(std::filesystem::u8path(path)));
+    return result;
 }
 std::shared_ptr<Texture2D> Texture2D::CreateRGBA8(RHIDevice &device, unsigned width, unsigned height,
                                                   const std::vector<unsigned char> &pixels,

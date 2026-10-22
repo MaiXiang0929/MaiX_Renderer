@@ -89,6 +89,23 @@ void UpdateOpaqueStats(RenderView& view)
 }
 }
 
+const PrimitiveSceneProxy* RenderScene::FindPrimitive(PrimitiveId id) const
+{
+    const auto found=std::find_if(m_Primitives.begin(),m_Primitives.end(),[&](const auto& p){return p.id==id;});
+    return found==m_Primitives.end()?nullptr:&*found;
+}
+std::vector<PrimitiveId> RenderScene::PrimitiveIds() const
+{
+    std::vector<PrimitiveId> ids; ids.reserve(m_Primitives.size());
+    for (const auto& p:m_Primitives) ids.push_back(p.id);
+    return ids;
+}
+std::vector<LightId> RenderScene::LightIds() const
+{
+    std::vector<LightId> ids; ids.reserve(m_Lights.size());
+    for (const auto& l:m_Lights) ids.push_back(l.id);
+    return ids;
+}
 PrimitiveId RenderScene::AddPrimitive(PrimitiveSceneProxy proxy)
 {
     proxy.id = m_NextPrimitiveId++;

@@ -77,7 +77,7 @@ cmake --build --preset windows-ninja-debug
 .\out\build\windows-ninja-debug\MaiX_Renderer.exe
 ```
 
-无参数启动会载入默认场景。默认选中 Monkey，可在 Scene 中选择地面或点光源，在 Inspector/Material Editor 中编辑。点光源当前不支持阴影；SSAO 保留现有手动开关，默认关闭。
+无参数启动会重开上次成功打开的项目及其默认场景；首次启动显示内置 Ground/Monkey 示例。默认选中 Monkey，可在 Scene 中选择地面或点光源，在 Inspector/Material Editor 中编辑。点光源当前不支持阴影；SSAO 保留现有手动开关，默认关闭。
 
 构建产物位于 `out/build/windows-ninja-debug/`；构建时部署最新的 `assets/` 和 `Shaders/`，支持从仓库根目录或可执行文件目录启动。
 
@@ -87,9 +87,19 @@ cmake --build --preset windows-ninja-debug
 
 Viewport 顶部工具栏提供移动、旋转、缩放与世界/局部空间切换；不可用于当前对象的操作会禁用。工具栏不计入视口图像的拾取和渲染范围。Inspector 中 Transform、Materials 使用折叠分组，导入尺寸和源单位位于默认收起的 Asset Info。资源浏览器只浏览当前用户项目的 `Assets/`，提供统一雾蓝文件夹图标、相对路径导航和当前目录名称过滤。下列场景快捷键在 Viewport 获得焦点时生效；鼠标场景操作从视口图像内开始。
 
-引擎内置 `assets/`（字体、天空盒、默认模型和场景）及其构建副本与用户内容分离。首次启动在 Windows 的“文档”实际位置下创建 `MaiX Projects/DefaultProject/Assets`；文档目录重定向时同样生效。通过 `File → Open Project Folder...` 选择其他项目根目录，并创建其中缺失的 `Assets/`。上次成功选择保存在用户目录的 `MaiX_Renderer/imgui.ini` 的项目配置段中；失效配置显示错误，不会改为浏览引擎资源。项目内容不能放入引擎内置资源或构建部署目录，构建只部署引擎资源。
+引擎内置 `assets/`（字体、天空盒、默认模型和场景）及其构建副本与用户内容分离。`File → New Project...` 选择电脑上的可写父目录，再输入名称，创建 `名称/名称.maixproject` 与 `Assets/Scenes/Main.maixscene`；默认场景包含 Ground、Monkey、点光源和 Camera。项目不能放入引擎内置资源、Shader 或构建部署目录；同名项目目录已存在时拒绝创建，构建只部署引擎资源。
 
-默认用户目录最初为空；场景里的 Ground/Monkey 是内置示例，不会自动复制进去。Content Browser 顶部显示项目名称与当前子目录路径，过滤框仅过滤当前目录；通过左侧目录树切换目录或返回 `Assets` 根目录。双击项目中的 FBX 可加载到当前场景；`File → Import FBX...` 也可选择外部源文件。加载操作不自动复制模型或贴图依赖。切换项目内容目录保留当前场景，暂不提供项目场景保存、资产数据库或依赖归档。
+`File → Open Project...` 选择 `.maixproject`，同时加载该项目的默认场景和资源浏览目录；全部加载成功才切换，失败保留原项目、场景及资源。当前场景有未保存修改时，可选择 Save and Continue、Discard and Continue 或 Cancel；保存操作写入切换前的项目。项目文件记录格式版本、名称和相对 Assets 的默认场景路径。File 菜单显示当前项目、根目录与场景路径；Content Browser 顶部显示项目名称，悬停可查看根目录。
+
+旧版只有 `Assets/` 的目录通过 `File → Initialize Project Folder...` 显式初始化：选择项目根目录（Assets 的上一级），再选择 Assets 内已有 `.maixscene` 作为默认场景，或创建默认 Main。已有文件不会覆盖，已有项目描述文件的目录不会重复初始化。首次启动仍兼容 Windows“文档”实际位置下的 `MaiX Projects/DefaultProject/Assets` 和旧版 Root 配置；旧配置误记默认项目的 Assets 目录时，启动会恢复到已知项目根目录，已有文件保持原位。其他误记 Assets 的配置只有找到父级项目描述文件才恢复，否则显示提示，不再创建 Assets/Assets。上次项目路径保存在用户目录的 `MaiX_Renderer/imgui.ini` 中。
+
+场景里的 Ground/Monkey 使用内置模型引用，不会复制模型进项目。Content Browser 显示当前子目录路径，过滤框仅过滤当前目录；通过左侧目录树切换目录或返回 `Assets` 根目录。双击项目中的 FBX 可加载到当前场景；`File → Import FBX...` 也可选择外部源文件。加载操作不自动复制模型或贴图依赖。
+
+`File → Save Scene / Save Scene As...` 保存带版本号的 `.maixscene` JSON，默认目录为当前项目 `Assets/Scenes/`，文件须保存在该项目 Assets 内；项目本身的位置可自由选择。`File → Open Scene...` 重开场景；当前内容有未保存修改时，可选择保存后打开、放弃修改或取消。打开失败保留当前场景，保存失败保留原文件。场景不会自动保存，Save As 不改变项目的默认场景设置。
+
+场景文件保留对象名称、父子层级、局部变换、本地 Visible、模型分段与材质绑定、灯光和相机参数，以及基础材质、实例父子关系、参数覆盖和纹理继承/替换/禁用。运行时资源 Handle 不写入文件。项目内资源使用 Assets 相对引用，内置资源使用引擎引用，项目外文件保留明确的绝对路径；不自动复制或归档依赖。FBX 内嵌纹理以源 FBX 的元素身份定位，缺失或不兼容来源会报错。全局渲染参数、编辑器导航相机与 UI 配置不写入场景文件；UI 配置仍独立保存于 imgui.ini。
+
+复制或搬移整个项目目录后，可在新位置打开 `.maixproject`；Assets 内相对引用会跟随项目，引擎引用仍指向内置内容，外部绝对引用仍要求原文件可访问。当前支持 FBX 模型与已有内置 Cube。含无来源生成纹理或仅供渲染验证的透明平面的场景，会明确拒绝保存；资产数据库、依赖归档、项目 Hub 与 Undo/Redo 尚未实现。
 
 | 操作 | 用途 |
 | --- | --- |
@@ -114,7 +124,7 @@ Inspector 的 `Visible` 控制对象自己的显示开关；父级隐藏会作�
 
 隐藏不会卸载模型或材质，也不会取消资源引用保护。隐藏期间的变换继续由 World 同步，恢复后保留最新位置。EngineSession 的 `PrepareFrame` 统一完成注册、状态同步与多视图帧准备，失效 Actor/组件绑定会拒绝该帧输出。
 
-父级修改会同步子模型、灯光、相机、阴影、包围体和拾取。当前支持能表示为 TRS 的层级变换；非均匀缩放配合旋转若产生剪切，或输入非有限/奇异变换，操作会完整拒绝并显示原因。`Delete Subtree (N)` 删除选中对象及全部后代，并清理渲染引用；删除活动场景相机后返回编辑器视图。场景层级暂不保存到磁盘。
+父级修改会同步子模型、灯光、相机、阴影、包围体和拾取。当前支持能表示为 TRS 的层级变换；非均匀缩放配合旋转若产生剪切，或输入非有限/奇异变换，操作会完整拒绝并显示原因。`Delete Subtree (N)` 删除选中对象及全部后代，并清理渲染引用；删除活动场景相机后返回编辑器视图。
 
 Material Editor 默认跟随所选模型，显示所属模型名称和材质列表。`All materials (debug)` 可查看全部场景材质；点击 Inspector 中的材质会返回模型范围。删除正在编辑的模型后会清理材质选择。
 

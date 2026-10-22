@@ -4,35 +4,6 @@
 #include "Engine/Rendering/Material/Material.h"
 #include "Engine/Rendering/Renderer/Resources/RenderResourceHandle.h"
 
-enum class MaterialParameter : std::uint8_t
-{
-    BaseColor,
-    SpecularColor,
-    Shininess,
-    EnvironmentReflectivity,
-    Metallic,
-    Roughness,
-    AmbientOcclusion,
-    NormalScale,
-    Opacity,
-    ToonThreshold,
-    ToonShadowStrength,
-    ToonShadowColor,
-    RimLightStrength,
-    RimLightColor,
-    FaceShadowEnabled,
-    FaceFrame,
-    FaceShadowSoftness,
-    FaceShadowMirrorX,
-    OutlineEnabled,
-    OutlineThickness,
-    OutlineColor,
-    Count
-};
-constexpr std::size_t MaterialParameterCount = static_cast<std::size_t>(MaterialParameter::Count);
-using MaterialOverrideMask = std::bitset<MaterialParameterCount>;
-enum class TextureOverrideMode { Inherit, Replace, Disabled };
-
 struct MaterialTextureOverride
 {
     TextureOverrideMode mode = TextureOverrideMode::Inherit;

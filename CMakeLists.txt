@@ -27,7 +27,8 @@ target_link_libraries(MaiXGL PUBLIC opengl32.lib)
 add_library(MaiXPNG STATIC ThirdParty/lodepng/lodepng.cpp)
 target_include_directories(MaiXPNG PUBLIC ${THIRD_PARTY_DIR}/lodepng)
 
-add_library(MaiXCore STATIC Engine/Core/Math/Transform.cpp Engine/Core/Math/Bounds.cpp)
+add_library(MaiXCore STATIC Engine/Core/Math/Transform.cpp Engine/Core/Math/Bounds.cpp
+    Engine/Core/Platform/Windows/AtomicFile.cpp)
 target_link_libraries(MaiXCore PUBLIC MaiXHeaders)
 
 add_library(MaiXPlatform STATIC Engine/Core/Platform/Windows/FileDialog.cpp
@@ -46,8 +47,10 @@ target_link_libraries(MaiXAsset PUBLIC MaiXCore)
 add_library(MaiXRuntime STATIC Engine/Runtime/Component/Camera.cpp
     Engine/Runtime/Scene/StartupScene.cpp Engine/Runtime/Scene/InstanceGrid.cpp
     Engine/Runtime/Scene/SceneModel.cpp Engine/Runtime/Scene/SceneLight.cpp Engine/Runtime/Scene/World.cpp
-    Engine/Runtime/Engine/ApplicationOptions.cpp)
+    Engine/Runtime/Engine/ApplicationOptions.cpp Engine/Runtime/Scene/SceneDocument.cpp
+    Engine/Runtime/Scene/SceneDocumentFiles.cpp)
 target_link_libraries(MaiXRuntime PUBLIC MaiXCore)
+target_compile_options(MaiXRuntime PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
 
 # Shared diagnostics are below both command execution and renderer orchestration.
 add_library(MaiXRenderSupport STATIC
@@ -95,6 +98,7 @@ target_link_libraries(MaiXRendering PUBLIC glfw3.lib)
 target_compile_options(MaiXRendering PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
 
 add_library(MaiXEngine STATIC Engine/Runtime/Engine/EngineSession.cpp
+    Engine/Runtime/Engine/ScenePersistence.cpp
     Engine/Runtime/Engine/RenderSceneBridge.cpp Engine/Runtime/Engine/SceneFrameBuilder.cpp)
 target_link_libraries(MaiXEngine PUBLIC MaiXRuntime MaiXRendering)
 
@@ -111,15 +115,21 @@ add_executable(MaiX_Renderer
     Editor/ContentBrowser/AssetImportPanel.cpp
     Editor/Diagnostics/RendererStatisticsPanel.cpp
     Editor/EditorApp/EditorApp.cpp
+    Editor/EditorApp/EditorAppScene.cpp
+    Editor/EditorApp/EditorAppProject.cpp
     Editor/EditorApp/Main.cpp
     Editor/Inspector/InspectorPanel.cpp
     Editor/MaterialEditor/MaterialEditorPanel.cpp
     Editor/SceneHierarchy/SceneHierarchyPanel.cpp
     Editor/Session/EditorFonts.cpp
     Editor/Session/EditorProject.cpp
+    Editor/Session/ProjectDocument.cpp
+    Editor/Session/ProjectSession.cpp
+    Editor/Session/DefaultProjectScene.cpp
     Editor/Session/EditorTheme.cpp
     Editor/Session/EditorWidgets.cpp
     Editor/Session/EditorWorkspace.cpp
+    Editor/Session/SceneFileDialogs.cpp
     Editor/Viewport/EditorViewportController.cpp
     Editor/Viewport/ViewportPicking.cpp
 )
@@ -152,6 +162,39 @@ if(BUILD_TESTING AND EXISTS "${PROJECT_ROOT}/tests/Renderer/RHITests.cpp")
     add_test(NAME RHITests COMMAND RHITests)
 endif()
 
+if(BUILD_TESTING AND EXISTS "${PROJECT_ROOT}/tests/Editor/ProjectDocumentTests.cpp")
+    add_executable(ProjectDocumentTests tests/Editor/ProjectDocumentTests.cpp Editor/Session/ProjectDocument.cpp)
+    target_link_libraries(ProjectDocumentTests PRIVATE MaiXRuntime)
+    target_compile_options(ProjectDocumentTests PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
+    add_test(NAME ProjectDocumentTests COMMAND ProjectDocumentTests)
+endif()
+if(BUILD_TESTING AND EXISTS "${PROJECT_ROOT}/tests/Editor/ProjectSessionTests.cpp")
+    add_executable(ProjectSessionTests tests/Editor/ProjectSessionTests.cpp Editor/Session/ProjectSession.cpp
+        Editor/Session/ProjectDocument.cpp Editor/Session/DefaultProjectScene.cpp Editor/Session/EditorProject.cpp)
+    target_link_libraries(ProjectSessionTests PRIVATE MaiXEngine MaiXPlatform MaiXEditorUI)
+    target_compile_options(ProjectSessionTests PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
+    add_test(NAME ProjectSessionTests COMMAND ProjectSessionTests)
+    set_tests_properties(ProjectSessionTests PROPERTIES WORKING_DIRECTORY "$<TARGET_FILE_DIR:MaiX_Renderer>")
+endif()
+if(BUILD_TESTING AND EXISTS "${PROJECT_ROOT}/tests/Runtime/SceneDocumentTests.cpp")
+    add_executable(SceneDocumentTests tests/Runtime/SceneDocumentTests.cpp)
+    target_link_libraries(SceneDocumentTests PRIVATE MaiXRuntime)
+    target_compile_options(SceneDocumentTests PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
+    add_test(NAME SceneDocumentTests COMMAND SceneDocumentTests)
+endif()
+if(BUILD_TESTING AND EXISTS "${PROJECT_ROOT}/tests/Editor/SceneFileDialogsTests.cpp")
+    add_executable(SceneFileDialogsTests tests/Editor/SceneFileDialogsTests.cpp Editor/Session/SceneFileDialogs.cpp)
+    target_link_libraries(SceneFileDialogsTests PRIVATE MaiXEditorUI MaiXHeaders)
+    target_compile_options(SceneFileDialogsTests PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
+    add_test(NAME SceneFileDialogsTests COMMAND SceneFileDialogsTests)
+endif()
+if(BUILD_TESTING AND EXISTS "${PROJECT_ROOT}/tests/Runtime/ScenePersistenceTests.cpp")
+    add_executable(ScenePersistenceTests tests/Runtime/ScenePersistenceTests.cpp)
+    target_link_libraries(ScenePersistenceTests PRIVATE MaiXEngine MaiXPlatform)
+    target_compile_options(ScenePersistenceTests PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
+    add_test(NAME ScenePersistenceTests COMMAND ScenePersistenceTests)
+    set_tests_properties(ScenePersistenceTests PROPERTIES WORKING_DIRECTORY "$<TARGET_FILE_DIR:MaiX_Renderer>")
+endif()
 if(BUILD_TESTING AND EXISTS "${PROJECT_ROOT}/tests/Runtime/WorldTests.cpp")
     add_executable(WorldTests tests/Runtime/WorldTests.cpp)
     target_link_libraries(WorldTests PRIVATE MaiXRuntime)
@@ -184,12 +227,13 @@ if(BUILD_TESTING)
     add_executable(EditorThemeTests tests/Editor/EditorThemeTests.cpp Editor/Session/EditorTheme.cpp)
     target_link_libraries(EditorThemeTests PRIVATE MaiXEditorUI MaiXHeaders)
     add_test(NAME EditorThemeTests COMMAND EditorThemeTests)
-    add_executable(EditorProjectTests tests/Editor/EditorProjectTests.cpp Editor/Session/EditorProject.cpp)
-    target_link_libraries(EditorProjectTests PRIVATE MaiXEditorUI MaiXHeaders)
+    add_executable(EditorProjectTests tests/Editor/EditorProjectTests.cpp Editor/Session/EditorProject.cpp Editor/Session/ProjectDocument.cpp)
+    target_link_libraries(EditorProjectTests PRIVATE MaiXRuntime MaiXEditorUI MaiXHeaders)
     target_compile_options(EditorProjectTests PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
     add_test(NAME EditorProjectTests COMMAND EditorProjectTests)
     add_executable(EditorWorkspaceTests tests/Editor/EditorWorkspaceTests.cpp
         Editor/Session/EditorWorkspace.cpp Editor/Session/EditorTheme.cpp Editor/Session/EditorProject.cpp
+        Editor/Session/ProjectDocument.cpp
         Editor/Session/EditorWidgets.cpp Editor/ContentBrowser/AssetImportPanel.cpp
         Editor/Viewport/EditorViewportController.cpp Editor/Viewport/ViewportPicking.cpp)
     target_link_libraries(EditorWorkspaceTests PRIVATE MaiXEngine MaiXPlatform MaiXEditorUI)

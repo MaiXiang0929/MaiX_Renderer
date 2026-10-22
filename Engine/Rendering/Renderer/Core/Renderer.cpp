@@ -153,6 +153,7 @@ bool Renderer::GetMaterialSnapshot(MaterialHandle handle, MaterialSnapshot& snap
     {
         snapshot.parent = entry->instance->parent;
         snapshot.overrides = entry->instance->overrides;
+        snapshot.overrideValues = entry->instance->values;
         const auto* base = m_MaterialResources.Get(snapshot.parent);
         if (base) snapshot.parentName = base->effective.GetName();
     }
@@ -163,6 +164,8 @@ bool Renderer::GetMaterialSnapshot(MaterialHandle handle, MaterialSnapshot& snap
         snapshot.hasTextures[i] = static_cast<bool>(texture);
         snapshot.textureIds[i] = texture ? texture->GetID() : 0;
         snapshot.textureSources[i] = material.GetTextureSource(slot);
+        snapshot.textureFiles[i] = texture ? texture->SourcePath() : std::filesystem::path{};
+        snapshot.embeddedTextureIds[i] = texture ? texture->EmbeddedId() : 0;
         if (entry->instance) snapshot.textureModes[i] = entry->instance->textures[i].mode;
     }
     return true;
@@ -306,6 +309,21 @@ bool Renderer::RemovePrimitive(PrimitiveId id)
     return m_RenderScene.RemovePrimitive(id);
 }
 
+Renderer::SceneResourceSnapshot Renderer::GetSceneResources() const
+{
+    SceneResourceSnapshot snapshot;
+    snapshot.materials=GetMaterialHandles();
+    snapshot.primitives=m_RenderScene.PrimitiveIds(); snapshot.lights=m_RenderScene.LightIds();
+    for (size_t i=0;i<m_MeshResources.size();++i)
+        if (m_MeshResources[i]) snapshot.meshes.push_back(MeshHandle{static_cast<RenderResourceId>(i)});
+    return snapshot;
+}
+bool Renderer::GetPrimitiveBinding(PrimitiveId id,MeshHandle& mesh,MaterialHandle& material,bool& castsShadow) const
+{
+    const auto* p=m_RenderScene.FindPrimitive(id);
+    if (!p) return false;
+    mesh={p->meshId}; material={p->materialId}; castsShadow=p->castsShadow; return true;
+}
 std::size_t Renderer::GetMeshResourceCount() const
 {
     return static_cast<std::size_t>(std::count_if(

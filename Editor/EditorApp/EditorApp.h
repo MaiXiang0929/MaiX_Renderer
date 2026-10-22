@@ -112,6 +112,22 @@ private:
     // IDs survive model-vector reallocation; resolved once when the viewport is valid.
     EditorSelection m_PendingFocusSelection;
     EditorMaterialSelection m_MaterialSelection;
+    enum class SceneFileAction { None, Open, Save, SaveAs, NewProject, OpenProject, InitializeProject };
+    SceneFileAction m_SceneFileAction = SceneFileAction::None;
+    std::filesystem::path m_ScenePath, m_SceneProjectRoot;
+    std::optional<std::filesystem::path> m_PendingOpenScene;
+    std::string m_LastSavedSceneText, m_SceneFileError;
+    bool m_ConfirmSceneReplacement = false;
+    struct ProjectAction
+    {
+        SceneFileAction kind;
+        std::filesystem::path path, existingScene;
+        std::string name;
+    };
+    std::optional<ProjectAction> m_PendingProjectAction;
+    std::optional<std::filesystem::path> m_NewProjectParent,m_LegacyProjectRoot;
+    bool m_RequestNewProjectDialog=false,m_RequestLegacyProjectDialog=false;
+    char m_NewProjectName[129]="MyProject";
 
 private:
     /// @brief 初始化应用程序
@@ -140,6 +156,16 @@ private:
 	/// @brief 渲染应用程序
     void Render();
     void UpdateAppearance();
+    void DrawSceneFileMenu();
+    void HandleSceneFileActions(void* nativeWindowHandle);
+    bool SaveSceneFile(bool saveAs, void* nativeWindowHandle);
+    bool OpenSceneFile(const std::filesystem::path& path);
+    void ReportSceneFileError(std::string error);
+    bool SceneHasUnsavedChanges();
+    void ResetSceneEditorState();
+    bool OpenProjectFile(const std::filesystem::path& path);
+    void ExecuteProjectAction(ProjectAction action);
+    void DrawProjectCreationDialogs(void* owner);
     
 	/// @brief 关闭应用程序
     void Shutdown();

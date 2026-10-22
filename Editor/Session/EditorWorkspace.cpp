@@ -124,21 +124,9 @@ void EditorWorkspace::PrepareMaterialEditor()
     }
 }
 
-void EditorWorkspace::BeginFrame(AssetImportPanel& assetImport, void* nativeWindowHandle, EditorAppearanceSettings& appearance)
+void EditorWorkspace::SynchronizeProject()
 {
-    bool projectOpened = false;
-    if (m_PendingProjectRoot)
-    {
-        const auto root = *m_PendingProjectRoot;
-        m_PendingProjectRoot.reset();
-        if (m_Project.Open(root))
-        {
-            projectOpened = true;
-            AddLog("Project Assets: " + m_Project.AssetsRoot().u8string());
-        }
-        else AddLog("[Project] " + m_Project.Diagnostic());
-    }
-    if (projectOpened || m_AssetRoot != m_Project.AssetsRoot())
+    if (m_AssetRoot != m_Project.AssetsRoot())
     {
         m_AssetRoot = m_Project.AssetsRoot();
         m_CurrentDirectory = m_AssetRoot;
@@ -146,12 +134,16 @@ void EditorWorkspace::BeginFrame(AssetImportPanel& assetImport, void* nativeWind
         m_AssetFilter[0] = '\0';
         RefreshAssets();
     }
+}
+
+void EditorWorkspace::BeginFrame(AssetImportPanel& assetImport, void* nativeWindowHandle, EditorAppearanceSettings& appearance)
+{
+    SynchronizeProject();
     if (ImGui::BeginMainMenuBar())
     {
         if (ImGui::BeginMenu("File"))
         {
-            if (ImGui::MenuItem("Open Project Folder...")) ChooseProjectFolder(nativeWindowHandle);
-            ImGui::Separator();
+            if (m_SceneFileMenu) { m_SceneFileMenu(); ImGui::Separator(); }
             assetImport.DrawFileMenuItems(nativeWindowHandle);
             ImGui::EndMenu();
         }
@@ -197,12 +189,6 @@ void EditorWorkspace::BeginFrame(AssetImportPanel& assetImport, void* nativeWind
         BuildDefaultLayout(dockspaceId);
     m_LayoutChecked = true;
     m_ResetLayout = false;
-}
-
-void EditorWorkspace::ChooseProjectFolder(void* nativeWindowHandle)
-{
-    if (const auto selected = FileDialog::OpenDirectory(nativeWindowHandle, m_Project.Root()))
-        m_PendingProjectRoot = *selected;
 }
 
 EditorViewportRegion EditorWorkspace::BeginViewport(const std::function<void()>& drawToolbar)
@@ -350,7 +336,7 @@ void EditorWorkspace::DrawContentBrowser(AssetImportPanel& assetImport)
         return;
     }
     ImGui::TextUnformatted(m_Project.Root().empty() ? "No project available" :
-        m_Project.Root().filename().u8string().c_str());
+        m_Project.Name().c_str());
     if (ImGui::IsItemHovered() && !m_Project.Root().empty())
         ImGui::SetTooltip("%s", m_Project.Root().u8string().c_str());
     if (!m_Project.Diagnostic().empty())

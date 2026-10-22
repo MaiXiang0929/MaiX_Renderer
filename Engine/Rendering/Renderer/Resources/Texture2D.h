@@ -9,6 +9,7 @@
 #pragma once
 
 #include <memory>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -39,6 +40,10 @@ public:
     bool IsValid() const { return !m_DeviceLifetime.expired() && m_TextureID != 0; }
     RHITextureHandle GetID() const { return IsValid() ? m_TextureID : RHITextureHandle{}; }
     TextureColorSpace GetColorSpace() const { return m_ColorSpace; }
+    void SetSource(std::filesystem::path path, std::uint64_t embeddedId = 0)
+    { m_SourcePath = std::move(path); m_EmbeddedId = embeddedId; }
+    const std::filesystem::path& SourcePath() const { return m_SourcePath; }
+    std::uint64_t EmbeddedId() const { return m_EmbeddedId; }
 
 private:
     RHIDevice& m_Device;
@@ -51,4 +56,6 @@ private:
 
     RHITextureHandle m_TextureID = 0;
     TextureColorSpace m_ColorSpace = TextureColorSpace::Linear;
+    std::filesystem::path m_SourcePath;
+    std::uint64_t m_EmbeddedId = 0;
 };
