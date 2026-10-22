@@ -143,6 +143,7 @@ struct RHITarget
 };
 struct RHIPipelineState
 {
+    bool seamlessCubemap = true;
     bool depthTest = true, depthWrite = true, blend = false, wireframe = false;
     RHICompare depthCompare = RHICompare::Less;
     RHICull cull = RHICull::None;

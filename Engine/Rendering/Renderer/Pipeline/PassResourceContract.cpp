@@ -12,15 +12,24 @@ std::size_t Index(PassResourceId id)
         throw ResourceContractError("Invalid render resource ID.");
     return index;
 }
+bool IsImported(PassResourceId id)
+{
+    return id == PassResourceId::Environment || id == PassResourceId::Irradiance ||
+           id == PassResourceId::PrefilteredEnvironment || id == PassResourceId::BrdfLut;
+}
 ResourceFormat ExpectedFormat(PassResourceId id)
 {
     switch (id)
     {
     case PassResourceId::Environment: return ResourceFormat::Cubemap;
+    case PassResourceId::Irradiance:
+    case PassResourceId::PrefilteredEnvironment: return ResourceFormat::Cubemap16F;
+    case PassResourceId::BrdfLut: return ResourceFormat::RGBA16F;
     case PassResourceId::ShadowDepth: return ResourceFormat::Depth24;
     case PassResourceId::ForwardDepth: return ResourceFormat::Depth24Stencil8;
     case PassResourceId::SsaoAO: return ResourceFormat::R8;
     case PassResourceId::ForwardColor:
+    case PassResourceId::ReflectionColor:
     case PassResourceId::OutlinedColor:
     case PassResourceId::SceneHdrColor:
     case PassResourceId::SsaoColor:
@@ -33,7 +42,8 @@ ResourceFormat ExpectedFormat(PassResourceId id)
 const char* RenderResourceName(PassResourceId id)
 {
     static constexpr const char* names[] = {
-        "Environment", "ShadowDepth", "ReflectionColor", "ForwardColor", "ForwardDepth",
+        "Environment", "Irradiance", "PrefilteredEnvironment", "BrdfLut",
+        "ShadowDepth", "ReflectionColor", "ForwardColor", "ForwardDepth",
         "OutlinedColor", "SceneHdrColor", "SsaoAO", "SsaoColor", "Bloom",
         "PostColor", "Overlay", "FinalColor"};
     return static_cast<std::size_t>(id) < RenderResourceCount ? names[Index(id)] : "Unknown";
@@ -56,6 +66,7 @@ PassResourceContract BuildPassResourceContract(RenderPassType pass, PassResource
     };
     const auto surface = [&] {
         read(Id::Environment, Access::Sample, true);
+        read(Id::Irradiance); read(Id::PrefilteredEnvironment); read(Id::BrdfLut);
         if (features.shadows) read(Id::ShadowDepth);
     };
     switch (pass)
@@ -117,7 +128,8 @@ bool ValidatePassResourceSequence(const PassResourceContract* contracts, std::si
                                  std::string& error)
 {
     std::array<bool, RenderResourceCount> available{};
-    available[Index(PassResourceId::Environment)] = true; // Renderer 注入的外部资源。
+    for (std::size_t i=0;i<RenderResourceCount;++i)
+        available[i] = IsImported(static_cast<PassResourceId>(i));
     for (std::size_t pass = 0; pass < count; ++pass)
     {
         const auto& contract = contracts[pass];
@@ -172,8 +184,8 @@ void FrameResources::BeginFrame(unsigned int width, unsigned int height)
 void FrameResources::Bind(PassResourceId id, RenderResourceBinding binding)
 {
     const auto index = Index(id);
-    if (binding.imported != (id == PassResourceId::Environment))
-        throw ResourceContractError("Only Environment can be imported in this pipeline.");
+    if (binding.imported != IsImported(id))
+        throw ResourceContractError("Only renderer-owned environment resources can be imported.");
     m_Bindings[index] = binding;
     m_Produced[index] = binding.imported;
 }
@@ -194,7 +206,14 @@ void PassResources::ValidateBinding(PassResourceId id, bool optional) const
     const auto& binding = m_Frame.m_Bindings[Index(id)];
     if (binding.format != ExpectedFormat(id)) Fail(id, "has an incompatible format.");
     if (!binding.texture && !optional) Fail(id, "has a zero texture.");
-    if (id == PassResourceId::Environment) return;
+    if (IsImported(id))
+    {
+        if (id != PassResourceId::Environment && (!binding.width || binding.width != binding.height))
+            Fail(id, "has an invalid environment extent.");
+        if (id == PassResourceId::PrefilteredEnvironment && !binding.mipmaps)
+            Fail(id, "requires a roughness mip chain.");
+        return;
+    }
     if (!binding.framebuffer) Fail(id, "has no render target.");
     RenderTargetExtent expected{m_Frame.m_Width, m_Frame.m_Height};
     if (id == PassResourceId::ReflectionColor)

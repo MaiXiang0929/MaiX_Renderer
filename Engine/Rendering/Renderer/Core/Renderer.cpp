@@ -62,7 +62,7 @@ bool Renderer::Init()
     m_GroundMesh.Upload(groundVertices);
 
     LoadCubemap("assets/models/sky");
-    return true;
+    return m_Cubemap.IsValid();
 }
 
 MeshHandle Renderer::CreateMesh(const std::vector<Vertex>& vertices)
@@ -468,7 +468,9 @@ void Renderer::LogMainViewStatsIfChanged(const RenderView& view)
 
 bool Renderer::ReloadShaders()
 {
-    const bool loaded = m_RenderPipeline.ReloadShaders();
+    const bool surfaceLoaded = m_RenderPipeline.ReloadShaders();
+    const bool lightingLoaded = m_Cubemap.RebuildLighting();
+    const bool loaded = surfaceLoaded && lightingLoaded;
     if (loaded)
         std::cout << "[Renderer] Shaders reloaded successfully!" << std::endl;
     else

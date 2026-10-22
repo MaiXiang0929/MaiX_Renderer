@@ -397,8 +397,13 @@ void ForwardPass::PrepareSurfaceShader(
     }
     shader.SetInt("wireframePass", 0);
 
-    BindEnvironment(context, 4);
-    shader.SetInt("cubemap", 4);
+    m_Device.Commands().BindTexture(context.Resources().Texture(PassResourceId::Irradiance),4,RHITextureKind::Cubemap);
+    shader.SetInt("irradianceMap",4);
+    m_Device.Commands().BindTexture(context.Resources().Texture(PassResourceId::PrefilteredEnvironment),7,RHITextureKind::Cubemap);
+    shader.SetInt("prefilterMap",7);
+    m_Device.Commands().BindTexture(context.Resources().Texture(PassResourceId::BrdfLut),8);
+    shader.SetInt("brdfLut",8);
+    shader.SetFloat("prefilterMaxLod",static_cast<float>(EnvironmentLighting::PrefilterMaxMip));
     const RHITextureHandle shadowTexture = context.frame.shadowsEnabled
         ? context.Resources().Texture(PassResourceId::ShadowDepth) : 0;
     m_Device.Commands().BindTexture(shadowTexture,5);

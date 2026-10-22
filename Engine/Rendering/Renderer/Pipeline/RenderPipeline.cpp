@@ -194,6 +194,16 @@ void RenderPipeline::BindFrameResources(FrameResources& resources, const RenderP
     using Id = PassResourceId;
     resources.Bind(Id::Environment, {context.cubemap.GetID(), 0, 0, 0, 0,
         ResourceFormat::Cubemap, false, true});
+    const auto& lighting = context.cubemap.Lighting();
+    resources.Bind(Id::Irradiance, {lighting.Irradiance(),0,0,
+        EnvironmentLighting::IrradianceSize,EnvironmentLighting::IrradianceSize,
+        ResourceFormat::Cubemap16F,false,true});
+    resources.Bind(Id::PrefilteredEnvironment, {lighting.Prefiltered(),0,0,
+        EnvironmentLighting::PrefilterSize,EnvironmentLighting::PrefilterSize,
+        ResourceFormat::Cubemap16F,false,true,true});
+    resources.Bind(Id::BrdfLut, {lighting.Brdf(),0,0,
+        EnvironmentLighting::BrdfSize,EnvironmentLighting::BrdfSize,
+        ResourceFormat::RGBA16F,false,true});
     const ShadowMap& shadow = m_ShadowPass.GetTarget();
     resources.Bind(Id::ShadowDepth, {shadow.GetDepthTexture(), shadow.GetFramebufferId(),
         shadow.GetDepthTexture(), static_cast<unsigned int>(shadow.GetWidth()),
