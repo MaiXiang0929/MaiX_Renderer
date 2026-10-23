@@ -64,6 +64,8 @@ struct SceneActorRecord
 struct SceneDocument
 {
     PostProcessSettings postProcess;
+    EnvironmentSettings environment;
+    std::optional<SceneAssetPath> environmentSource;
     std::vector<SceneActorRecord> actors;
     std::vector<SceneMaterialRecord> materials;
     std::uint64_t defaultModel = 0, mainLight = 0;

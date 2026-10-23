@@ -212,7 +212,7 @@ RHITextureHandle FrameResources::GetFinalTexture() const
 void PassResources::ValidateBinding(PassResourceId id, bool optional) const
 {
     const auto& binding = m_Frame.m_Bindings[Index(id)];
-    if (binding.format != ExpectedFormat(id)) Fail(id, "has an incompatible format.");
+    if (binding.format != ExpectedFormat(id) && !(id == PassResourceId::Environment && binding.format == ResourceFormat::Cubemap16F)) Fail(id, "has an incompatible format.");
     if (!binding.texture && !optional) Fail(id, "has a zero texture.");
     if (IsImported(id))
     {

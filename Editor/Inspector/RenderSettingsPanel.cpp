@@ -3,7 +3,7 @@
 #include "Engine/Rendering/Renderer/Pipeline/RenderSettings.h"
 #include <imgui.h>
 
-void DrawRenderSettingsPanel(PostProcessSettings& settings)
+void DrawRenderSettingsPanel(PostProcessSettings& settings, const std::function<void()>& environmentControls)
 {
     ImGui::SetNextWindowSize(ImVec2(390, 480), ImGuiCond_FirstUseEver);
     if (!ImGui::Begin("Render Settings"))
@@ -13,6 +13,7 @@ void DrawRenderSettingsPanel(PostProcessSettings& settings)
     }
     ImGui::TextWrapped("Saved with the current scene.");
     if (ImGui::Button("Reset to Defaults")) settings = PostProcessSettings{};
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Resets post effects and anti-aliasing. Environment parameters have a separate reset below.");
 
     ImGui::SeparatorText("Exposure and Tone Mapping");
     ImGui::Checkbox("Tone mapping (ACES)", &settings.toneMappingEnabled);
@@ -49,5 +50,6 @@ void DrawRenderSettingsPanel(PostProcessSettings& settings)
         "%.5f", ImGuiSliderFlags_AlwaysClamp);
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Depth bias in scene world units; reduces self-occlusion.");
     ImGui::EndDisabled();
+    if (environmentControls) environmentControls();
     ImGui::End();
 }

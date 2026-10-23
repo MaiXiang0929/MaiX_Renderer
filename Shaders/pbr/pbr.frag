@@ -82,6 +82,15 @@ uniform sampler2DShadow shadowMap;
 uniform bool shadowsEnabled;
 uniform bool wireframePass;
 
+
+// Inverse yaw maps a world-space direction into the authored environment.
+uniform vec3 environmentTransform; // cos(yaw), sin(yaw), linear intensity
+vec3 EnvironmentDirection(vec3 d)
+{
+    return vec3(environmentTransform.x*d.x - environmentTransform.y*d.z,
+        d.y, environmentTransform.y*d.x + environmentTransform.x*d.z);
+}
+
 const float PI = 3.14159265359;
 
 float DistributionGGX(vec3 N, vec3 H, float roughness)
@@ -346,21 +355,21 @@ void main()
     }
 
     vec3 reflectDirView = reflect(-V, N);
-    vec3 reflectDirWorld = normalize(viewToWorld * reflectDirView);
-    vec3 normalWorld = normalize(viewToWorld * N);
+    vec3 reflectDirWorld = EnvironmentDirection(normalize(viewToWorld * reflectDirView));
+    vec3 normalWorld = EnvironmentDirection(normalize(viewToWorld * N));
     vec3 environmentFresnel = f0 + (max(vec3(1.0-roughness),f0)-f0) * pow(1.0-nDotV,5.0);
     vec3 diffuseWeight = (vec3(1.0)-environmentFresnel)*(1.0-metallic);
     // Irradiance map stores E/pi. All IBL textures contain linear scene radiance.
-    vec3 environmentDiffuse = texture(irradianceMap,normalWorld).rgb * albedo * diffuseWeight;
+    vec3 environmentDiffuse = texture(irradianceMap,normalWorld).rgb * albedo * diffuseWeight * environmentTransform.z;
     vec3 envReflection = textureLod(prefilterMap,reflectDirWorld,roughness*prefilterMaxLod).rgb;
     vec2 integratedBrdf = texture(brdfLut,vec2(nDotV,roughness)).rg;
     vec3 environmentSpecular = envReflection * (f0*integratedBrdf.x+integratedBrdf.y) *
-        material.environmentReflectivity;
+        material.environmentReflectivity * environmentTransform.z;
     vec3 ambient = (environmentDiffuse + environmentSpecular) * ao;
 
-    indirectDiffuse = vec4(opaqueForSsao ? environmentDiffuse * ao : vec3(0.0),
+    indirectDiffuse = vec4(opaqueForSsao ? min(environmentDiffuse * ao, vec3(65504.0)) : vec3(0.0),
         clamp(material.opacity * albedoSample.a, 0.0, 1.0));
     color = vec4(
-        ambient + directLighting,
+        min(ambient + directLighting, vec3(65504.0)),
         clamp(material.opacity * albedoSample.a, 0.0, 1.0));
 }

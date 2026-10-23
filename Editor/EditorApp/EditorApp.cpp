@@ -9,6 +9,7 @@
 #include "Engine/Runtime/Engine/RenderSceneBridge.h"
 #include "Editor/Diagnostics/RendererStatisticsPanel.h"
 #include "Editor/Inspector/RenderSettingsPanel.h"
+#include "Editor/Inspector/EnvironmentPanel.h"
 #include "Engine/Rendering/Renderer/Core/Renderer.h"
 #include "Engine/Rendering/RHI/OpenGL/OpenGLNativeBridge.h"
 #include "Engine/Runtime/Scene/InstanceGrid.h"
@@ -1294,7 +1295,7 @@ void EditorApp::Render() {
     }
 
     if (m_Workspace->ShowRenderSettings())
-        DrawRenderSettingsPanel(m_Engine.Scene().postProcess);
+        DrawRenderSettingsPanel(m_Engine.Scene().postProcess, [&] { DrawEnvironmentControls(m_Engine.Scene(),*m_Renderer,nativeWindowHandle); });
 
     const SceneFrameSettings frameSettings{m_Renderer->IsTessellationEnabled(),
         m_Renderer->GetDisplacementScale(), m_Renderer->AreEditorPrimitivesEnabled()};

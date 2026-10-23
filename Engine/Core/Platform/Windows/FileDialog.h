@@ -11,6 +11,7 @@ using NativeWindowHandle = void*;
 // Opens a native Windows picker without copying or importing the selected file.
 std::optional<std::filesystem::path> OpenModelFile(
     NativeWindowHandle ownerWindow = nullptr);
+std::optional<std::filesystem::path> OpenHdrEnvironmentFile(NativeWindowHandle ownerWindow = nullptr);
 std::optional<std::filesystem::path> OpenTextureFile(
     NativeWindowHandle ownerWindow = nullptr);
 std::optional<std::filesystem::path> OpenSceneFile(NativeWindowHandle ownerWindow,

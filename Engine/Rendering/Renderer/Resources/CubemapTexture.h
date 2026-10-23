@@ -8,6 +8,7 @@
 #pragma once
 
 #include <string>
+#include <filesystem>
 
 #include "Engine/Rendering/RHI/RHIDevice.h"
 #include "Engine/Rendering/Renderer/Resources/EnvironmentLighting.h"
@@ -22,6 +23,9 @@ public:
     CubemapTexture& operator=(const CubemapTexture&) = delete;
 
     bool Load(const std::string& directoryPath);
+    bool LoadHdr(const std::filesystem::path& path, std::string& error);
+    bool IsHdr() const { return m_IsHdr; }
+    unsigned Size() const { return m_Size; }
     bool RebuildLighting() { return m_Lighting.Build(m_TextureID,m_Size); }
     void Bind(unsigned int textureUnit) const;
 
@@ -33,5 +37,6 @@ private:
     RHIDevice& m_Device;
     RHITextureHandle m_TextureID = 0;
     unsigned m_Size = 0;
+    bool m_IsHdr = false;
     EnvironmentLighting m_Lighting;
 };

@@ -2,6 +2,8 @@
 #include "Engine/Runtime/Scene/SceneDocument.h"
 #include "nlohmann/json.hpp"
 #include <cmath>
+#include <algorithm>
+#include <cctype>
 #include <functional>
 #include <unordered_map>
 #include <unordered_set>
@@ -147,6 +149,14 @@ bool ValidateSceneDocument(const SceneDocument& d, std::string& error)
 {
     try
     {
+        Check(IsValidEnvironmentSettings(d.environment),"Invalid environment intensity or rotation.");
+        if (d.environmentSource)
+        {
+            CheckAsset(*d.environmentSource);
+            auto extension=std::filesystem::u8path(d.environmentSource->path).extension().u8string();
+            std::transform(extension.begin(),extension.end(),extension.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
+            Check(extension==".hdr","Environment source must reference a Radiance .hdr file.");
+        }
         Check(d.actors.size()<=10000 && d.materials.size()<=10000,"Scene record limit exceeded.");
         std::unordered_map<std::uint64_t, const SceneMaterialRecord*> materials;
         for (const auto& m:d.materials)
@@ -240,6 +250,8 @@ bool EncodeSceneDocument(const SceneDocument& d,std::string& text,std::string& e
             {"defaultModel",d.defaultModel},{"mainLight",d.mainLight},{"reflectionGroundEnabled",d.reflectionGroundEnabled},
             {"groundY",d.groundY},{"modelDiameter",d.modelDiameter},{"sceneRadius",d.sceneRadius},
             {"defaultBoundsMin",Vec(d.defaultBoundsMin)},{"defaultBoundsMax",Vec(d.defaultBoundsMax)},{"objCenter",Vec(d.objCenter)}};
+        j["environment"]={{"source",d.environmentSource?Asset(*d.environmentSource):J(nullptr)},
+            {"intensity",d.environment.intensity},{"rotationDegrees",d.environment.rotationDegrees}};
         const auto& p=d.postProcess;
         j["postProcess"]={{"fxaaEnabled",p.fxaaEnabled},{"toneMappingEnabled",p.toneMappingEnabled},{"exposureCompensation",p.exposureCompensation},
             {"bloomEnabled",p.bloomEnabled},{"bloomThreshold",p.bloomThreshold},{"bloomIntensity",p.bloomIntensity},
@@ -299,10 +311,17 @@ bool DecodeSceneDocument(const std::string& text,SceneDocument& output,std::stri
             return true;
         });
         Fields(j,{"format","version","actors","materials","defaultModel","mainLight","reflectionGroundEnabled","groundY",
-            "modelDiameter","sceneRadius","defaultBoundsMin","defaultBoundsMax","objCenter","postProcess"});
+            "modelDiameter","sceneRadius","defaultBoundsMin","defaultBoundsMax","objCenter","postProcess","environment"});
         const auto version=Key(j.at("version"));
         Check(j.at("format")=="MaiX Scene"&&(version==1||version==2),"Unsupported scene format/version.");
         SceneDocument d;
+        if (j.contains("environment"))
+        {
+            const auto& env=j.at("environment"); Fields(env,{"source","intensity","rotationDegrees"});
+            d.environment.intensity=Number(env.at("intensity"));
+            d.environment.rotationDegrees=Number(env.at("rotationDegrees"));
+            if (!env.at("source").is_null()) d.environmentSource=ReadAsset(env.at("source"));
+        }
         d.postProcess.fxaaEnabled=false; // Old v1/v2 scenes retain their authored appearance.
         if (version==2)
         {

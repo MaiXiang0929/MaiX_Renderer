@@ -120,6 +120,7 @@ add_executable(MaiX_Renderer
     Editor/EditorApp/EditorAppProject.cpp
     Editor/EditorApp/Main.cpp
     Editor/Inspector/InspectorPanel.cpp
+    Editor/Inspector/EnvironmentPanel.cpp
     Editor/Inspector/RenderSettingsPanel.cpp
     Editor/MaterialEditor/MaterialEditorPanel.cpp
     Editor/SceneHierarchy/SceneHierarchyPanel.cpp

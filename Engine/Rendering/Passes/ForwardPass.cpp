@@ -2,6 +2,7 @@
 #include "Engine/Rendering/Passes/ForwardPass.h"
 
 #include <algorithm>
+#include <cmath>
 #include <iostream>
 
 #include "Engine/Rendering/Renderer/Resources/CubemapTexture.h"
@@ -14,6 +15,11 @@
 
 namespace
 {
+void BindEnvironmentSettings(Shader& shader, const EnvironmentSettings& settings)
+{
+    const float angle = settings.rotationDegrees * 0.017453292519943295f;
+    shader.SetVec3("environmentTransform", std::cos(angle), std::sin(angle), settings.intensity);
+}
 void BindEnvironment(RenderPassContext& context, unsigned int unit)
 {
     const RHITextureHandle texture = context.Resources().Texture(PassResourceId::Environment);
@@ -124,6 +130,7 @@ void ForwardPass::Execute(RenderPassContext& context)
     if (context.frame.reflectionGroundEnabled)
     {
         m_GroundShader.Bind();
+        BindEnvironmentSettings(m_GroundShader, context.frame.environment);
         m_GroundShader.SetMatrix4("mvp", &context.frame.groundMvp.cell[0]);
         m_GroundShader.SetMatrix4("model", &context.frame.groundModel.cell[0]);
         m_GroundShader.SetMatrix4(
@@ -376,6 +383,7 @@ void ForwardPass::PrepareSurfaceShader(
 {
     const cy::Matrix4f& view = renderView.view;
     shader.Bind();
+    BindEnvironmentSettings(shader, context.frame.environment);
     const LightUploadData lightUpload = UploadLights(
         renderView,
         context.frame.shadowLightId,
@@ -428,6 +436,7 @@ void ForwardPass::RenderSkybox(
     skyboxView.cell[14] = 0.0f;
 
     m_SkyboxShader.Bind();
+    BindEnvironmentSettings(m_SkyboxShader, context.frame.environment);
     m_SkyboxShader.SetMatrix4(
         "projection", &context.frame.projection.cell[0]);
     m_SkyboxShader.SetMatrix4("view", &skyboxView.cell[0]);
