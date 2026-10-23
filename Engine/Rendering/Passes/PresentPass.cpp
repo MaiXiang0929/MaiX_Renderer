@@ -41,6 +41,7 @@ void PresentPass::Execute(RenderPassContext& context)
     m_Shader.Bind();
     m_Device.Commands().BindTexture(postProcessTexture,0);
     m_Device.Commands().BindTexture(editorOverlayTexture,1);
+    m_Shader.SetInt("fxaaEnabled", context.postProcess.fxaaEnabled ? 1 : 0);
     m_Shader.SetInt("renderedTexture",0); m_Shader.SetInt("editorOverlayTexture",1);
     context.presentMesh.Draw();
     context.Resources().EndTarget(PassResourceId::FinalColor);
