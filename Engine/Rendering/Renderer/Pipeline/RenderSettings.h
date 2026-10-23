@@ -12,6 +12,7 @@ struct TessellationSettings
 
 struct PostProcessSettings
 {
+    bool fxaaEnabled = true;
     bool ssaoEnabled = false;
     float ssaoRadius = 0.5f;
     float ssaoIntensity = 1.0f;

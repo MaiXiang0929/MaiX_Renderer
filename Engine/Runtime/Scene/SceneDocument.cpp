@@ -241,7 +241,7 @@ bool EncodeSceneDocument(const SceneDocument& d,std::string& text,std::string& e
             {"groundY",d.groundY},{"modelDiameter",d.modelDiameter},{"sceneRadius",d.sceneRadius},
             {"defaultBoundsMin",Vec(d.defaultBoundsMin)},{"defaultBoundsMax",Vec(d.defaultBoundsMax)},{"objCenter",Vec(d.objCenter)}};
         const auto& p=d.postProcess;
-        j["postProcess"]={{"toneMappingEnabled",p.toneMappingEnabled},{"exposureCompensation",p.exposureCompensation},
+        j["postProcess"]={{"fxaaEnabled",p.fxaaEnabled},{"toneMappingEnabled",p.toneMappingEnabled},{"exposureCompensation",p.exposureCompensation},
             {"bloomEnabled",p.bloomEnabled},{"bloomThreshold",p.bloomThreshold},{"bloomIntensity",p.bloomIntensity},
             {"ssaoEnabled",p.ssaoEnabled},{"ssaoRadius",p.ssaoRadius},{"ssaoIntensity",p.ssaoIntensity},{"ssaoBias",p.ssaoBias}};
         for (const auto& m:d.materials)
@@ -303,11 +303,13 @@ bool DecodeSceneDocument(const std::string& text,SceneDocument& output,std::stri
         const auto version=Key(j.at("version"));
         Check(j.at("format")=="MaiX Scene"&&(version==1||version==2),"Unsupported scene format/version.");
         SceneDocument d;
+        d.postProcess.fxaaEnabled=false; // Old v1/v2 scenes retain their authored appearance.
         if (version==2)
         {
             const auto& p=j.at("postProcess");
-            Fields(p,{"toneMappingEnabled","exposureCompensation","bloomEnabled","bloomThreshold","bloomIntensity",
+            Fields(p,{"fxaaEnabled","toneMappingEnabled","exposureCompensation","bloomEnabled","bloomThreshold","bloomIntensity",
                 "ssaoEnabled","ssaoRadius","ssaoIntensity","ssaoBias"});
+            if (p.contains("fxaaEnabled")) d.postProcess.fxaaEnabled=p.at("fxaaEnabled").get<bool>();
             d.postProcess.toneMappingEnabled=p.at("toneMappingEnabled").get<bool>();
             d.postProcess.exposureCompensation=Number(p.at("exposureCompensation"));
             d.postProcess.bloomEnabled=p.at("bloomEnabled").get<bool>();

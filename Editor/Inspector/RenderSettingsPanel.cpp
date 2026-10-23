@@ -20,6 +20,13 @@ void DrawRenderSettingsPanel(PostProcessSettings& settings)
         MinimumExposureCompensation, MaximumExposureCompensation, "%+.2f", ImGuiSliderFlags_AlwaysClamp);
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("+1 EV doubles brightness; -1 EV halves it.");
 
+    ImGui::SeparatorText("Anti-aliasing");
+    int antiAliasing = settings.fxaaEnabled ? 1 : 0;
+    if (ImGui::Combo("Method", &antiAliasing, "Off\0FXAA\0"))
+        settings.fxaaEnabled = antiAliasing == 1;
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Smooths scene edges after tone mapping. May soften fine details; editor overlays stay sharp.");
+
     ImGui::SeparatorText("Bloom");
     ImGui::Checkbox("Bloom", &settings.bloomEnabled);
     ImGui::BeginDisabled(!settings.bloomEnabled);

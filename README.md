@@ -27,6 +27,7 @@ IBL 当前使用内置六面 sRGB PNG 天空，不包含 HDR/EXR 环境文件导
 ### 阴影、HDR 与后处理
 
 - Directional/Spot Light 阴影贴图与 PCF 采样；Forward Shader 使用 UBO 读取场景灯光。
+- FXAA 在 Present 阶段处理色调映射和 sRGB 编码后的场景颜色，再合成编辑器叠加层；无需新增全分辨率目标。可在 Render Settings 的 Anti-aliasing → Method 选择 Off/FXAA。新建场景默认 FXAA，旧 v1/v2 场景缺少该字段时使用 Off；它可平滑轮廓和描边，也可能软化细节，不能消除运动或高光的时域闪烁。
 - Forward Pass 写入 RGBA16F HDR Scene Color；Bloom、SSAO、手动曝光、ACES Tone Mapping 和 sRGB 输出编码组成后处理链路。
 - SSAO 只衰减 PBR 的间接漫反射与 Toon 的基础环境项，保留直接光、环境镜面、Rim、天空和镜面地面反射。独立 RGBA16F 附件记录可遮蔽贡献；描边覆盖时清零，透明混合时按透过率衰减背景贡献，透明层自身不使用主视图 SSAO。材质 ORM AO 的原有作用保持不变。附加目标随视口重建，当前即使 SSAO 关闭也保留分配（8 字节/像素）。
 - 支持 Cubemap、半分辨率反射、离屏渲染目标和随窗口尺寸变化的目标重建。
@@ -104,9 +105,9 @@ Viewport 顶部工具栏提供移动、旋转、缩放与世界/局部空间切�
 
 场景文件保留对象名称、父子层级、局部变换、本地 Visible、模型分段与材质绑定、灯光和相机参数，以及基础材质、实例父子关系、参数覆盖和纹理继承/替换/禁用。运行时资源 Handle 不写入文件。项目内资源使用 Assets 相对引用，内置资源使用引擎引用，项目外文件保留明确的绝对路径；不自动复制或归档依赖。FBX 内嵌纹理以源 FBX 的元素身份定位，缺失或不兼容来源会报错。
 
-`View → Render Settings` 编辑当前场景的 Exposure（EV）、ACES Tone Mapping、Bloom 和 SSAO 参数；`Reset to Defaults` 恢复默认值，关闭效果保留其参数。曝光每增加 1 EV，线性亮度加倍；Bloom Threshold 使用曝光前的线性 HDR 值，SSAO Radius/Bias 使用场景世界单位。修改即时影响画面，并纳入未保存修改检测；通过 Save Scene 保存后，再次打开该场景恢复这些值；重启仍按项目默认场景打开。参数由 CPU 场景持有，每帧以快照传入渲染管线，GPU 资源仍由 Renderer/Pass 管理。
+`View → Render Settings` 编辑当前场景的 Exposure（EV）、ACES Tone Mapping、Bloom、SSAO 与抗锯齿设置；`Reset to Defaults` 恢复默认值（包括开启 FXAA），关闭效果保留其参数。曝光每增加 1 EV，线性亮度加倍；Bloom Threshold 使用曝光前的线性 HDR 值，SSAO Radius/Bias 使用场景世界单位。修改即时影响画面，并纳入未保存修改检测；通过 Save Scene 保存后，再次打开该场景恢复这些值；重启仍按项目默认场景打开。参数由 CPU 场景持有，每帧以快照传入渲染管线，GPU 资源仍由 Renderer/Pass 管理。
 
-新保存的场景使用 v2 格式。v1 场景仍可读取，并明确使用默认曝光 0 EV、开启 Tone Mapping/Bloom、关闭 SSAO 及原有默认强度；不会继承前一个场景的后处理参数。v2 参数缺失、非有限、越界或包含未知字段时拒绝加载；资源重建失败也保留当前场景和参数。阴影/细分调试开关、编辑器辅助图元、导航相机与 UI 配置不纳入本轮场景设置；UI 配置仍独立保存于 imgui.ini。Renderer Statistics 保留统计和其他已有调试控件，后处理编辑统一放在 Render Settings。
+新保存的场景使用 v2 格式。v1 场景仍可读取，并明确使用默认曝光 0 EV、开启 Tone Mapping/Bloom、关闭 SSAO 及原有默认强度；不会继承前一个场景的后处理参数。FXAA 开关随 v2 的 postProcess 保存；v1 与缺少 fxaaEnabled 字段的旧 v2 场景显式关闭 FXAA，字段存在时必须为布尔值。其他 v2 参数缺失、非有限、越界或包含未知字段时拒绝加载；资源重建失败也保留当前场景和参数。阴影/细分调试开关、编辑器辅助图元、导航相机与 UI 配置不纳入本轮场景设置；UI 配置仍独立保存于 imgui.ini。Renderer Statistics 保留统计和其他已有调试控件，后处理编辑统一放在 Render Settings。
 
 复制或搬移整个项目目录后，可在新位置打开 `.maixproject`；Assets 内相对引用会跟随项目，引擎引用仍指向内置内容，外部绝对引用仍要求原文件可访问。当前支持 FBX 模型与已有内置 Cube。含无来源生成纹理或仅供渲染验证的透明平面的场景，会明确拒绝保存；资产数据库、依赖归档、项目 Hub 与 Undo/Redo 尚未实现。
 

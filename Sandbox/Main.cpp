@@ -144,6 +144,77 @@ void VerifyComposition()
     Require(glGetError() == GL_NO_ERROR, "RHI composition produced an OpenGL error");
 }
 
+void VerifyFxaa()
+{
+    auto device = CreateRHIDevice();
+    Shader shader(*device);
+    Require(shader.Load("Shaders/present/present.vert", "Shaders/present/present.frag"), "FXAA present shader");
+    std::vector<Vertex> vertices(3);
+    vertices[0].Position = {-1,-1,0}; vertices[0].TexCoord = {0,0};
+    vertices[1].Position = {3,-1,0}; vertices[1].TexCoord = {2,0};
+    vertices[2].Position = {-1,3,0}; vertices[2].TexCoord = {0,2};
+    Mesh mesh(*device); mesh.Upload(vertices);
+    for (const auto extent : {std::pair<int,int>{16,16},{31,17},{1,1},{1,9},{9,1}})
+    {
+        const int width=extent.first, height=extent.second;
+        std::vector<unsigned char> pixels(width*height*4),overlayPixels(width*height*4,0),result(pixels.size());
+        for(int y=0;y<height;++y) for(int x=0;x<width;++x)
+        {
+            const int i=(y*width+x)*4;
+            const unsigned char value=x>=y ? 255 : 0;
+            pixels[i]=pixels[i+1]=pixels[i+2]=value; pixels[i+3]=255;
+        }
+        RHITextureDesc texture; texture.width=width;texture.height=height;texture.wrap=RHIWrap::ClampEdge;
+        const auto scene=device->CreateTexture(texture,{pixels.data()});
+        auto overlay=device->CreateTexture(texture,{overlayPixels.data()});
+        Framebuffer target(*device);FramebufferSpecification spec;
+        spec.width=width;spec.height=height;spec.depthStencilEnabled=false;spec.mipmapsEnabled=false;
+        Require(target.Init(spec),"FXAA output dimensions");
+        target.Bind(); glDisable(GL_DEPTH_TEST);glDisable(GL_BLEND);glDisable(GL_CULL_FACE);
+        device->Commands().InvalidateState();shader.Bind();
+        device->Commands().BindTexture(scene,0);device->Commands().BindTexture(overlay,1);
+        shader.SetInt("renderedTexture",0);shader.SetInt("editorOverlayTexture",1);
+        shader.SetInt("fxaaEnabled",0);mesh.Draw();
+        glReadPixels(0,0,width,height,GL_RGBA,GL_UNSIGNED_BYTE,result.data());
+        Require(result==pixels,"FXAA Off must pass every pixel through unchanged");
+        shader.SetInt("fxaaEnabled",1);mesh.Draw();
+        glReadPixels(0,0,width,height,GL_RGBA,GL_UNSIGNED_BYTE,result.data());
+        const auto antialiasedScene=result;
+        int smoothed=0;
+        for(int i=0;i<width*height;++i) if(result[i*4]>0&&result[i*4]<255) ++smoothed;
+        if(width>1&&height>1) Require(smoothed>0,"FXAA must smooth a diagonal edge");
+        if(width==1&&height==1) Require(result==pixels,"FXAA preserves a uniform one-pixel image");
+        // Overlay pixels sit on the diagonal; they must remain exact after the scene is filtered.
+        const int center=((height/2)*width+width/2)*4;
+        overlayPixels[center+1]=255;overlayPixels[center+3]=255;
+        device->DestroyTexture(overlay);overlay=device->CreateTexture(texture,{overlayPixels.data()});
+        device->Commands().BindTexture(overlay,1);mesh.Draw();
+        glReadPixels(0,0,width,height,GL_RGBA,GL_UNSIGNED_BYTE,result.data());
+        Require(result[center]==0&&result[center+1]==255&&result[center+2]==0&&result[center+3]==255,
+            "FXAA must not filter editor overlay pixels");
+        // Premultiplied translucent overlay must compose against the filtered scene.
+        overlayPixels[center]=128;overlayPixels[center+1]=0;overlayPixels[center+3]=128;
+        device->DestroyTexture(overlay);overlay=device->CreateTexture(texture,{overlayPixels.data()});
+        device->Commands().BindTexture(overlay,1);mesh.Draw();
+        glReadPixels(0,0,width,height,GL_RGBA,GL_UNSIGNED_BYTE,result.data());
+        for(int channel=0;channel<3;++channel)
+        {
+            const int expected=(channel==0 ? 128 : 0)+int(antialiasedScene[center+channel]*127.0f/255.0f);
+            Require(std::abs(int(result[center+channel])-expected)<=2,"FXAA preserves premultiplied overlay blending");
+        }
+        std::vector<unsigned char> flat(pixels.size());
+        for(int i=0;i<width*height;++i){flat[i*4]=64;flat[i*4+1]=128;flat[i*4+2]=192;flat[i*4+3]=255;}
+        const auto flatScene=device->CreateTexture(texture,{flat.data()});
+        std::fill(overlayPixels.begin(),overlayPixels.end(),0);
+        device->DestroyTexture(overlay);overlay=device->CreateTexture(texture,{overlayPixels.data()});
+        device->Commands().BindTexture(flatScene,0);device->Commands().BindTexture(overlay,1);mesh.Draw();
+        glReadPixels(0,0,width,height,GL_RGBA,GL_UNSIGNED_BYTE,result.data());
+        Require(result==flat,"FXAA must preserve uniform color including image borders");
+        target.Unbind();device->DestroyTexture(scene);device->DestroyTexture(overlay);device->DestroyTexture(flatScene);
+    }
+    Require(glGetError()==GL_NO_ERROR,"FXAA OpenGL error");
+}
+
 void VerifyProxyViews()
 {
     auto device = CreateRHIDevice();
@@ -240,6 +311,17 @@ void VerifySession()
     for (int i = 0; i < 3; ++i)
         engine.Render(frame);
     Require(renderer->GetFinalColorTexture() != 0, "Standalone engine produced no final texture");
+    for (bool enabled : {false,true})
+    {
+        scene.postProcess.fxaaEnabled=enabled;
+        for (const auto extent : {std::pair<unsigned,unsigned>{80,51},{1,1},{64,48}})
+        {
+            auto aaFrame=engine.PrepareFrame(navigation,extent.first,extent.second,true,{false,0,false});
+            Require(aaFrame.postProcess.fxaaEnabled==enabled,"frame snapshot must carry the current FXAA setting");
+            engine.Render(aaFrame);
+            Require(renderer->GetFinalColorTexture()!=0,"FXAA toggle/resize pipeline output");
+        }
+    }
     realDrawArrays = glad_glDrawArrays;
     glad_glDrawArrays = FailOneDraw;
     struct RestoreDraw
@@ -368,6 +450,7 @@ int main()
                 "Invalid context creation left a partial window");
         Require(context.Initialize(64, 48, "MaiX Sandbox", error, false), error.c_str());
         VerifyComposition();
+        VerifyFxaa();
         VerifyShaderFailureCleanup();
         VerifyProxyViews();
         VerifySession();
