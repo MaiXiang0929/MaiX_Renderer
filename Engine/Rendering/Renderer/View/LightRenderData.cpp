@@ -91,7 +91,7 @@ LightUploadData BuildLightUploadData(
         if (shadowLightId != InvalidLightId &&
             light.id == shadowLightId &&
             light.castsShadow &&
-            light.type != LightType::Point)
+            SupportsShadowMap(light.type))
         {
             upload.shadowLightIndex = static_cast<int>(upload.lightCount);
         }

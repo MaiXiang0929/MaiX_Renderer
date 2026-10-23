@@ -2,6 +2,7 @@
 #include "Engine/Runtime/Engine/SceneFrameBuilder.h"
 #include "Engine/Core/Math/CameraClipRange.h"
 #include "Engine/Rendering/Renderer/View/DirectionalShadow.h"
+#include "Engine/Rendering/Renderer/View/SpotShadow.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -34,9 +35,18 @@ RenderFrameData BuildSceneFrame(SceneState &scene, Camera &camera, unsigned int 
                                                                                      section.localTransform)
                                                  .radius);
                 }
-    const cy::Matrix4f lightVP = FitDirectionalShadow(
-        sceneBounds, editableMainLight ? editableMainLight->proxy.direction : cy::Vec3f(0, -1, 0),
-        shadowPadding);
+    cy::Matrix4f lightVP = cy::Matrix4f::Identity();
+    cy::Vec2f spotShadowBias{0.0f, 0.0f};
+    bool shadowEnabled = editableMainLight && editableMainLight->proxy.castsShadow &&
+        SupportsShadowMap(editableMainLight->proxy.type) && sceneBounds.radius > 0;
+    if (shadowEnabled)
+    {
+        const auto& light = editableMainLight->proxy;
+        if (light.type == LightType::Spot)
+            shadowEnabled = BuildSpotShadow(light, lightVP, spotShadowBias);
+        else
+            lightVP = FitDirectionalShadow(sceneBounds, light.direction, shadowPadding);
+    }
     // 反射视图仍由 Engine frame builder 根据场景地面位置计算，Pass 只消费结果。
     float groundY = scene.groundY;
     if (scene.models.size() == 1 && scene.models.front().id == scene.defaultModelId &&
@@ -150,8 +160,8 @@ RenderFrameData BuildSceneFrame(SceneState &scene, Camera &camera, unsigned int 
     frame.projection = projMatrix;
     frame.view = viewMatrix;
     frame.lightVP = lightVP;
-    frame.shadowsEnabled =
-        editableMainLight && editableMainLight->proxy.castsShadow && sceneBounds.radius > 0;
+    frame.spotShadowBias = spotShadowBias;
+    frame.shadowsEnabled = shadowEnabled;
     frame.reflectionGroundEnabled = scene.reflectionGroundEnabled;
     frame.shadowLightId = frame.shadowsEnabled ? scene.mainLightId : InvalidLightId;
     frame.keyLightId = editableMainLight ? scene.mainLightId : InvalidLightId;
