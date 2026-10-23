@@ -77,6 +77,8 @@ void SSAOPass::Execute(RenderPassContext& context)
 
     context.Resources().BeginTarget(PassResourceId::SsaoColor); m_CompositeShader.Bind();
     BindTexture(sceneColor, 0); BindTexture(m_Filtered.GetColorTexture(), 1);
+    BindTexture(context.Resources().Texture(PassResourceId::SceneIndirect), 2);
+    m_CompositeShader.SetInt("indirectTexture", 2);
     m_CompositeShader.SetInt("sceneTexture", 0); m_CompositeShader.SetInt("aoTexture", 1);
     m_CompositeShader.SetFloat("intensity", context.postProcess.ssaoIntensity);
     context.presentMesh.Draw(); context.Resources().EndTarget(PassResourceId::SsaoColor);

@@ -134,12 +134,13 @@ struct RHITargetDesc
     RHITextureFormat colorFormat = RHITextureFormat::RGBA8;
     bool color = true, depth = true, sampleableDepth = false, mipmaps = false;
     bool shadow = false;
+    bool secondaryColor = false; // Optional second color attachment, same format, no mipmaps.
 };
 // Target exclusively owns its attachments. Returned texture handles are borrowed.
 struct RHITarget
 {
     RHITargetHandle handle;
-    RHITextureHandle color, depth;
+    RHITextureHandle color, depth, secondaryColor;
 };
 struct RHIPipelineState
 {

@@ -10,6 +10,7 @@ in TC_OUT
     vec4 tangent;
 } teIn[];
 
+out vec2 fragTexCoord;
 uniform mat4 lightMvp;
 uniform sampler2D displacementMap;
 uniform bool hasDisplacementMap;
@@ -31,6 +32,7 @@ void main()
         weights.y * teIn[1].uv +
         weights.z * teIn[2].uv;
 
+    fragTexCoord = uv;
     if (hasDisplacementMap)
         position += normal * texture(displacementMap, uv).r * displacementScale;
 

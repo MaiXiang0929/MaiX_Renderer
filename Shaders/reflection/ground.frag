@@ -49,9 +49,11 @@ float CalculateShadowVisibility(vec4 lightSpacePos)
 }
 
 layout(location = 0) out vec4 color;
+layout(location = 1) out vec4 indirectDiffuse;
 
 void main()
 {
+    indirectDiffuse = vec4(0.0);
     // 将世界空间位置投影到反射纹理坐标
     vec4 clipPos = reflectionVP * vec4(worldPos, 1.0);
     vec3 ndc = clipPos.xyz / clipPos.w;

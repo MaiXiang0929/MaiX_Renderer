@@ -18,6 +18,7 @@ struct MaterialProperties
     float normalScale = 1.0f;
     // 透明 Pass 使用的整体不透明度；管线分类仍由 Primitive 单独决定。
     float opacity = 1.0f;
+    float alphaCutoff = 0.5f;
     ShadingModel shadingModel = ShadingModel::PBR;
     float toonThreshold = 0.5f;
     float toonShadowStrength = 0.65f;
@@ -57,6 +58,7 @@ enum class MaterialParameter : std::uint8_t
     OutlineEnabled,
     OutlineThickness,
     OutlineColor,
+    AlphaCutoff,
     Count
 };
 constexpr std::size_t MaterialParameterCount = static_cast<std::size_t>(MaterialParameter::Count);

@@ -28,7 +28,7 @@ RenderResourceBinding Snapshot(const Framebuffer& target, bool depth = false)
     return {depth ? target.GetDepthTexture() : target.GetColorTexture(),
         target.GetFramebufferId(), target.GetDepthTexture(),
         static_cast<unsigned int>(target.GetWidth()), static_cast<unsigned int>(target.GetHeight()),
-        format, target.HasDepthStencil(), false, target.HasMipmaps()};
+        format, target.HasDepthStencil(), false, target.HasMipmaps(), target.GetSecondaryColorTexture()};
 }
 const char* GetPassDebugName(RenderPassType type)
 {
@@ -210,6 +210,13 @@ void RenderPipeline::BindFrameResources(FrameResources& resources, const RenderP
         static_cast<unsigned int>(shadow.GetHeight()), ResourceFormat::Depth24, true, false});
     resources.Bind(Id::ReflectionColor, Snapshot(m_ReflectionPass.GetTarget()));
     const auto mainColor = Snapshot(m_ForwardPass.GetTarget());
+    auto indirect = mainColor;
+    indirect.texture = m_ForwardPass.GetTarget().GetSecondaryColorTexture();
+    indirect.otherColorTexture = mainColor.texture;
+    indirect.mipmaps = false;
+    resources.Bind(Id::ForwardIndirect, indirect);
+    resources.Bind(Id::OutlinedIndirect, indirect);
+    resources.Bind(Id::SceneIndirect, indirect);
     resources.Bind(Id::ForwardColor, mainColor);
     resources.Bind(Id::OutlinedColor, mainColor);
     resources.Bind(Id::SceneHdrColor, mainColor);

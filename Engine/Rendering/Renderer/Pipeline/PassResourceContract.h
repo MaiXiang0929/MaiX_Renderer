@@ -16,7 +16,7 @@ enum class PassResourceId
     Environment, Irradiance, PrefilteredEnvironment, BrdfLut,
     ShadowDepth, ReflectionColor, ForwardColor, ForwardDepth,
     OutlinedColor, SceneHdrColor, SsaoAO, SsaoColor, Bloom,
-    PostColor, Overlay, FinalColor, Count
+    PostColor, Overlay, FinalColor, ForwardIndirect, OutlinedIndirect, SceneIndirect, Count
 };
 enum class ResourceFormat { RGBA8, RGBA16F, R8, Depth24, Depth24Stencil8, Cubemap, Cubemap16F };
 enum class ResourceAccess { Sample, PreserveColor, DepthTest, ColorWrite, DepthWrite };
@@ -71,6 +71,7 @@ struct RenderResourceBinding
     bool hasDepth = false;
     bool imported = false;
     bool mipmaps = false;
+    RHITextureHandle otherColorTexture = 0; // Sibling attachment for feedback validation.
 };
 
 class ResourceContractError : public RHIError

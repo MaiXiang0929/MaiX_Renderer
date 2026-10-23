@@ -217,6 +217,9 @@ void MaterialEditorPanel::Draw(
     editField(MaterialParameter::NormalScale, "Normal Scale", [&] { return ImGui::SliderFloat("##Value", &properties.normalScale, 0.000f, 4.000f); });
     editField(MaterialParameter::Opacity, "Opacity", [&] { return ImGui::SliderFloat("##Value", &properties.opacity, 0.000f, 1.000f); });
 
+    if (snapshot.blendMode == BlendMode::Masked)
+        editField(MaterialParameter::AlphaCutoff, "Alpha Cutoff", [&] { return ImGui::SliderFloat("##Value", &properties.alphaCutoff, 0.0f, 1.0f); });
+
     if (properties.shadingModel == ShadingModel::Toon)
     {
         editField(MaterialParameter::ToonThreshold, "Toon Threshold", [&] { return ImGui::SliderFloat("##Value", &properties.toonThreshold, 0.000f, 1.000f); });
@@ -238,14 +241,14 @@ void MaterialEditorPanel::Draw(
         editField(MaterialParameter::OutlineColor, "Outline Color", [&] { return ImGui::ColorEdit3("##Value", &properties.outlineColor.x); });
 
     }
-    int blendMode = snapshot.blendMode == BlendMode::AlphaBlend ? 1 : 0;
+    int blendMode = static_cast<int>(snapshot.blendMode);
     ImGui::BeginDisabled(snapshot.isInstance);
     MaterialFieldLabel(snapshot.isInstance ? "Blend Mode (parent)" : "Blend Mode");
-    if (ImGui::Combo("##BlendMode", &blendMode, "Opaque\0Alpha Blend\0")) changed = true;
+    if (ImGui::Combo("##BlendMode", &blendMode, "Opaque\0Alpha Blend\0Masked\0")) changed = true;
     ImGui::EndDisabled();
     if (changed)
         renderer.UpdateMaterial(handle, properties,
-            blendMode == 1 ? BlendMode::AlphaBlend : BlendMode::Opaque);
+            static_cast<BlendMode>(blendMode));
     renderer.GetMaterialSnapshot(handle, snapshot);
 
     ImGui::SeparatorText("Texture Slots");

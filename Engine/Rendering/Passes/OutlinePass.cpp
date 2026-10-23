@@ -47,6 +47,7 @@ void OutlinePass::Execute(RenderPassContext& context)
     {
         // 没有绘制也必须显式传递阶段结果；不能让后处理误用未完成的颜色身份。
         context.Resources().Publish(PassResourceId::OutlinedColor);
+        context.Resources().Publish(PassResourceId::OutlinedIndirect);
         return;
     }
 
@@ -79,9 +80,11 @@ void OutlinePass::Execute(RenderPassContext& context)
             properties.outlineColor.x,
             properties.outlineColor.y,
             properties.outlineColor.z);
+        item.material->BindCoverage(m_Shader, 0);
         item.mesh->Draw();
     }
 
     context.Resources().EndTarget(PassResourceId::OutlinedColor, false);
     context.Resources().Publish(PassResourceId::OutlinedColor);
+    context.Resources().Publish(PassResourceId::OutlinedIndirect);
 }

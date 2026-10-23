@@ -28,6 +28,9 @@ ResourceFormat ExpectedFormat(PassResourceId id)
     case PassResourceId::ShadowDepth: return ResourceFormat::Depth24;
     case PassResourceId::ForwardDepth: return ResourceFormat::Depth24Stencil8;
     case PassResourceId::SsaoAO: return ResourceFormat::R8;
+    case PassResourceId::ForwardIndirect:
+    case PassResourceId::OutlinedIndirect:
+    case PassResourceId::SceneIndirect:
     case PassResourceId::ForwardColor:
     case PassResourceId::ReflectionColor:
     case PassResourceId::OutlinedColor:
@@ -45,7 +48,7 @@ const char* RenderResourceName(PassResourceId id)
         "Environment", "Irradiance", "PrefilteredEnvironment", "BrdfLut",
         "ShadowDepth", "ReflectionColor", "ForwardColor", "ForwardDepth",
         "OutlinedColor", "SceneHdrColor", "SsaoAO", "SsaoColor", "Bloom",
-        "PostColor", "Overlay", "FinalColor"};
+        "PostColor", "Overlay", "FinalColor", "ForwardIndirect", "OutlinedIndirect", "SceneIndirect"};
     return static_cast<std::size_t>(id) < RenderResourceCount ? names[Index(id)] : "Unknown";
 }
 
@@ -81,20 +84,25 @@ PassResourceContract BuildPassResourceContract(RenderPassType pass, PassResource
     case RenderPassType::Forward:
         surface(); read(Id::ReflectionColor);
         write(Id::ForwardColor, Access::ColorWrite, Load::Clear, Load::Clear);
+        write(Id::ForwardIndirect, Access::ColorWrite, Load::Clear, Load::Clear);
         write(Id::ForwardDepth, Access::DepthWrite, Load::None, Load::Clear);
         break;
     case RenderPassType::Outline:
+        read(Id::ForwardIndirect, Access::PreserveColor);
+        write(Id::OutlinedIndirect, Access::ColorWrite, Load::Preserve, Load::Preserve, Id::ForwardIndirect);
         read(Id::ForwardColor, Access::PreserveColor); read(Id::ForwardDepth, Access::DepthTest);
         write(Id::OutlinedColor, Access::ColorWrite, Load::Preserve, Load::Preserve, Id::ForwardColor);
         break;
     case RenderPassType::Translucency:
+        read(Id::OutlinedIndirect, Access::PreserveColor);
+        write(Id::SceneIndirect, Access::ColorWrite, Load::Preserve, Load::Preserve, Id::OutlinedIndirect);
         surface(); read(Id::OutlinedColor, Access::PreserveColor); read(Id::ForwardDepth, Access::DepthTest);
         write(Id::SceneHdrColor, Access::ColorWrite, Load::Preserve, Load::Preserve, Id::OutlinedColor);
         break;
     case RenderPassType::SSAO:
         if (features.ssao)
         {
-            read(Id::SceneHdrColor); read(Id::ForwardDepth);
+            read(Id::SceneHdrColor); read(Id::ForwardDepth); read(Id::SceneIndirect);
             write(Id::SsaoAO, Access::ColorWrite, Load::Clear);
             write(Id::SsaoColor, Access::ColorWrite, Load::Clear);
         }
@@ -284,7 +292,7 @@ void PassResources::Validate() const
                 (!binding.hasDepth || binding.framebuffer != output.framebuffer || binding.depthTexture != output.depthTexture))
                 Fail(declaration.id, "does not preserve the declared depth target.");
             if (use.access == ResourceAccess::Sample && binding.texture &&
-                (binding.texture == output.texture || binding.texture == output.depthTexture))
+                (binding.texture == output.texture || binding.texture == output.depthTexture || binding.texture == output.otherColorTexture))
                 Fail(declaration.id, "has a sampled input overlapping its target attachment.");
         }
     }

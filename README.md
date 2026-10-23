@@ -21,12 +21,14 @@ IBL 当前使用内置六面 sRGB PNG 天空，不包含 HDR/EXR 环境文件导
 
 - Toon 材质支持分段漫反射、阴影色和 Rim Light；独立的 Outline Pass 使用 Inverted Hull 绘制轮廓。
 - Face Shadow 使用线性 SDF 纹理、角色局部 Face Forward/Right、左右镜像和独立 Key Light；可通过 `--face-shadow-demo` 加载外部 FBX 与面部阴影贴图。
+- Masked 材质使用 Base Color Alpha × Opacity 与 Alpha Cutoff（默认 0.5）裁剪，低于阈值的片元不写颜色和深度；保留片元按不透明表面绘制。主视图、平面反射、阴影及普通/实例化/细分路径使用同一规则，NPR 描边也执行裁剪。Material Editor 的 Blend Mode 选择 Masked，实例可单独覆盖 Cutoff；模式继承父材质。参数随场景保存，旧场景缺少 Cutoff 时使用 0.5。沿用现有单面剔除；拾取仍使用几何，不做 Alpha 像素拾取。
 - Translucency Pass 按视图深度从后向前绘制 Alpha Blend 物体，使用纹理 Alpha 并保持深度只读。
 
 ### 阴影、HDR 与后处理
 
 - Directional/Spot Light 阴影贴图与 PCF 采样；Forward Shader 使用 UBO 读取场景灯光。
 - Forward Pass 写入 RGBA16F HDR Scene Color；Bloom、SSAO、手动曝光、ACES Tone Mapping 和 sRGB 输出编码组成后处理链路。
+- SSAO 只衰减 PBR 的间接漫反射与 Toon 的基础环境项，保留直接光、环境镜面、Rim、天空和镜面地面反射。独立 RGBA16F 附件记录可遮蔽贡献；描边覆盖时清零，透明混合时按透过率衰减背景贡献，透明层自身不使用主视图 SSAO。材质 ORM AO 的原有作用保持不变。附加目标随视口重建，当前即使 SSAO 关闭也保留分配（8 字节/像素）。
 - 支持 Cubemap、半分辨率反射、离屏渲染目标和随窗口尺寸变化的目标重建。
 
 ### 场景与编辑器

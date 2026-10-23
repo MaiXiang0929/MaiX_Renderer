@@ -8,8 +8,10 @@ in vec3 texCoords;
 uniform samplerCube skybox;
 
 layout(location = 0) out vec4 color;
+layout(location = 1) out vec4 indirectDiffuse;
 
 void main()
 {
+    indirectDiffuse = vec4(0.0);
     color = texture(skybox, texCoords);
 }

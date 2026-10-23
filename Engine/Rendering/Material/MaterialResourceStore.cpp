@@ -98,6 +98,7 @@ bool MaterialResourceStore::UpdateOverride(MaterialHandle h, MaterialParameter p
     case MaterialParameter::Roughness: candidate.values.roughness = values.roughness; break;
     case MaterialParameter::AmbientOcclusion: candidate.values.ambientOcclusion = values.ambientOcclusion; break;
     case MaterialParameter::NormalScale: candidate.values.normalScale = values.normalScale; break;
+    case MaterialParameter::AlphaCutoff: candidate.values.alphaCutoff = values.alphaCutoff; break;
     case MaterialParameter::Opacity: candidate.values.opacity = values.opacity; break;
     case MaterialParameter::ToonThreshold: candidate.values.toonThreshold = values.toonThreshold; break;
     case MaterialParameter::ToonShadowStrength: candidate.values.toonShadowStrength = values.toonShadowStrength; break;
