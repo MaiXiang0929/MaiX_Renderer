@@ -10,7 +10,8 @@
 enum class BlendMode
 {
     Opaque,
-    AlphaBlend
+    AlphaBlend,
+    Masked
 };
 
 enum class ShadingModel

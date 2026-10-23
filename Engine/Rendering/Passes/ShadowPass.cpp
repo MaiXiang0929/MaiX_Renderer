@@ -69,7 +69,8 @@ void ShadowPass::Execute(RenderPassContext& context)
                 context.frame.lightVP * item.model;
             shader.SetMatrix4("lightMvp", &lightMvp.cell[0]);
             RenderSubmissionStats::Get().RecordMaterialBind(item.material);
-            item.material->BindDisplacement(shader, 0);
+            item.material->BindCoverage(shader, 0);
+            item.material->BindDisplacement(shader, 3);
             item.mesh->DrawPatches();
         }
     }
@@ -188,6 +189,7 @@ void ShadowPass::Execute(RenderPassContext& context)
                     activeShader = &m_InstancedStandardShader;
                     activeShader->Bind();
                 }
+                firstItem.material->BindCoverage(*activeShader, 0);
                 for (std::size_t firstInstance = 0;
                     firstInstance < instanceCount;
                     firstInstance += InstanceBuffer::MaxInstancesPerDraw)
@@ -227,6 +229,7 @@ void ShadowPass::Execute(RenderPassContext& context)
             const cy::Matrix4f lightMvp =
                 context.frame.lightVP * shadowCaster->model;
             activeShader->SetMatrix4("lightMvp", &lightMvp.cell[0]);
+            shadowCaster->material->BindCoverage(*activeShader, 0);
             firstItem.mesh->Draw();
         }
     }

@@ -24,6 +24,7 @@ struct FramebufferSpecification
     bool depthStencilEnabled = true;
     bool sampleableDepth = false;
     bool mipmapsEnabled = true;
+    bool secondaryColorEnabled = false;
 };
 
 class Framebuffer {
@@ -65,6 +66,7 @@ public:
     FramebufferColorFormat GetColorFormat() const { return m_ColorFormat; }
     bool HasDepthStencil() const { return m_DepthStencilEnabled; }
     bool HasDepthTexture() const { return m_DepthTexture != 0; }
+    RHITextureHandle GetSecondaryColorTexture() const { return m_SecondaryColorTexture; }
     RHITextureHandle GetDepthTexture() const { return m_DepthTexture; }
     bool HasMipmaps() const { return m_MipmapsEnabled; }
 
@@ -75,6 +77,8 @@ private:
     RHITargetHandle m_FBO = 0;
     RHITextureHandle m_ColorTexture = 0;
     RHITextureHandle m_DepthTexture = 0;
+    RHITextureHandle m_SecondaryColorTexture = 0;
+    bool m_SecondaryColorEnabled = false;
 
     int m_Width = 0;
     int m_Height = 0;

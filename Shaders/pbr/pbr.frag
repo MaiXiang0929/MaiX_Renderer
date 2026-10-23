@@ -10,6 +10,10 @@ in vec3 fragFaceForward;
 in vec3 fragFaceRight;
 
 layout(location = 0) out vec4 color;
+layout(location = 1) out vec4 indirectDiffuse;
+// Transparent surfaces attenuate the background contribution through the shared blend state.
+// Their own indirect light is excluded because the AO depth describes the opaque surface.
+uniform bool opaqueForSsao;
 
 struct MaterialData
 {
@@ -200,8 +204,19 @@ float CalculateFaceLightBand(vec3 lightDirection)
         sdfThreshold);
 }
 
+
+uniform bool coverageMasked;
+uniform float coverageOpacity;
+uniform float coverageCutoff;
+uniform bool coverageHasMap;
+uniform sampler2D coverageMap;
+
 void main()
 {
+    if (coverageMasked && coverageOpacity * (coverageHasMap ? texture(coverageMap, fragTexCoord).a : 1.0) < coverageCutoff)
+        discard;
+
+    indirectDiffuse = vec4(0.0);
     if (wireframePass) {
         color = vec4(0.03, 0.03, 0.03, 1.0);
         return;
@@ -257,6 +272,8 @@ void main()
             toonLighting += albedo * bandColor * radiance * visibility;
         }
         float rim = pow(1.0 - max(dot(N, V), 0.0), 3.0) * material.rimLightStrength;
+        indirectDiffuse = vec4(opaqueForSsao ? vec3(0.03) * albedo : vec3(0.0),
+            clamp(material.opacity * albedoSample.a, 0.0, 1.0));
         color = vec4(toonLighting + material.rimLightColor * rim,
             clamp(material.opacity * albedoSample.a, 0.0, 1.0));
         return;
@@ -341,6 +358,8 @@ void main()
         material.environmentReflectivity;
     vec3 ambient = (environmentDiffuse + environmentSpecular) * ao;
 
+    indirectDiffuse = vec4(opaqueForSsao ? environmentDiffuse * ao : vec3(0.0),
+        clamp(material.opacity * albedoSample.a, 0.0, 1.0));
     color = vec4(
         ambient + directLighting,
         clamp(material.opacity * albedoSample.a, 0.0, 1.0));

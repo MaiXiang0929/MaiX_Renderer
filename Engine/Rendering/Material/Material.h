@@ -50,6 +50,7 @@ public:
     void SetOcclusionRoughnessMetallicMap(
         std::shared_ptr<Texture2D> texture);
     void SetDisplacementMap(std::shared_ptr<Texture2D> texture);
+    void BindCoverage(Shader& shader, unsigned int textureUnit) const;
     void BindDisplacement(Shader& shader, unsigned int textureUnit) const;
 
 private:

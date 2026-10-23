@@ -80,13 +80,14 @@ J Properties(const MaterialProperties& p)
 #define PUT_VEC(field) j[#field]=Vec(p.field);
     SCENE_VECTORS(PUT_VEC)
 #undef PUT_VEC
+    j["alphaCutoff"]=p.alphaCutoff;
     j["shadingModel"]=static_cast<int>(p.shadingModel); j["faceShadowEnabled"]=p.faceShadowEnabled;
     j["faceShadowMirrorX"]=p.faceShadowMirrorX; j["outlineEnabled"]=p.outlineEnabled; return j;
 }
 MaterialProperties ReadProperties(const J& j)
 {
     Fields(j,{"baseColor","specularColor","shininess","environmentReflectivity","metallic","roughness",
-        "ambientOcclusion","normalScale","opacity","shadingModel","toonThreshold","toonShadowStrength","toonShadowColor",
+        "ambientOcclusion","normalScale","opacity","alphaCutoff","shadingModel","toonThreshold","toonShadowStrength","toonShadowColor",
         "rimLightStrength","rimLightColor","faceShadowEnabled","faceForwardLocal","faceRightLocal","faceShadowSoftness",
         "faceShadowMirrorX","outlineEnabled","outlineThickness","outlineColor"});
     MaterialProperties p;
@@ -96,6 +97,7 @@ MaterialProperties ReadProperties(const J& j)
 #define GET_VEC(field) p.field=Vector(j.at(#field));
     SCENE_VECTORS(GET_VEC)
 #undef GET_VEC
+    if (j.contains("alphaCutoff")) p.alphaCutoff=Number(j.at("alphaCutoff"));
     const auto shading=Key(j.at("shadingModel")); Check(shading<=1,"Unknown shading model.");
     p.shadingModel=static_cast<ShadingModel>(shading);
     p.faceShadowEnabled=j.at("faceShadowEnabled").get<bool>();
@@ -150,7 +152,8 @@ bool ValidateSceneDocument(const SceneDocument& d, std::string& error)
         for (const auto& m:d.materials)
         {
             Check(m.id && materials.emplace(m.id,&m).second,"Duplicate or zero material key.");
-            Check(static_cast<int>(m.blend)>=0 && static_cast<int>(m.blend)<=1,"Invalid blend mode.");
+            Check(static_cast<int>(m.blend)>=0 && static_cast<int>(m.blend)<=2,"Invalid blend mode.");
+            Check(std::isfinite(m.properties.alphaCutoff)&&m.properties.alphaCutoff>=0&&m.properties.alphaCutoff<=1,"Invalid alpha cutoff.");
             Check(static_cast<int>(m.properties.shadingModel)>=0 && static_cast<int>(m.properties.shadingModel)<=1,"Invalid shading model.");
 #define CHECK_FLOAT(field) Check(std::isfinite(m.properties.field),"Non-finite material parameter.");
             SCENE_FLOATS(CHECK_FLOAT)
@@ -323,9 +326,9 @@ bool DecodeSceneDocument(const std::string& text,SceneDocument& output,std::stri
             Fields(v,{"id","parent","name","properties","overrides","blend","textures"});
             SceneMaterialRecord m; m.id=Key(v.at("id")); m.parent=Key(v.at("parent")); m.name=v.at("name").get<std::string>();
             m.properties=ReadProperties(v.at("properties"));
-            const auto mask=v.at("overrides").get<std::string>(); Check(mask.size()==MaterialParameterCount&&mask.find_first_not_of("01")==std::string::npos,"Invalid material override mask.");
+            const auto mask=v.at("overrides").get<std::string>(); Check((mask.size()==MaterialParameterCount||mask.size()==MaterialParameterCount-1)&&mask.find_first_not_of("01")==std::string::npos,"Invalid material override mask.");
             m.overrides=MaterialOverrideMask(mask);
-            const auto blend=Key(v.at("blend")); Check(blend<=1,"Invalid blend mode."); m.blend=static_cast<BlendMode>(blend);
+            const auto blend=Key(v.at("blend")); Check(blend<=2,"Invalid blend mode."); m.blend=static_cast<BlendMode>(blend);
             const auto& ts=v.at("textures"); Check(ts.is_array()&&ts.size()==MaterialTextureSlotCount,"Invalid texture slots.");
             for (size_t i=0;i<ts.size();++i)
             {

@@ -18,7 +18,7 @@ bool Framebuffer::Init(const FramebufferSpecification &spec)
         return false;
     if (m_FBO != 0 && m_Width == spec.width && m_Height == spec.height && m_ColorFormat == spec.colorFormat &&
         m_DepthStencilEnabled == spec.depthStencilEnabled && m_SampleableDepth == spec.sampleableDepth &&
-        m_MipmapsEnabled == spec.mipmapsEnabled)
+        m_MipmapsEnabled == spec.mipmapsEnabled && m_SecondaryColorEnabled == spec.secondaryColorEnabled)
         return true;
     RHITargetDesc desc;
     desc.width = spec.width;
@@ -29,6 +29,7 @@ bool Framebuffer::Init(const FramebufferSpecification &spec)
     desc.depth = spec.depthStencilEnabled;
     desc.sampleableDepth = spec.sampleableDepth;
     desc.mipmaps = spec.mipmapsEnabled;
+    desc.secondaryColor = spec.secondaryColorEnabled;
     const auto candidate = m_Device.CreateTarget(desc);
     if (candidate.handle == 0)
         return false;
@@ -37,6 +38,8 @@ bool Framebuffer::Init(const FramebufferSpecification &spec)
     m_FBO = candidate.handle;
     m_ColorTexture = candidate.color;
     m_DepthTexture = candidate.depth;
+    m_SecondaryColorTexture = candidate.secondaryColor;
+    m_SecondaryColorEnabled = spec.secondaryColorEnabled;
     m_Width = spec.width;
     m_Height = spec.height;
     m_ColorFormat = spec.colorFormat;
@@ -51,6 +54,8 @@ void Framebuffer::Cleanup()
     m_FBO = 0;
     m_ColorTexture = 0;
     m_DepthTexture = 0;
+    m_SecondaryColorTexture = 0;
+    m_SecondaryColorEnabled = false;
     m_Width = 0;
     m_Height = 0;
     m_ColorFormat = FramebufferColorFormat::RGBA8;

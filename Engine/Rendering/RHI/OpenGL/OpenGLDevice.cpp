@@ -515,7 +515,7 @@ class OpenGLDevice final : public RHIDevice, public RHICommandList
     RHITarget CreateTarget(const RHITargetDesc &desc) override
     {
         if (!desc.width || !desc.height || desc.width > m_Caps.maxTextureSize ||
-            desc.height > m_Caps.maxTextureSize || (!desc.color && !desc.depth))
+            desc.height > m_Caps.maxTextureSize || (!desc.color && !desc.depth) || (desc.secondaryColor && !desc.color))
             return {};
         Bindings saved;
         Target target;
@@ -525,6 +525,7 @@ class OpenGLDevice final : public RHIDevice, public RHICommandList
             return {};
         auto rollback = [&]() {
             DeleteTexture(target.handles.color);
+            DeleteTexture(target.handles.secondaryColor);
             DeleteTexture(target.handles.depth);
             if (target.renderbuffer)
                 glDeleteRenderbuffers(1, &target.renderbuffer);
@@ -554,6 +555,20 @@ class OpenGLDevice final : public RHIDevice, public RHICommandList
         {
             glDrawBuffer(GL_NONE);
             glReadBuffer(GL_NONE);
+        }
+        if (desc.secondaryColor)
+        {
+            texture.format = desc.colorFormat;
+            texture.mipmaps = false;
+            texture.anisotropic = false;
+            target.handles.secondaryColor = CreateTexture(texture, {});
+            if (!target.handles.secondaryColor)
+                return {};
+            auto& secondary = Find(m_Textures, target.handles.secondaryColor);
+            secondary.attachment = true;
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, secondary.object, 0);
+            const GLenum buffers[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
+            glDrawBuffers(2, buffers);
         }
         if (desc.depth && (desc.sampleableDepth || desc.shadow))
         {
@@ -604,6 +619,7 @@ class OpenGLDevice final : public RHIDevice, public RHICommandList
         if (target.renderbuffer)
             glDeleteRenderbuffers(1, &target.renderbuffer);
         DeleteTexture(target.handles.color);
+        DeleteTexture(target.handles.secondaryColor);
         DeleteTexture(target.handles.depth);
         m_Targets.erase(it);
         return true;
@@ -625,6 +641,8 @@ class OpenGLDevice final : public RHIDevice, public RHICommandList
             bindings.renderbuffer = next.renderbuffer;
         if (old.handles.color != 0 && bindings.texture == static_cast<GLint>(Native(old.handles.color)))
             bindings.texture = Native(next.handles.color);
+        if (old.handles.secondaryColor != 0 && bindings.texture == static_cast<GLint>(Native(old.handles.secondaryColor)))
+            bindings.texture = next.handles.secondaryColor ? Native(next.handles.secondaryColor) : 0;
         if (old.handles.depth != 0 && bindings.texture == static_cast<GLint>(Native(old.handles.depth)))
             bindings.texture = Native(next.handles.depth);
     }
@@ -704,7 +722,7 @@ class OpenGLDevice final : public RHIDevice, public RHICommandList
             if (m_ActiveTarget != 0)
             {
                 const auto &output = Find(m_Targets, m_ActiveTarget).handles;
-                if (handle == output.color || handle == output.depth)
+                if (handle == output.color || handle == output.depth || handle == output.secondaryColor)
                     throw RHIError("Texture sampling overlaps the current render target");
             }
             if (texture.desc.kind != kind)

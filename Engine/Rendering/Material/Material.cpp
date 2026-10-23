@@ -52,6 +52,8 @@ void Material::SetName(std::string name)
 void Material::Bind(Shader& shader, unsigned int firstTextureUnit) const
 {
     RenderSubmissionStats::Get().RecordMaterialBind(this);
+    BindCoverage(shader, firstTextureUnit);
+    shader.SetInt("opaqueForSsao", m_BlendMode != BlendMode::AlphaBlend ? 1 : 0);
     shader.SetVec3(
         "material.baseColor",
         m_Properties.baseColor.x,
@@ -253,4 +255,16 @@ void Material::BindDisplacement(Shader& shader, unsigned int textureUnit) const
     displacementMap->Bind(shader.Device(), textureUnit);
     shader.SetInt("material.displacementMap", static_cast<int>(textureUnit));
     shader.SetInt("displacementMap", static_cast<int>(textureUnit));
+}
+
+void Material::BindCoverage(Shader& shader, unsigned int textureUnit) const
+{
+    shader.SetInt("coverageMasked", m_BlendMode == BlendMode::Masked ? 1 : 0);
+    shader.SetFloat("coverageOpacity", m_Properties.opacity);
+    shader.SetFloat("coverageCutoff", m_Properties.alphaCutoff);
+    const auto& texture = GetTexture(MaterialTextureSlot::BaseColor);
+    shader.SetInt("coverageHasMap", texture ? 1 : 0);
+    // Always assign the sampler, including untextured materials.
+    shader.SetInt("coverageMap", static_cast<int>(textureUnit));
+    if (texture) texture->Bind(shader.Device(), textureUnit);
 }

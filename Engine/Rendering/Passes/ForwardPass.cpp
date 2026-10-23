@@ -50,6 +50,7 @@ bool ForwardPass::Resize(unsigned int width, unsigned int height)
     specification.height = static_cast<int>(height);
     specification.colorFormat = FramebufferColorFormat::RGBA16F;
     specification.sampleableDepth = true;
+    specification.secondaryColorEnabled = true;
     return m_Framebuffer.Init(specification);
 }
 
@@ -153,6 +154,7 @@ void ForwardPass::Execute(RenderPassContext& context)
     context.Resources().EndTarget(PassResourceId::ForwardColor, false);
     context.Resources().Publish(PassResourceId::ForwardColor);
     context.Resources().Publish(PassResourceId::ForwardDepth);
+    context.Resources().Publish(PassResourceId::ForwardIndirect);
 }
 
 void ForwardPass::RenderSurface(

@@ -37,6 +37,7 @@ MaterialProperties SanitizeMaterialProperties(const MaterialProperties& properti
     clamped.roughness = std::clamp(clamped.roughness, 0.045f, 1.0f);
     clamped.ambientOcclusion = std::clamp(clamped.ambientOcclusion, 0.0f, 1.0f);
     clamped.normalScale = std::clamp(clamped.normalScale, 0.0f, 4.0f);
+    clamped.alphaCutoff = std::isfinite(clamped.alphaCutoff) ? std::clamp(clamped.alphaCutoff, 0.0f, 1.0f) : 0.5f;
     clamped.opacity = std::clamp(clamped.opacity, 0.0f, 1.0f);
     clamped.toonThreshold = std::clamp(clamped.toonThreshold, 0.0f, 1.0f);
     clamped.toonShadowStrength = std::clamp(clamped.toonShadowStrength, 0.0f, 1.0f);
@@ -91,6 +92,7 @@ Material MaterialInstance::Resolve(const Material& base, const std::string& name
     if (overridden(MaterialParameter::OutlineEnabled)) resolved.outlineEnabled = values.outlineEnabled;
     if (overridden(MaterialParameter::OutlineThickness)) resolved.outlineThickness = values.outlineThickness;
     if (overridden(MaterialParameter::OutlineColor)) resolved.outlineColor = values.outlineColor;
+    if (overridden(MaterialParameter::AlphaCutoff)) resolved.alphaCutoff = values.alphaCutoff;
     resolved = SanitizeMaterialProperties(resolved);
     // Shading Model 与 Blend Mode 始终由基础材质决定，实例不能覆盖队列策略。
     for (std::size_t i = 0; i < textures.size(); ++i)
