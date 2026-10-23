@@ -192,8 +192,8 @@ void RenderPipeline::Execute(RenderPassContext& context)
 void RenderPipeline::BindFrameResources(FrameResources& resources, const RenderPassContext& context) const
 {
     using Id = PassResourceId;
-    resources.Bind(Id::Environment, {context.cubemap.GetID(), 0, 0, 0, 0,
-        ResourceFormat::Cubemap, false, true});
+    resources.Bind(Id::Environment, {context.cubemap.GetID(), 0, 0, context.cubemap.Size(), context.cubemap.Size(),
+        context.cubemap.IsHdr() ? ResourceFormat::Cubemap16F : ResourceFormat::Cubemap, false, true});
     const auto& lighting = context.cubemap.Lighting();
     resources.Bind(Id::Irradiance, {lighting.Irradiance(),0,0,
         EnvironmentLighting::IrradianceSize,EnvironmentLighting::IrradianceSize,

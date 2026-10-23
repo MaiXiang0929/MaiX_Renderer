@@ -2,6 +2,17 @@
 #pragma once
 #include <cmath>
 
+struct EnvironmentSettings
+{
+    float intensity = 1.0f;
+    float rotationDegrees = 0.0f;
+};
+inline bool IsValidEnvironmentSettings(const EnvironmentSettings& settings)
+{
+    return std::isfinite(settings.intensity) && settings.intensity >= 0 && settings.intensity <= 16 &&
+        std::isfinite(settings.rotationDegrees) && settings.rotationDegrees >= -180 && settings.rotationDegrees <= 180;
+}
+
 struct TessellationSettings
 {
     bool enabled = false;

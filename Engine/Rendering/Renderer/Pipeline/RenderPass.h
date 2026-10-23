@@ -18,6 +18,7 @@ struct TessellationSettings;
 /// @details 这里只保存矩阵、光源和视口等 CPU 数据，不持有任何 OpenGL 资源。
 struct RenderFrameData
 {
+    EnvironmentSettings environment;
     PostProcessSettings postProcess; // Value snapshot; the scene remains the authoring owner.
     unsigned int viewportWidth = 0;
     unsigned int viewportHeight = 0;

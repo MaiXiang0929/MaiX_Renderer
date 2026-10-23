@@ -131,6 +131,7 @@ public:
     bool RemoveLight(LightId id);
 
     void LoadCubemap(const std::string& directoryPath);
+    bool LoadEnvironment(const std::filesystem::path& source, std::string& error);
 
     void ExecutePipeline(RenderFrameData& frame);
     /// 编辑器只能在渲染目标未再次 Resize 的当前帧采样该纹理。

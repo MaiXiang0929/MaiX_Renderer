@@ -50,6 +50,12 @@ bool CaptureSceneDocument(SceneState& scene,const Renderer& renderer,const Scene
         const auto resources=renderer.GetSceneResources();
         SceneDocument d;
         d.postProcess=scene.postProcess;
+        d.environment=scene.environment;
+        if (!scene.environmentSource.empty())
+        {
+            Require(std::filesystem::is_regular_file(scene.environmentSource),"Environment source is missing.");
+            d.environmentSource=MakeSceneAssetPath(scene.environmentSource,roots);
+        }
         std::unordered_map<RenderResourceId,std::uint64_t> materials;
         std::unordered_map<std::uint64_t,std::uint64_t> actors;
         std::unordered_set<PrimitiveId> primitives;
@@ -139,6 +145,7 @@ bool ReplaceSceneFromDocument(SceneState& active,Renderer& renderer,const SceneA
     if (!ValidateSceneDocument(d,error)) return false;
     SceneState candidate;
     candidate.postProcess=d.postProcess;
+    candidate.environment=d.environment;
     struct Rollback
     {
         SceneState& scene; Renderer& renderer;
@@ -146,6 +153,7 @@ bool ReplaceSceneFromDocument(SceneState& active,Renderer& renderer,const SceneA
     } rollback{candidate,renderer};
     try
     {
+        if (d.environmentSource) candidate.environmentSource=ResolveSceneAssetPath(*d.environmentSource,roots);
         const auto old=renderer.GetSceneResources();
         candidate.models.reserve(d.actors.size()); candidate.lights.reserve(d.actors.size());
         candidate.sceneMaterials.reserve(d.materials.size());
@@ -303,6 +311,8 @@ bool ReplaceSceneFromDocument(SceneState& active,Renderer& renderer,const SceneA
         SynchronizeSceneActors(candidate,renderer);
         candidate.reflectionGroundEnabled=d.reflectionGroundEnabled; candidate.groundY=d.groundY; candidate.modelDiameter=d.modelDiameter;
         candidate.sceneRadius=d.sceneRadius; candidate.defaultBoundsMin=d.defaultBoundsMin; candidate.defaultBoundsMax=d.defaultBoundsMax; candidate.objCenter=d.objCenter;
+        if (!renderer.LoadEnvironment(candidate.environmentSource,error))
+            throw std::runtime_error("Environment rebuild failed: " + error);
         // No operation after this point allocates: commit, then release exactly the old resource set.
         active=std::move(candidate); candidate=SceneState{};
         ReleaseSnapshot(old,renderer); error.clear(); return true;

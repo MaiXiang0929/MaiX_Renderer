@@ -8,6 +8,13 @@
 
 namespace AssetImport
 {
+// Linear RGBA float pixels for environment maps; kept separate from material images.
+struct HdrImageData
+{
+    unsigned width = 0, height = 0;
+    std::vector<float> pixels;
+};
+
 struct ImageData
 {
     static constexpr std::uint32_t RgbaChannelCount = 4;

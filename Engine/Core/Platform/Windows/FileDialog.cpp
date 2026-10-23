@@ -148,6 +148,12 @@ std::optional<std::filesystem::path> OpenModelFile(NativeWindowHandle ownerWindo
         std::size(filters));
 }
 
+std::optional<std::filesystem::path> OpenHdrEnvironmentFile(NativeWindowHandle ownerWindow)
+{
+    static constexpr COMDLG_FILTERSPEC filters[] = {{L"Radiance Environment (*.hdr)",L"*.hdr"}};
+    return OpenFile(ownerWindow,L"Select HDR Environment",filters,std::size(filters));
+}
+
 std::optional<std::filesystem::path> OpenTextureFile(NativeWindowHandle ownerWindow)
 {
     static constexpr COMDLG_FILTERSPEC filters[] = {

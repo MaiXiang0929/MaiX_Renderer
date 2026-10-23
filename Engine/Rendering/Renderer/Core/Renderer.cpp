@@ -9,6 +9,7 @@
 #include "Engine/Rendering/Renderer/Core/Renderer.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <iostream>
 #include <utility>
@@ -364,6 +365,23 @@ void Renderer::LoadCubemap(const std::string& directoryPath)
         std::cout << "[Renderer] Cubemap loaded from: "
                   << directoryPath << std::endl;
     }
+}
+
+bool Renderer::LoadEnvironment(const std::filesystem::path& source, std::string& error)
+{
+    try
+    {
+        if (source.empty())
+        {
+            if (!m_Cubemap.Load("assets/models/sky")) { error = "Cannot rebuild the built-in environment."; return false; }
+            error.clear(); return true;
+        }
+        auto extension = source.extension().u8string();
+        std::transform(extension.begin(),extension.end(),extension.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
+        if (extension != ".hdr") { error = "Select a Radiance .hdr environment."; return false; }
+        return m_Cubemap.LoadHdr(source,error);
+    }
+    catch (const std::exception& exception) { error = exception.what(); return false; }
 }
 
 void Renderer::ExecutePipeline(RenderFrameData& frame)

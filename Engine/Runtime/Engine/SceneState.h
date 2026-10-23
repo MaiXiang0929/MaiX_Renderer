@@ -5,6 +5,7 @@
 #include "Engine/Runtime/Scene/SceneModel.h"
 #include "Engine/Rendering/Renderer/Pipeline/RenderSettings.h"
 #include <limits>
+#include <filesystem>
 #include <vector>
 
 // World owns identity/local transforms; typed component records below expose
@@ -12,6 +13,8 @@
 struct SceneState
 {
     PostProcessSettings postProcess;
+    EnvironmentSettings environment;
+    std::filesystem::path environmentSource; // Empty selects the built-in six-face sky.
     World world;
     std::vector<SceneModel> models;
     std::vector<SceneLight> lights;

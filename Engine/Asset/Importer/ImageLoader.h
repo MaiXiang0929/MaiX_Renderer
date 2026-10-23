@@ -13,6 +13,8 @@ namespace AssetImport
 class ImageLoader
 {
 public:
+    // Radiance RGBE only, 2:1, top-first linear RGBA; rejects values outside RGBA16F range.
+    static bool LoadHdrFromFile(const std::filesystem::path& path, HdrImageData& image, std::string& error);
     static bool LoadFromFile(
         const std::filesystem::path& path,
         ImageData& outImage,

@@ -15,7 +15,7 @@ MaiX_Renderer 当前是一个基于 C++17 与 OpenGL 4.0 Core Profile 的实时�
 - 环境加载时由 GPU 生成漫反射辐照度、GGX 粗糙度预过滤 Cubemap 与 BRDF LUT；主视图、平面反射及透明 PBR 共用 IBL，浮点环境资源与反射结果由最终后处理统一曝光和色调映射。
 - `--material-lab` 使用共享 Mesh 展示铜、塑料、陶瓷和粗糙金属四种材质。Material Editor 可在运行时修改材质参数与纹理。
 
-IBL 当前使用内置六面 sRGB PNG 天空，不包含 HDR/EXR 环境文件导入或动态反射探针。预计算在加载环境或 F6 重载时执行；Roughness 控制环境反射模糊程度，Metallic 控制漫反射与镜面分配，Environment Reflectivity 保留为环境镜面强度，AO 作用于间接光。可用 `--material-lab` 对照粗糙度与金属度，并旋转视角检查反射方向；画面效果仍需用户验收。
+IBL 可使用内置六面 sRGB PNG 天空或 Radiance `.hdr` 全景；不包含 EXR、动态天空或动态反射探针。HDR 在加载时转换为浮点 Cubemap 并生成 IBL，F6 重载会重新生成当前环境的 IBL；Roughness 控制环境反射模糊程度，Metallic 控制漫反射与镜面分配，Environment Reflectivity 保留为环境镜面强度，AO 作用于间接光。可用 `--material-lab` 对照粗糙度与金属度，并旋转视角检查反射方向；画面效果仍需用户验收。
 
 ### NPR 与透明渲染
 
@@ -104,6 +104,12 @@ Viewport 顶部工具栏提供移动、旋转、缩放与世界/局部空间切�
 `File → Save Scene / Save Scene As...` 保存带版本号的 `.maixscene` JSON，默认目录为当前项目 `Assets/Scenes/`，文件须保存在该项目 Assets 内；项目本身的位置可自由选择。`File → Open Scene...` 重开场景；当前内容有未保存修改时，可选择保存后打开、放弃修改或取消。打开失败保留当前场景，保存失败保留原文件。场景不会自动保存，Save As 不改变项目的默认场景设置。
 
 场景文件保留对象名称、父子层级、局部变换、本地 Visible、模型分段与材质绑定、灯光和相机参数，以及基础材质、实例父子关系、参数覆盖和纹理继承/替换/禁用。运行时资源 Handle 不写入文件。项目内资源使用 Assets 相对引用，内置资源使用引擎引用，项目外文件保留明确的绝对路径；不自动复制或归档依赖。FBX 内嵌纹理以源 FBX 的元素身份定位，缺失或不兼容来源会报错。
+
+`View → Render Settings → Environment Lighting` 中使用 `Load HDR...` 选择 2:1 Radiance `.hdr` 全景，`Use built-in sky` 恢复内置环境，`Reload HDR` 重新读取当前文件。Environment intensity 是 0–16 的线性倍率，Environment rotation 是绕世界 Y 轴的水平旋转（-180°–180°）；天空、PBR（含透明）和反射视图统一使用，直接灯光与 Toon 原有基础环境项不受该倍率影响。地面只对环境 fallback 采样应用倍率，已有平面反射结果不重复放大。`Reset environment parameters` 恢复强度 1、旋转 0，不改变来源；上方 `Reset to Defaults` 只重置后处理和抗锯齿。
+
+环境来源和参数随场景保存，旧场景缺少环境记录时使用内置天空、强度 1、旋转 0。项目 Assets 中的 HDR 使用相对引用，外部文件保留绝对引用；选择文件不会自动复制。环境和 IBL 重建全部成功后才提交，失败保留原场景、来源与 GPU 环境。首次加载/重载会同步解码并预计算，可能短暂等待；调整旋转与强度只更新当帧值，不重复预计算。
+
+HDR 文件及单份解码 RGBA 浮点缓冲分别限制为 256 MiB，要求 2:1，超出 RGBA16F 范围（65504）的输入、负值或非有限值拒绝加载；解码时会同时持有编码数据和浮点候选，峰值内存高于单缓冲上限。源 Cubemap 自动选择不超过 1024 的面尺寸。强度导致输出超出半精度范围时饱和至 65504，最终仍由既有曝光与 Tone Mapping 输出。新 HDR 环境效果待用户验收。
 
 `View → Render Settings` 编辑当前场景的 Exposure（EV）、ACES Tone Mapping、Bloom、SSAO 与抗锯齿设置；`Reset to Defaults` 恢复默认值（包括开启 FXAA），关闭效果保留其参数。曝光每增加 1 EV，线性亮度加倍；Bloom Threshold 使用曝光前的线性 HDR 值，SSAO Radius/Bias 使用场景世界单位。修改即时影响画面，并纳入未保存修改检测；通过 Save Scene 保存后，再次打开该场景恢复这些值；重启仍按项目默认场景打开。参数由 CPU 场景持有，每帧以快照传入渲染管线，GPU 资源仍由 Renderer/Pass 管理。
 
