@@ -262,7 +262,14 @@ bool InspectorPanel::Draw(EditorSelection &selection, SceneState &scene, bool &c
         ImGui::TextDisabled("Cone follows the light direction.");
     }
 
+    const bool shadowSupported = SupportsShadowMap(light->proxy.type);
+    ImGui::BeginDisabled(!shadowSupported);
     changed |= ImGui::Checkbox("Cast Shadow", &light->proxy.castsShadow);
+    ImGui::EndDisabled();
+    if (!shadowSupported)
+        ImGui::TextDisabled("Point light shadows are not supported.");
+    else if (light->proxy.id != scene.mainLightId)
+        ImGui::TextDisabled("Only the scene main light currently casts shadows.");
     if (changed)
         ApplySceneLightTransform(*light, renderer);
 

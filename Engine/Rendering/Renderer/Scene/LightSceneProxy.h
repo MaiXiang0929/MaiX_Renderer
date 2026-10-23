@@ -16,6 +16,11 @@ enum class LightType
     Spot
 };
 
+inline bool SupportsShadowMap(LightType type)
+{
+    return type == LightType::Directional || type == LightType::Spot;
+}
+
 struct LightSceneProxy
 {
     LightId id = InvalidLightId;

@@ -26,6 +26,8 @@ struct RenderFrameData
     cy::Matrix4f projection;
     cy::Matrix4f view;
     cy::Matrix4f lightVP;
+    // Spot: near*far/(far-near), 2*tan(outer half angle). Zero for orthographic/no shadow.
+    cy::Vec2f spotShadowBias{0.0f, 0.0f};
     LightId shadowLightId = InvalidLightId;
     LightId keyLightId = InvalidLightId;
 

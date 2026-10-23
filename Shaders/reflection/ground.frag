@@ -12,7 +12,8 @@ uniform vec3 cameraWorldPos;
 uniform mat4 lightVP;
 uniform sampler2DShadow shadowMap;
 uniform bool shadowsEnabled;
-uniform bool shadowIsDirectional;
+uniform vec3 spotShadowBias; // xy: perspective depth coefficient, cone width per unit distance
+uniform vec3 shadowLightPosition;
 
 float CalculateShadowVisibility(vec4 lightSpacePos)
 {
@@ -22,27 +23,37 @@ float CalculateShadowVisibility(vec4 lightSpacePos)
     }
 
     if (lightSpacePos.w <= 0.0) {
-        return shadowIsDirectional ? 1.0 : 0.0;
+        return 1.0;
     }
 
     vec3 projected = lightSpacePos.xyz / lightSpacePos.w;
     projected = projected * 0.5 + 0.5;
 
-    // 方向光在阴影图外保留直射；聚光灯沿用光锥外遮蔽约定。
+    // No shadow evidence outside either shadow camera; preserve reflected radiance.
     if (projected.x < 0.0 || projected.x > 1.0 ||
         projected.y < 0.0 || projected.y > 1.0 ||
         projected.z < 0.0 || projected.z > 1.0) {
-        return shadowIsDirectional ? 1.0 : 0.0;
+        return 1.0;
     }
 
     vec2 texelSize = 1.0 / vec2(textureSize(shadowMap, 0));
+    float bias = 0.001;
+    if (spotShadowBias.x > 0.0)
+    {
+        float distance = lightSpacePos.w;
+        vec3 toLight = shadowLightPosition - worldPos;
+        float nDotL = toLight.y / max(length(toLight), 0.0001);
+        float worldTexel = spotShadowBias.y * distance * texelSize.x;
+        float worldBias = min(worldTexel * max(2.0 * (1.0 - nDotL), 0.5), distance * 0.1);
+        bias = spotShadowBias.x * worldBias / (distance * (distance - worldBias));
+    }
     float visibility = 0.0;
     for (int x = -1; x <= 1; ++x) {
         for (int y = -1; y <= 1; ++y) {
             visibility += texture(
                 shadowMap,
                 vec3(projected.xy + vec2(x, y) * texelSize,
-                     projected.z - 0.001));
+                     projected.z - bias));
         }
     }
     return visibility / 9.0;

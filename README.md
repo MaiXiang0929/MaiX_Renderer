@@ -26,7 +26,8 @@ IBL 可使用内置六面 sRGB PNG 天空或 Radiance `.hdr` 全景；不包含 
 
 ### 阴影、HDR 与后处理
 
-- Directional/Spot Light 阴影贴图与 PCF 采样；Forward Shader 使用 UBO 读取场景灯光。
+- 当前仅场景主灯（mainLight）可投影：Directional 使用场景包围范围拟合的正交阴影，Spot 使用灯光世界位置/方向、两倍 Outer Cone 半角和 Range 的透视阴影；Forward Shader 使用 UBO 读取场景灯光。点光源不生成阴影，仍可作为 NPR Key Light；Inspector 禁用其 Cast Shadow，并提示非主灯的投影限制。
+- 聚光灯阴影近面为 Range 的 0.1%，远面为 Range；Bias 按接收位置的阴影纹素大小计算并转换到透视深度，方向光保留原有 Bias。阴影图覆盖范围之外不额外压暗，锥角/距离衰减仍独立生效。主视图、反射和透明接收表面共用当帧投影与 Bias；Masked、实例化及细分投影沿用既有路径。本轮聚光灯阴影画面待用户验收。
 - FXAA 在 Present 阶段处理色调映射和 sRGB 编码后的场景颜色，再合成编辑器叠加层；无需新增全分辨率目标。可在 Render Settings 的 Anti-aliasing → Method 选择 Off/FXAA。新建场景默认 FXAA，旧 v1/v2 场景缺少该字段时使用 Off；它可平滑轮廓和描边，也可能软化细节，不能消除运动或高光的时域闪烁。
 - Forward Pass 写入 RGBA16F HDR Scene Color；Bloom、SSAO、手动曝光、ACES Tone Mapping 和 sRGB 输出编码组成后处理链路。
 - SSAO 只衰减 PBR 的间接漫反射与 Toon 的基础环境项，保留直接光、环境镜面、Rim、天空和镜面地面反射。独立 RGBA16F 附件记录可遮蔽贡献；描边覆盖时清零，透明混合时按透过率衰减背景贡献，透明层自身不使用主视图 SSAO。材质 ORM AO 的原有作用保持不变。附加目标随视口重建，当前即使 SSAO 关闭也保留分配（8 字节/像素）。

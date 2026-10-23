@@ -131,6 +131,7 @@ void ForwardPass::Execute(RenderPassContext& context)
     {
         m_GroundShader.Bind();
         BindEnvironmentSettings(m_GroundShader, context.frame.environment);
+        m_GroundShader.SetVec3("spotShadowBias", context.frame.spotShadowBias.x, context.frame.spotShadowBias.y, 0.0f);
         m_GroundShader.SetMatrix4("mvp", &context.frame.groundMvp.cell[0]);
         m_GroundShader.SetMatrix4("model", &context.frame.groundModel.cell[0]);
         m_GroundShader.SetMatrix4(
@@ -151,8 +152,9 @@ void ForwardPass::Execute(RenderPassContext& context)
             "shadowsEnabled", context.frame.shadowsEnabled ? 1 : 0);
         const auto shadowLight = std::find_if(context.mainView.lights.begin(), context.mainView.lights.end(),
             [&](const LightSceneProxy& light) { return light.id == context.frame.shadowLightId; });
-        m_GroundShader.SetInt("shadowIsDirectional", shadowLight != context.mainView.lights.end() &&
-            shadowLight->type == LightType::Directional ? 1 : 0);
+        const auto lightPosition = shadowLight != context.mainView.lights.end() ?
+            shadowLight->position : cy::Vec3f(0.0f);
+        m_GroundShader.SetVec3("shadowLightPosition", lightPosition.x, lightPosition.y, lightPosition.z);
         context.groundMesh.Draw();
     }
 
@@ -384,6 +386,7 @@ void ForwardPass::PrepareSurfaceShader(
     const cy::Matrix4f& view = renderView.view;
     shader.Bind();
     BindEnvironmentSettings(shader, context.frame.environment);
+    shader.SetVec3("spotShadowBias", context.frame.spotShadowBias.x, context.frame.spotShadowBias.y, 0.0f);
     const LightUploadData lightUpload = UploadLights(
         renderView,
         context.frame.shadowLightId,
