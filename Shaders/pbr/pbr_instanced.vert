@@ -11,6 +11,7 @@ layout(std140) uniform InstanceTransforms
 };
 
 uniform mat4 projectionFromView;
+uniform int surfaceSide;
 uniform vec3 faceForwardLocal;
 uniform vec3 faceRightLocal;
 
@@ -33,6 +34,8 @@ void main()
     fragNormal = normalize(normalMatrix * normal);
     fragTangent = normalize(mat3(modelView) * tangent.xyz);
     fragTangentSign = tangent.w;
+    if (surfaceSide != 3)
+        fragTangentSign *= sign(determinant(mat3(modelView)));
     fragTexCoord = texCoord;
 
     fragFaceForward = normalize(mat3(modelView) * faceForwardLocal);

@@ -9,7 +9,8 @@ bool HasSameResources(const RenderItem& left, const RenderItem& right)
 {
     return left.shaderId == right.shaderId &&
         left.materialId == right.materialId &&
-        left.meshId == right.meshId;
+        left.meshId == right.meshId &&
+        left.reversedWinding == right.reversedWinding;
 }
 }
 

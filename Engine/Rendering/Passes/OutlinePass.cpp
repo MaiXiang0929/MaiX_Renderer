@@ -8,6 +8,7 @@
 #include "Engine/Rendering/Material/Material.h"
 #include "Engine/Rendering/Renderer/Resources/Mesh.h"
 #include "Engine/Rendering/Renderer/View/RenderView.h"
+#include "Engine/Rendering/Renderer/View/MaterialFacing.h"
 
 namespace
 {
@@ -18,6 +19,7 @@ bool ShouldDrawOutline(const RenderItem& item)
 
     const MaterialProperties& properties = item.material->GetProperties();
     return properties.shadingModel == ShadingModel::Toon &&
+        SupportsSurfaceOutline(properties.surfaceSide) &&
         properties.outlineEnabled &&
         properties.outlineThickness > MinimumOutlineThickness;
 }
@@ -81,6 +83,10 @@ void OutlinePass::Execute(RenderPassContext& context)
             properties.outlineColor.y,
             properties.outlineColor.z);
         item.material->BindCoverage(m_Shader, 0);
+        ApplySurfaceFacing(state, properties.surfaceSide, item.reversedWinding);
+        // Inverted hulls intentionally draw the logical back shell.
+        state.cull = RHICull::Front;
+        m_Device.Commands().SetPipelineState(state);
         item.mesh->Draw();
     }
 

@@ -13,6 +13,7 @@ MaiX_Renderer 当前是一个基于 C++17 与 OpenGL 4.0 Core Profile 的实时�
 - 使用 Cook-Torrance metallic/roughness BRDF，支持 Base Color、Normal、ORM 和 Displacement 纹理。ORM 通道约定为 R=AO、G=Roughness、B=Metallic。
 - 对颜色纹理与数据纹理分别使用 sRGB/Linear 语义；标准网格、Instancing 和 Tessellation/Displacement 路径共用 PBR 光照。
 - 环境加载时由 GPU 生成漫反射辐照度、GGX 粗糙度预过滤 Cubemap 与 BRDF LUT；主视图、平面反射及透明 PBR 共用 IBL，浮点环境资源与反射结果由最终后处理统一曝光和色调映射。
+- 材质支持 Front、Back、Double 与 Legacy 面模式；新材质默认 Front，实例继承父材质。主视图、反射、透明和阴影统一处理剔除及负缩放绕序，Double 背面使用翻转后的完整法线贴图法线。
 - `--material-lab` 使用共享 Mesh 展示铜、塑料、陶瓷和粗糙金属四种材质。Material Editor 可在运行时修改材质参数与纹理。
 
 IBL 可使用内置六面 sRGB PNG 天空或 Radiance `.hdr` 全景；不包含 EXR、动态天空或动态反射探针。HDR 在加载时转换为浮点 Cubemap 并生成 IBL，F6 重载会重新生成当前环境的 IBL；Roughness 控制环境反射模糊程度，Metallic 控制漫反射与镜面分配，Environment Reflectivity 保留为环境镜面强度，AO 作用于间接光。可用 `--material-lab` 对照粗糙度与金属度，并旋转视角检查反射方向；既有 HDR/IBL 效果已由用户验收。
@@ -21,7 +22,7 @@ IBL 可使用内置六面 sRGB PNG 天空或 Radiance `.hdr` 全景；不包含 
 
 - Toon 材质支持分段漫反射、阴影色和 Rim Light；独立的 Outline Pass 使用 Inverted Hull 绘制轮廓。
 - Face Shadow 使用线性 SDF 纹理、角色局部 Face Forward/Right、左右镜像和独立 Key Light；可通过 `--face-shadow-demo` 加载外部 FBX 与面部阴影贴图。
-- Masked 材质使用 Base Color Alpha × Opacity 与 Alpha Cutoff（默认 0.5）裁剪，低于阈值的片元不写颜色和深度；保留片元按不透明表面绘制。主视图、平面反射、阴影及普通/实例化/细分路径使用同一规则，NPR 描边也执行裁剪。Material Editor 的 Blend Mode 选择 Masked，实例可单独覆盖 Cutoff；模式继承父材质。参数随场景保存，旧场景缺少 Cutoff 时使用 0.5。沿用现有单面剔除；拾取仍使用几何，不做 Alpha 像素拾取。
+- Masked 材质使用 Base Color Alpha × Opacity 与 Alpha Cutoff（默认 0.5）裁剪，低于阈值的片元不写颜色和深度；保留片元按不透明表面绘制。主视图、平面反射、阴影及普通/实例化/细分路径使用同一规则，NPR 描边也执行裁剪。Material Editor 的 Blend Mode 选择 Masked，实例可单独覆盖 Cutoff；模式继承父材质。参数随场景保存，旧场景缺少 Cutoff 时使用 0.5。剔除由 Surface Side 决定；拾取仍使用几何，不做 Alpha 像素拾取。
 - Translucency Pass 按视图深度从后向前绘制 Alpha Blend 物体，使用纹理 Alpha 并保持深度只读。
 
 ### 阴影、HDR 与后处理
@@ -114,7 +115,7 @@ HDR 文件及单份解码 RGBA 浮点缓冲分别限制为 256 MiB，要求 2:1�
 
 `View → Render Settings` 编辑当前场景的 Exposure（EV）、ACES Tone Mapping、Bloom、SSAO 与抗锯齿设置；`Reset to Defaults` 恢复默认值（包括开启 FXAA），关闭效果保留其参数。曝光每增加 1 EV，线性亮度加倍；Bloom Threshold 使用曝光前的线性 HDR 值，SSAO Radius/Bias 使用场景世界单位。修改即时影响画面，并纳入未保存修改检测；通过 Save Scene 保存后，再次打开该场景恢复这些值；重启仍按项目默认场景打开。参数由 CPU 场景持有，每帧以快照传入渲染管线，GPU 资源仍由 Renderer/Pass 管理。
 
-新保存的场景使用 v3 格式，保存全局阴影范围/预算/分辨率，以及各灯 Bias、级联数、距离和分割系数。v1/v2 场景仍可读取，迁移为单主灯阴影、2048² 单图、方向光单级、点光源 Cast Shadow 关闭，保持旧画面；需要新能力时在 Render Settings 的 Shadows 开启 Multiple shadow lights，再编辑灯光参数。v1 使用原有后处理默认值；FXAA 在 v1 及缺少该字段的旧 v2 场景中关闭。非法、越界、缺失必需字段或未知字段拒绝加载，候选失败保留当前场景和参数。级联调试色、深度预览、全局阴影调试开关、细分调试、导航相机与 UI 配置不写入场景。
+新保存的场景使用 v4 格式，增加材质 Surface Side，并保留全局阴影范围/预算/分辨率及各灯 Bias、级联数、距离和分割系数。v1–v3 场景的材质迁移为 Legacy，保留原先不剔除与不翻转背面法线的表现；旧 v3 阴影配置保持原值。v1/v2 场景仍可读取，迁移为单主灯阴影、2048² 单图、方向光单级、点光源 Cast Shadow 关闭，保持旧画面；需要新能力时在 Render Settings 的 Shadows 开启 Multiple shadow lights，再编辑灯光参数。v1 使用原有后处理默认值；FXAA 在 v1 及缺少该字段的旧 v2 场景中关闭。非法、越界、缺失必需字段或未知字段拒绝加载，候选失败保留当前场景和参数。级联调试色、深度预览、全局阴影调试开关、细分调试、导航相机与 UI 配置不写入场景。
 
 复制或搬移整个项目目录后，可在新位置打开 `.maixproject`；Assets 内相对引用会跟随项目，引擎引用仍指向内置内容，外部绝对引用仍要求原文件可访问。当前支持 FBX 模型与已有内置 Cube。含无来源生成纹理或仅供渲染验证的透明平面的场景，会明确拒绝保存；资产数据库、依赖归档、项目 Hub 与 Undo/Redo 尚未实现。
 
@@ -163,6 +164,11 @@ Inspector 的 `Visible` 控制对象自己的显示开关；父级隐藏会作�
 Material Editor 默认跟随所选模型，显示所属模型名称和材质列表。`All materials (debug)` 可查看全部场景材质；点击 Inspector 中的材质会返回模型范围。删除正在编辑的模型后会清理材质选择。
 
 基础材质可通过 `Create Instance` 创建并绑定到当前模型分段。实例支持参数 Override、纹理继承/替换/禁用、重置覆盖和 `Edit Parent`；`Use Parent Material` 恢复基础材质。使用 `--material-instance-lab` 启动父材质与两个实例的共享 Mesh 验收场景。
+
+
+`Surface Side` 在基础材质中选择，实例通过 `Edit Parent` 修改并随父材质更新：Front 只绘制正面，Back 只绘制背面并翻转光照法线，Double 绘制两面且背面翻转完整法线，Legacy 保留旧版两面可见但不翻转法线的行为。负缩放和镜面反射会修正逻辑正反面；同一材质的正负缩放实例按绕序分批。阴影使用同一面规则，Double 薄片两面都能投影；Masked 的孔洞继续一致裁剪。Front/Legacy 支持已有 Inverted Hull 描边，Back/Double 暂停描边并在面板提示；位移仍沿原始顶点法线。
+
+材质面模式验收：导入一张带 UV/法线贴图的薄片，在 Material Editor 依次切换 Front、Back、Double，绕到背面检查显隐与受光；把模型 X 缩放设为负值，再检查一次。开启灯光 Cast Shadow，对照地面阴影和 Masked 孔洞；在镜面场景检查反射。创建实例后通过 Edit Parent 改面模式，确认两者同步，保存并重开核对模式。旧场景应显示 Legacy，切换后再保存为 v4。材质面模式与双面光照的视觉、交互已由用户验收。
 
 ## 项目结构
 

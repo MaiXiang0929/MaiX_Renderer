@@ -94,7 +94,7 @@ Material MaterialInstance::Resolve(const Material& base, const std::string& name
     if (overridden(MaterialParameter::OutlineColor)) resolved.outlineColor = values.outlineColor;
     if (overridden(MaterialParameter::AlphaCutoff)) resolved.alphaCutoff = values.alphaCutoff;
     resolved = SanitizeMaterialProperties(resolved);
-    // Shading Model 与 Blend Mode 始终由基础材质决定，实例不能覆盖队列策略。
+    // Shading Model、Blend Mode 与 Surface Side 始终由基础材质决定，实例不能覆盖队列与光栅策略。
     for (std::size_t i = 0; i < textures.size(); ++i)
     {
         const auto slot = static_cast<MaterialTextureSlot>(i);

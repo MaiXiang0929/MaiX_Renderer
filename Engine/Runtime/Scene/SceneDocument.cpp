@@ -83,16 +83,28 @@ J Properties(const MaterialProperties& p)
     SCENE_VECTORS(PUT_VEC)
 #undef PUT_VEC
     j["alphaCutoff"]=p.alphaCutoff;
+    j["surfaceSide"]=static_cast<int>(p.surfaceSide);
     j["shadingModel"]=static_cast<int>(p.shadingModel); j["faceShadowEnabled"]=p.faceShadowEnabled;
     j["faceShadowMirrorX"]=p.faceShadowMirrorX; j["outlineEnabled"]=p.outlineEnabled; return j;
 }
-MaterialProperties ReadProperties(const J& j)
+MaterialProperties ReadProperties(const J& j, std::uint64_t version)
 {
     Fields(j,{"baseColor","specularColor","shininess","environmentReflectivity","metallic","roughness",
         "ambientOcclusion","normalScale","opacity","alphaCutoff","shadingModel","toonThreshold","toonShadowStrength","toonShadowColor",
         "rimLightStrength","rimLightColor","faceShadowEnabled","faceForwardLocal","faceRightLocal","faceShadowSoftness",
-        "faceShadowMirrorX","outlineEnabled","outlineThickness","outlineColor"});
+        "faceShadowMirrorX","outlineEnabled","outlineThickness","outlineColor","surfaceSide"});
     MaterialProperties p;
+    if (version>=4)
+    {
+        const auto side=Key(j.at("surfaceSide"));
+        Check(side<=static_cast<std::uint64_t>(SurfaceSide::Legacy),"Unknown surface side.");
+        p.surfaceSide=static_cast<SurfaceSide>(side);
+    }
+    else
+    {
+        Check(!j.contains("surfaceSide"),"Old scene versions cannot contain surface side.");
+        p.surfaceSide=SurfaceSide::Legacy;
+    }
 #define GET_FLOAT(field) p.field=Number(j.at(#field));
     SCENE_FLOATS(GET_FLOAT)
 #undef GET_FLOAT
@@ -163,6 +175,7 @@ bool ValidateSceneDocument(const SceneDocument& d, std::string& error)
         {
             Check(m.id && materials.emplace(m.id,&m).second,"Duplicate or zero material key.");
             Check(static_cast<int>(m.blend)>=0 && static_cast<int>(m.blend)<=2,"Invalid blend mode.");
+            Check(IsValidSurfaceSide(m.properties.surfaceSide),"Invalid surface side.");
             Check(std::isfinite(m.properties.alphaCutoff)&&m.properties.alphaCutoff>=0&&m.properties.alphaCutoff<=1,"Invalid alpha cutoff.");
             Check(static_cast<int>(m.properties.shadingModel)>=0 && static_cast<int>(m.properties.shadingModel)<=1,"Invalid shading model.");
 #define CHECK_FLOAT(field) Check(std::isfinite(m.properties.field),"Non-finite material parameter.");
@@ -248,7 +261,7 @@ bool EncodeSceneDocument(const SceneDocument& d,std::string& text,std::string& e
     if (!ValidateSceneDocument(d,error)) return false;
     try
     {
-        J j={{"format","MaiX Scene"},{"version",3},{"actors",J::array()},{"materials",J::array()},
+        J j={{"format","MaiX Scene"},{"version",4},{"actors",J::array()},{"materials",J::array()},
             {"defaultModel",d.defaultModel},{"mainLight",d.mainLight},{"reflectionGroundEnabled",d.reflectionGroundEnabled},
             {"groundY",d.groundY},{"modelDiameter",d.modelDiameter},{"sceneRadius",d.sceneRadius},
             {"defaultBoundsMin",Vec(d.defaultBoundsMin)},{"defaultBoundsMax",Vec(d.defaultBoundsMax)},{"objCenter",Vec(d.objCenter)}};
@@ -320,9 +333,9 @@ bool DecodeSceneDocument(const std::string& text,SceneDocument& output,std::stri
         Fields(j,{"format","version","actors","materials","defaultModel","mainLight","reflectionGroundEnabled","groundY",
             "modelDiameter","sceneRadius","defaultBoundsMin","defaultBoundsMax","objCenter","postProcess","environment","shadows"});
         const auto version=Key(j.at("version"));
-        Check(j.at("format")=="MaiX Scene"&&(version==1||version==2||version==3),"Unsupported scene format/version.");
+        Check(j.at("format")=="MaiX Scene"&&(version>=1&&version<=4),"Unsupported scene format/version.");
         SceneDocument d;
-        if (version==3)
+        if (version>=3)
         {
             const auto& shadows=j.at("shadows"); Fields(shadows,{"multiLight","maxLights","resolution","pointResolution"});
             d.shadowSettings.multiLight=shadows.at("multiLight").get<bool>();
@@ -369,7 +382,7 @@ bool DecodeSceneDocument(const std::string& text,SceneDocument& output,std::stri
         {
             Fields(v,{"id","parent","name","properties","overrides","blend","textures"});
             SceneMaterialRecord m; m.id=Key(v.at("id")); m.parent=Key(v.at("parent")); m.name=v.at("name").get<std::string>();
-            m.properties=ReadProperties(v.at("properties"));
+            m.properties=ReadProperties(v.at("properties"),version);
             const auto mask=v.at("overrides").get<std::string>(); Check((mask.size()==MaterialParameterCount||mask.size()==MaterialParameterCount-1)&&mask.find_first_not_of("01")==std::string::npos,"Invalid material override mask.");
             m.overrides=MaterialOverrideMask(mask);
             const auto blend=Key(v.at("blend")); Check(blend<=2,"Invalid blend mode."); m.blend=static_cast<BlendMode>(blend);
@@ -410,7 +423,7 @@ bool DecodeSceneDocument(const std::string& text,SceneDocument& output,std::stri
             if (v.contains("light"))
             {
                 a.light.emplace(); auto& l=*a.light; const auto& light=v.at("light");
-                if (version==3)
+                if (version>=3)
                     Fields(light,{"type","color","intensity","range","innerConeAngle","outerConeAngle","castsShadow",
                         "shadowBias","shadowNormalBias","cascadeCount","shadowDistance","splitLambda"});
                 else Fields(light,{"type","color","intensity","range","innerConeAngle","outerConeAngle","castsShadow"});
@@ -418,7 +431,7 @@ bool DecodeSceneDocument(const std::string& text,SceneDocument& output,std::stri
                 l.color=Vector(light.at("color")); l.intensity=Number(light.at("intensity")); l.range=Number(light.at("range"));
                 l.innerConeAngle=Number(light.at("innerConeAngle")); l.outerConeAngle=Number(light.at("outerConeAngle"));
                 l.castsShadow=light.at("castsShadow").get<bool>();
-                if (version==3)
+                if (version>=3)
                 {
                     l.shadowBias=Number(light.at("shadowBias")); l.shadowNormalBias=Number(light.at("shadowNormalBias"));
                     const auto cascades=Key(light.at("cascadeCount")); Check(cascades==1||cascades==2||cascades==4,"Invalid cascade count.");

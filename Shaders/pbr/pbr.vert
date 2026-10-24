@@ -7,6 +7,7 @@ layout(location = 3) in vec4 tangent;
 
 uniform mat4 mvp;
 uniform mat4 mv;
+uniform int surfaceSide;
 uniform vec3 faceForwardLocal;
 uniform vec3 faceRightLocal;
 
@@ -27,6 +28,10 @@ void main()
     fragNormal = normalize(normalMatrix * normal);
     fragTangent = normalize(mat3(mv) * tangent.xyz);
     fragTangentSign = tangent.w;
+    // A reflection of either the model or view reverses the tangent frame.
+    // Legacy keeps its historical orientation, including mirrored transforms.
+    if (surfaceSide != 3)
+        fragTangentSign *= sign(determinant(mat3(mv)));
     fragTexCoord = texCoord;
 
     fragFaceForward = normalize(mat3(mv) * faceForwardLocal);

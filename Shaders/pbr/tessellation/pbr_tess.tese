@@ -20,6 +20,7 @@ out vec3 fragFaceRight;
 
 uniform mat4 mvp;
 uniform mat4 mv;
+uniform int surfaceSide;
 uniform sampler2D displacementMap;
 uniform bool hasDisplacementMap;
 uniform float displacementScale;
@@ -56,6 +57,8 @@ void main()
     fragNormal = normalize(normalMatrix * normal);
     fragTangent = normalize(mat3(mv) * tangent.xyz);
     fragTangentSign = tangent.w < 0.0 ? -1.0 : 1.0;
+    if (surfaceSide != 3)
+        fragTangentSign *= sign(determinant(mat3(mv)));
     fragTexCoord = uv;
 
     fragFaceForward = normalize(mat3(mv) * faceForwardLocal);

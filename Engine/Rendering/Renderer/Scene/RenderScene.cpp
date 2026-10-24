@@ -5,6 +5,8 @@
 #include <tuple>
 
 #include "Engine/Rendering/Renderer/View/RenderView.h"
+#include "Engine/Rendering/Material/Material.h"
+#include "Engine/Rendering/Renderer/View/MaterialFacing.h"
 
 namespace
 {
@@ -21,11 +23,13 @@ void SortOpaqueItems(RenderView& view)
                     left.shaderId,
                     left.meshId,
                     left.materialId,
+                    left.reversedWinding,
                     left.primitiveId) <
                     std::tie(
                         right.shaderId,
                         right.meshId,
                         right.materialId,
+                        right.reversedWinding,
                         right.primitiveId);
             });
         return;
@@ -40,11 +44,13 @@ void SortOpaqueItems(RenderView& view)
                 left.shaderId,
                 left.materialId,
                 left.meshId,
+                left.reversedWinding,
                 left.primitiveId) <
                 std::tie(
                     right.shaderId,
                     right.materialId,
                     right.meshId,
+                    right.reversedWinding,
                     right.primitiveId);
         });
 }
@@ -277,6 +283,8 @@ void RenderScene::BuildRenderView(RenderView& view) const
             0.0f,
             proxy.castsShadow
         };
+        item.reversedWinding = IsSurfaceWindingReversed(
+            proxy.material->GetProperties().surfaceSide, view.view * proxy.localToWorld);
         if (proxy.blendMode == BlendMode::AlphaBlend)
         {
             const cy::Vec4f centerView = view.view * cy::Vec4f(

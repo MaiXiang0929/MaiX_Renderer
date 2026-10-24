@@ -207,6 +207,19 @@ void MaterialEditorPanel::Draw(
         changed = true;
     }
     ImGui::EndDisabled();
+    int surfaceSide = static_cast<int>(properties.surfaceSide);
+    ImGui::BeginDisabled(snapshot.isInstance);
+    MaterialFieldLabel(snapshot.isInstance ? "Surface Side (parent)" : "Surface Side");
+    if (ImGui::Combo("##SurfaceSide", &surfaceSide, "Front\0Back\0Double\0Legacy\0"))
+    {
+        properties.surfaceSide = static_cast<SurfaceSide>(surfaceSide);
+        changed = true;
+    }
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("Front/Back select the rendered side. Double renders both sides with corrected back-face normals.\nLegacy preserves old scene culling and normals. Instances inherit their parent's setting.");
+    if (properties.surfaceSide == SurfaceSide::Legacy)
+        ImGui::TextDisabled("Legacy: old scene culling and normals.");
     editField(MaterialParameter::BaseColor, "Base Color", [&] { return ImGui::ColorEdit3("##Value", &properties.baseColor.x); });
     editField(MaterialParameter::SpecularColor, "Legacy Specular Color", [&] { return ImGui::ColorEdit3("##Value", &properties.specularColor.x); });
     editField(MaterialParameter::Shininess, "Legacy Shininess", [&] { return ImGui::SliderFloat("##Value", &properties.shininess, 1.000f, 256.000f); });
@@ -236,9 +249,15 @@ void MaterialEditorPanel::Draw(
         });
         editField(MaterialParameter::FaceShadowSoftness, "Face Shadow Softness", [&] { return ImGui::SliderFloat("##Value", &properties.faceShadowSoftness, 0.000f, 0.250f); });
         editField(MaterialParameter::FaceShadowMirrorX, "Mirror Face Shadow X", [&] { return ImGui::Checkbox("##Value", &properties.faceShadowMirrorX); });
+        const bool outlineSupported = properties.surfaceSide == SurfaceSide::Front ||
+            properties.surfaceSide == SurfaceSide::Legacy;
+        if (!outlineSupported)
+            ImGui::TextWrapped("Inverted-hull outline is unavailable for Back and Double surfaces.");
+        ImGui::BeginDisabled(!outlineSupported);
         editField(MaterialParameter::OutlineEnabled, "Outline", [&] { return ImGui::Checkbox("##Value", &properties.outlineEnabled); });
         editField(MaterialParameter::OutlineThickness, "Outline Thickness", [&] { return ImGui::SliderFloat("##Value", &properties.outlineThickness, 0.000f, 0.200f, "%.5f", ImGuiSliderFlags_Logarithmic); });
         editField(MaterialParameter::OutlineColor, "Outline Color", [&] { return ImGui::ColorEdit3("##Value", &properties.outlineColor.x); });
+        ImGui::EndDisabled();
 
     }
     int blendMode = static_cast<int>(snapshot.blendMode);

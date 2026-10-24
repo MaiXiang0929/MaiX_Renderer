@@ -20,6 +20,7 @@ struct MaterialProperties
     float opacity = 1.0f;
     float alphaCutoff = 0.5f;
     ShadingModel shadingModel = ShadingModel::PBR;
+    SurfaceSide surfaceSide = SurfaceSide::Front; // Parent-owned raster policy; not an instance override.
     float toonThreshold = 0.5f;
     float toonShadowStrength = 0.65f;
     cy::Vec3f toonShadowColor{ 0.18f, 0.20f, 0.28f };
