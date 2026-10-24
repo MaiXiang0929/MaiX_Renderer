@@ -20,7 +20,7 @@ bool ShadowPass::Init(unsigned int width, unsigned int height)
 {
     const bool shadersLoaded = ReloadShaders();
     const bool instanceBufferInitialized = m_InstanceBuffer.Init();
-    m_ShadowMap.Init(width, height);
+    (void)width; (void)height;
     return shadersLoaded && instanceBufferInitialized;
 }
 
@@ -39,34 +39,117 @@ bool ShadowPass::ReloadShaders()
         "Shaders/shadow/shadow_depth.frag");
     const bool instanceBlockBound = instancedStandardLoaded &&
         m_InstanceBuffer.BindShaderBlock(m_InstancedStandardShader);
-    return standardLoaded && instanceBlockBound && tessellationLoaded;
+    const bool pointLoaded = m_PointShader.Load("Shaders/shadow/shadow_depth.vert", "Shaders/shadow/point_depth.frag");
+    const bool pointInstancedLoaded = m_PointInstancedShader.Load("Shaders/shadow/shadow_depth_instanced.vert", "Shaders/shadow/point_depth.frag");
+    const bool pointTessLoaded = m_PointTessellationShader.LoadTessellation(
+        "Shaders/pbr/tessellation/pbr_tess.vert", "Shaders/pbr/tessellation/pbr_tess.tesc",
+        "Shaders/shadow/shadow_tess.tese", "Shaders/shadow/point_depth.frag");
+    const bool pointBlock = pointInstancedLoaded && m_InstanceBuffer.BindShaderBlock(m_PointInstancedShader);
+    return standardLoaded && instanceBlockBound && tessellationLoaded && pointLoaded && pointTessLoaded && pointBlock;
+}
+
+ShadowPass::~ShadowPass()
+{
+    m_Device.DestroyTarget(m_ArrayTarget.handle);
+    m_Device.DestroyTarget(m_CubeTarget.handle);
+}
+
+bool ShadowPass::PrepareTargets(const ShadowFrame& frame)
+{
+    const unsigned layers = std::max(frame.layers2D, 1u);
+    const unsigned cubeLayers = std::max(frame.cubeCount, 1u) * 6;
+    const bool arrayChange = !m_ArrayTarget.handle || m_Resolution != frame.resolution || m_Layers < layers;
+    const bool cubeChange = !m_CubeTarget.handle || m_PointResolution != frame.pointResolution || m_CubeLayers < cubeLayers;
+    RHITarget candidateArray, candidateCube;
+    try
+    {
+        auto create = [&](unsigned size, unsigned count, RHITextureKind kind) {
+            RHITargetDesc desc;
+            desc.width = desc.height = size;
+            desc.color = false; desc.shadow = true;
+            desc.depthKind = kind; desc.layers = count;
+            auto target = m_Device.CreateTarget(desc);
+            if (!target.handle) throw RHIError("Shadow array allocation failed");
+            return target;
+        };
+        if (arrayChange) candidateArray = create(frame.resolution, layers, RHITextureKind::Texture2DArray);
+        if (cubeChange) candidateCube = create(frame.pointResolution, cubeLayers, RHITextureKind::CubemapArray);
+        if (arrayChange)
+        {
+            m_Device.RemapTargetBindings(m_ArrayTarget.handle, candidateArray.handle);
+            m_Device.DestroyTarget(m_ArrayTarget.handle); m_ArrayTarget = candidateArray;
+            candidateArray = {}; m_Resolution = frame.resolution; m_Layers = layers;
+        }
+        if (cubeChange)
+        {
+            m_Device.RemapTargetBindings(m_CubeTarget.handle, candidateCube.handle);
+            m_Device.DestroyTarget(m_CubeTarget.handle); m_CubeTarget = candidateCube;
+            candidateCube = {}; m_PointResolution = frame.pointResolution; m_CubeLayers = cubeLayers;
+        }
+        return true;
+    }
+    catch (const RHIError&)
+    {
+        m_Device.DestroyTarget(candidateArray.handle); m_Device.DestroyTarget(candidateCube.handle);
+        return false;
+    }
 }
 
 void ShadowPass::Execute(RenderPassContext& context)
 {
-    if (!context.frame.shadowsEnabled)
-        return;
+    if (!context.frame.shadowsEnabled) return;
+    if (!context.shadowViews || context.shadowViews->size() != context.frame.shadowFrame.views.size())
+        throw RHIError("Shadow view list does not match frame plan");
+    auto& access = context.Resources();
+    for (std::size_t i = 0; i < context.frame.shadowFrame.views.size(); ++i)
+    {
+        const auto& view = context.frame.shadowFrame.views[i];
+        if (view.lightIndex >= context.frame.shadowFrame.lights.size()) throw RHIError("Invalid shadow light index");
+        const auto id = view.point ? PassResourceId::ShadowCubeDepth : PassResourceId::ShadowDepth;
+        access.BeginLayer(id, view.layer);
+        RenderDepth(context, (*context.shadowViews)[i], view);
+        access.EndLayer(id);
+    }
+    // Both sampler types remain valid even when this frame uses only one family.
+    if (!context.frame.shadowFrame.layers2D) { access.BeginLayer(PassResourceId::ShadowDepth,0); access.EndLayer(PassResourceId::ShadowDepth); }
+    if (!context.frame.shadowFrame.cubeCount)
+        for (unsigned face = 0; face < 6; ++face) { access.BeginLayer(PassResourceId::ShadowCubeDepth,face); access.EndLayer(PassResourceId::ShadowCubeDepth); }
+    access.Publish(PassResourceId::ShadowDepth);
+    access.Publish(PassResourceId::ShadowCubeDepth);
+}
 
-    context.Resources().BeginTarget(PassResourceId::ShadowDepth);
+void ShadowPass::RenderDepth(RenderPassContext& context, const RenderView& view, const ShadowViewFrame& shadowView)
+{
+
     RHIScopedPipelineState stateScope(m_Device.Commands());
     auto state=stateScope.saved; state.offsetFill=true; state.offsetFactor=2; state.offsetUnits=4;
     m_Device.Commands().SetPipelineState(state);
+    const auto& light = context.frame.shadowFrame.lights[shadowView.lightIndex];
+    const auto preparePoint = [&](Shader& shader) {
+        if (!shadowView.point) return;
+        const auto inverse = shadowView.viewProjection.GetInverse();
+        shader.SetMatrix4("inverseLightVP", inverse.cell);
+        shader.SetVec3("shadowPosition", light.position.x, light.position.y, light.position.z);
+        shader.SetFloat("shadowNear", light.nearPlane);
+        shader.SetFloat("shadowFar", light.farPlane);
+    };
 
     if (context.tessellation.enabled)
     {
-        Shader& shader = m_TessellationShader;
+        Shader& shader = shadowView.point ? m_PointTessellationShader : m_TessellationShader;
         shader.Bind();
+        preparePoint(shader);
         shader.SetFloat("tessellationLevel", context.tessellation.level);
         shader.SetFloat(
             "displacementScale", context.tessellation.displacementScale);
-        for (const RenderItem& item : context.shadowView.opaqueItems)
+        for (const RenderItem& item : view.opaqueItems)
         {
             if (!item.castsShadow || item.mesh == nullptr ||
                 item.material == nullptr)
                 continue;
 
             const cy::Matrix4f lightMvp =
-                context.frame.lightVP * item.model;
+                shadowView.viewProjection * item.model;
             shader.SetMatrix4("lightMvp", &lightMvp.cell[0]);
             RenderSubmissionStats::Get().RecordMaterialBind(item.material);
             item.material->BindCoverage(shader, 0);
@@ -77,28 +160,28 @@ void ShadowPass::Execute(RenderPassContext& context)
     else
     {
         m_BatchInstanceCounts.assign(
-            context.shadowView.opaqueBatches.size(), 0);
+            view.opaqueBatches.size(), 0);
         std::size_t uploadChunkCount = 0;
         for (std::size_t batchIndex = 0;
-            batchIndex < context.shadowView.opaqueBatches.size();
+            batchIndex < view.opaqueBatches.size();
             ++batchIndex)
         {
             const OpaqueRenderBatch& batch =
-                context.shadowView.opaqueBatches[batchIndex];
+                view.opaqueBatches[batchIndex];
             if (batch.itemCount == 0 ||
-                batch.firstItem >= context.shadowView.opaqueItems.size())
+                batch.firstItem >= view.opaqueItems.size())
                 continue;
-            if (context.shadowView.opaqueItems[batch.firstItem].mesh == nullptr)
+            if (view.opaqueItems[batch.firstItem].mesh == nullptr)
                 continue;
 
             const std::size_t endItem = std::min(
                 batch.firstItem + batch.itemCount,
-                context.shadowView.opaqueItems.size());
+                view.opaqueItems.size());
             for (std::size_t itemIndex = batch.firstItem;
                 itemIndex < endItem;
                 ++itemIndex)
             {
-                if (context.shadowView.opaqueItems[itemIndex].castsShadow)
+                if (view.opaqueItems[itemIndex].castsShadow)
                     ++m_BatchInstanceCounts[batchIndex];
             }
             const std::size_t instanceCount =
@@ -116,7 +199,7 @@ void ShadowPass::Execute(RenderPassContext& context)
             InstanceTransformData{});
         std::size_t buildChunkIndex = 0;
         for (std::size_t batchIndex = 0;
-            batchIndex < context.shadowView.opaqueBatches.size();
+            batchIndex < view.opaqueBatches.size();
             ++batchIndex)
         {
             const std::size_t instanceCount =
@@ -125,17 +208,17 @@ void ShadowPass::Execute(RenderPassContext& context)
                 continue;
 
             const OpaqueRenderBatch& batch =
-                context.shadowView.opaqueBatches[batchIndex];
+                view.opaqueBatches[batchIndex];
             const std::size_t endItem = std::min(
                 batch.firstItem + batch.itemCount,
-                context.shadowView.opaqueItems.size());
+                view.opaqueItems.size());
             std::size_t instanceIndex = 0;
             for (std::size_t itemIndex = batch.firstItem;
                 itemIndex < endItem;
                 ++itemIndex)
             {
                 const RenderItem& item =
-                    context.shadowView.opaqueItems[itemIndex];
+                    view.opaqueItems[itemIndex];
                 if (!item.castsShadow)
                     continue;
 
@@ -147,7 +230,7 @@ void ShadowPass::Execute(RenderPassContext& context)
                 m_InstanceTransforms[
                     chunkIndex * InstanceBuffer::MaxInstancesPerDraw +
                     indexInChunk].modelView =
-                    context.frame.lightVP * item.model;
+                    shadowView.viewProjection * item.model;
                 ++instanceIndex;
             }
             buildChunkIndex +=
@@ -164,17 +247,17 @@ void ShadowPass::Execute(RenderPassContext& context)
         Shader* activeShader = nullptr;
         std::size_t drawChunkIndex = 0;
         for (std::size_t batchIndex = 0;
-            batchIndex < context.shadowView.opaqueBatches.size();
+            batchIndex < view.opaqueBatches.size();
             ++batchIndex)
         {
             const OpaqueRenderBatch& batch =
-                context.shadowView.opaqueBatches[batchIndex];
+                view.opaqueBatches[batchIndex];
             if (batch.itemCount == 0 ||
-                batch.firstItem >= context.shadowView.opaqueItems.size())
+                batch.firstItem >= view.opaqueItems.size())
                 continue;
 
             const RenderItem& firstItem =
-                context.shadowView.opaqueItems[batch.firstItem];
+                view.opaqueItems[batch.firstItem];
             if (firstItem.mesh == nullptr)
                 continue;
 
@@ -184,10 +267,11 @@ void ShadowPass::Execute(RenderPassContext& context)
                 continue;
             if (instanceCount > 1)
             {
-                if (activeShader != &m_InstancedStandardShader)
+                if (activeShader != (shadowView.point ? &m_PointInstancedShader : &m_InstancedStandardShader))
                 {
-                    activeShader = &m_InstancedStandardShader;
+                    activeShader = (shadowView.point ? &m_PointInstancedShader : &m_InstancedStandardShader);
                     activeShader->Bind();
+                    preparePoint(*activeShader);
                 }
                 firstItem.material->BindCoverage(*activeShader, 0);
                 for (std::size_t firstInstance = 0;
@@ -204,36 +288,36 @@ void ShadowPass::Execute(RenderPassContext& context)
                 continue;
             }
 
-            if (activeShader != &m_StandardShader)
+            if (activeShader != (shadowView.point ? &m_PointShader : &m_StandardShader))
             {
-                activeShader = &m_StandardShader;
+                activeShader = (shadowView.point ? &m_PointShader : &m_StandardShader);
                 activeShader->Bind();
+                preparePoint(*activeShader);
             }
             const std::size_t endItem = std::min(
                 batch.firstItem + batch.itemCount,
-                context.shadowView.opaqueItems.size());
+                view.opaqueItems.size());
             const RenderItem* shadowCaster = nullptr;
             for (std::size_t itemIndex = batch.firstItem;
                 itemIndex < endItem;
                 ++itemIndex)
             {
-                if (context.shadowView.opaqueItems[itemIndex].castsShadow)
+                if (view.opaqueItems[itemIndex].castsShadow)
                 {
                     shadowCaster =
-                        &context.shadowView.opaqueItems[itemIndex];
+                        &view.opaqueItems[itemIndex];
                     break;
                 }
             }
             if (shadowCaster == nullptr)
                 continue;
             const cy::Matrix4f lightMvp =
-                context.frame.lightVP * shadowCaster->model;
+                shadowView.viewProjection * shadowCaster->model;
             activeShader->SetMatrix4("lightMvp", &lightMvp.cell[0]);
             shadowCaster->material->BindCoverage(*activeShader, 0);
             firstItem.mesh->Draw();
         }
     }
 
-    context.Resources().EndTarget(PassResourceId::ShadowDepth);
-    context.Resources().Publish(PassResourceId::ShadowDepth);
+
 }

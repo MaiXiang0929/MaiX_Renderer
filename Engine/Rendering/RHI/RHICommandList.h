@@ -6,6 +6,8 @@ class RHICommandList
   public:
     virtual ~RHICommandList() = default;
     virtual void BeginTarget(RHITargetHandle, bool clearColor, bool clearDepth, float alpha) = 0;
+    // Depth-only array targets require an explicit layer (cubemap array: layer-face).
+    virtual void BeginTargetLayer(RHITargetHandle, unsigned layer, bool clearDepth) = 0;
     virtual void EndTarget() = 0;
     virtual void GenerateMipmaps(RHITextureHandle) = 0;
     // Copy a color target to one existing cubemap face/mip; extents and formats must match.

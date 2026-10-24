@@ -5,7 +5,6 @@ in vec3 fragNormal;
 in vec3 fragTangent;
 in float fragTangentSign;
 in vec2 fragTexCoord;
-in vec4 fragLightSpacePos;
 in vec3 fragFaceForward;
 in vec3 fragFaceRight;
 
@@ -71,16 +70,181 @@ layout(std140) uniform ForwardLights
 };
 
 uniform int lightCount;
-uniform int shadowLightIndex;
 uniform int keyLightIndex;
 uniform samplerCube irradianceMap;
 uniform samplerCube prefilterMap;
 uniform sampler2D brdfLut;
 uniform float prefilterMaxLod;
-uniform mat3 viewToWorld;
-uniform sampler2DShadow shadowMap;
+// Forward shadow ABI: keep this block identical in pbr.frag and ground.frag.
+struct ShadowData
+{
+    mat4 matrices[4];
+    vec4 layerAndType; // base layer, light type, cascade count, cube index
+    vec4 positionAndNear;
+    vec4 farBiasNormalLegacy; // far, bias in texels, normal bias in texels, legacy
+    vec4 splits;
+    vec4 worldTexels;
+    vec4 depthRanges;
+    vec4 cascadeParameters; // near split, legacy perspective coefficient/cone width
+};
+layout(std140) uniform ForwardShadows
+{
+    ShadowData shadowLights[4];
+};
+uniform sampler2DArrayShadow shadowMap;
+uniform samplerCubeArrayShadow shadowCubeMap;
 uniform bool shadowsEnabled;
-uniform vec3 spotShadowBias; // xy: perspective depth coefficient, cone width per unit distance
+uniform int shadowLightCount;
+uniform bool shadowDebugCascades;
+uniform mat4 inverseView;
+
+int ShadowCascadeIndex(ShadowData shadow, float linearDepth)
+{
+    int count = clamp(int(shadow.layerAndType.z + 0.5), 1, 4);
+    for (int cascade = 0; cascade < count; ++cascade)
+        if (linearDepth <= shadow.splits[cascade])
+            return cascade;
+    return -1;
+}
+float ShadowSliceStart(ShadowData shadow, int cascade)
+{
+    return cascade == 0 ? shadow.cascadeParameters.x : shadow.splits[cascade - 1];
+}
+float ShadowCascadeBlend(ShadowData shadow, int cascade, float linearDepth)
+{
+    float end = shadow.splits[cascade];
+    float width = max((end - ShadowSliceStart(shadow, cascade)) * 0.1, 0.0001);
+    return smoothstep(end - width, end, linearDepth);
+}
+float SampleProjectedShadow(ShadowData shadow, int cascade, vec3 worldPosition,
+    float nDotL, bool ground)
+{
+    vec4 clip = shadow.matrices[cascade] * vec4(worldPosition, 1.0);
+    if (clip.w <= 0.0 || shadow.layerAndType.x < 0.0)
+        return 1.0;
+    vec3 projected = clip.xyz / clip.w * 0.5 + 0.5;
+    if (any(lessThan(projected, vec3(0.0))) || any(greaterThan(projected, vec3(1.0))))
+        return 1.0;
+    vec2 texel = 1.0 / vec2(textureSize(shadowMap, 0).xy);
+    bool spot = int(shadow.layerAndType.y + 0.5) == 2;
+    bool legacy = shadow.farBiasNormalLegacy.w > 0.5;
+    float slope = 1.0 - clamp(nDotL, -1.0, 1.0);
+    float depthBias;
+    if (legacy && !spot)
+        depthBias = ground ? 0.001 : max(0.0025 * slope, 0.0005);
+    else
+    {
+        float worldTexel = shadow.worldTexels[cascade];
+        if (spot)
+            worldTexel *= clip.w / max(shadow.farBiasNormalLegacy.x, 0.0001);
+        if (legacy && spot)
+            worldTexel = shadow.cascadeParameters.z * clip.w * texel.x;
+        float worldBias = worldTexel * (legacy ? max(2.0 * slope, 0.5) :
+            shadow.farBiasNormalLegacy.y + shadow.farBiasNormalLegacy.z * slope);
+        if (spot)
+        {
+            worldBias = clamp(worldBias, 0.0, clip.w * 0.1);
+            float nearPlane = shadow.positionAndNear.w;
+            float farPlane = shadow.farBiasNormalLegacy.x;
+            float coefficient = legacy ? shadow.cascadeParameters.y :
+                nearPlane / (1.0 - nearPlane / farPlane);
+            // clip.w is positive and worldBias is at most 10% of it. Work with
+            // their ratio so a world-unit denominator floor cannot erase bias.
+            float biasRatio = worldBias / clip.w;
+            depthBias = (coefficient / clip.w) * biasRatio / (1.0 - biasRatio);
+        }
+        else
+            depthBias = worldBias / max(shadow.depthRanges[cascade], 0.0001);
+    }
+    float visibility = 0.0;
+    for (int x = -1; x <= 1; ++x)
+        for (int y = -1; y <= 1; ++y)
+            visibility += texture(shadowMap, vec4(projected.xy + vec2(x, y) * texel,
+                shadow.layerAndType.x + float(cascade), projected.z - depthBias));
+    return visibility / 9.0;
+}
+float SamplePointShadow(ShadowData shadow, vec3 worldPosition, float nDotL)
+{
+    if (shadow.layerAndType.w < 0.0)
+        return 1.0;
+    vec3 fromLight = worldPosition - shadow.positionAndNear.xyz;
+    float distance = length(fromLight);
+    float nearPlane = shadow.positionAndNear.w;
+    float farPlane = shadow.farBiasNormalLegacy.x;
+    if (distance <= nearPlane || distance >= farPlane)
+        return 1.0;
+    vec3 direction = fromLight / distance;
+    vec3 up = abs(direction.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+    vec3 tangent = normalize(cross(direction, up));
+    vec3 bitangent = cross(direction, tangent);
+    float angularTexel = 2.0 / float(textureSize(shadowCubeMap, 0).x);
+    float worldTexel = angularTexel * distance;
+    float worldBias = worldTexel * (shadow.farBiasNormalLegacy.y +
+        shadow.farBiasNormalLegacy.z * (1.0 - clamp(nDotL, -1.0, 1.0)));
+    float reference = clamp((distance - worldBias - nearPlane) / (farPlane - nearPlane), 0.0, 1.0);
+    float visibility = 0.0;
+    // Offsets are directions, so the cubemap selects neighboring faces across seams.
+    for (int x = -1; x <= 1; ++x)
+        for (int y = -1; y <= 1; ++y)
+        {
+            vec3 sampleDirection = direction + angularTexel * (float(x) * tangent + float(y) * bitangent);
+            visibility += texture(shadowCubeMap, vec4(sampleDirection, shadow.layerAndType.w), reference);
+        }
+    return visibility / 9.0;
+}
+float CalculateShadowVisibility(int index, vec3 worldPosition, float linearDepth,
+    float nDotL, bool ground)
+{
+    if (!shadowsEnabled || index < 0 || index >= shadowLightCount)
+        return 1.0;
+    ShadowData shadow = shadowLights[index];
+    int type = int(shadow.layerAndType.y + 0.5);
+    if (type == 1)
+        return SamplePointShadow(shadow, worldPosition, nDotL);
+    if (type == 2 || shadow.farBiasNormalLegacy.w > 0.5)
+        return SampleProjectedShadow(shadow, 0, worldPosition, nDotL, ground);
+    int cascade = ShadowCascadeIndex(shadow, linearDepth);
+    if (cascade < 0)
+        return 1.0;
+    float visibility = SampleProjectedShadow(shadow, cascade, worldPosition, nDotL, ground);
+    float blend = ShadowCascadeBlend(shadow, cascade, linearDepth);
+    if (blend > 0.0)
+    {
+        int count = int(shadow.layerAndType.z + 0.5);
+        float nextVisibility = cascade + 1 < count ?
+            SampleProjectedShadow(shadow, cascade + 1, worldPosition, nDotL, ground) : 1.0;
+        visibility = mix(visibility, nextVisibility, blend);
+    }
+    return visibility;
+}
+vec3 CascadeDebugColor(int cascade)
+{
+    if (cascade == 0) return vec3(0.9, 0.12, 0.08);
+    if (cascade == 1) return vec3(0.12, 0.8, 0.14);
+    if (cascade == 2) return vec3(0.1, 0.3, 0.95);
+    return vec3(0.9, 0.7, 0.08);
+}
+vec3 ApplyCascadeDebug(vec3 result, float linearDepth)
+{
+    if (!shadowDebugCascades || !shadowsEnabled)
+        return result;
+    for (int index = 0; index < shadowLightCount; ++index)
+    {
+        ShadowData shadow = shadowLights[index];
+        if (int(shadow.layerAndType.y + 0.5) != 0 || shadow.farBiasNormalLegacy.w > 0.5)
+            continue;
+        int cascade = ShadowCascadeIndex(shadow, linearDepth);
+        if (cascade < 0)
+            return result;
+        vec3 tint = CascadeDebugColor(cascade);
+        float blend = ShadowCascadeBlend(shadow, cascade, linearDepth);
+        vec3 nextTint = cascade + 1 < int(shadow.layerAndType.z + 0.5) ?
+            CascadeDebugColor(cascade + 1) : result;
+        return mix(tint, nextTint, blend);
+    }
+    return result;
+}
+// End shared shadow ABI and sampling.
 uniform bool wireframePass;
 
 
@@ -141,45 +305,6 @@ float CalculateSpotAttenuation(
     vec3 lightToSurface = -surfaceToLight;
     float coneCos = dot(lightToSurface, normalize(lightDirection));
     return smoothstep(outerConeCos, innerConeCos, coneCos);
-}
-
-float CalculateShadowVisibility(vec4 lightSpacePos, vec3 normal, vec3 lightDir)
-{
-    if (!shadowsEnabled)
-        return 1.0;
-    if (lightSpacePos.w <= 0.0)
-        return 1.0;
-
-    vec3 projected = lightSpacePos.xyz / lightSpacePos.w;
-    projected = projected * 0.5 + 0.5;
-    if (projected.x < 0.0 || projected.x > 1.0 ||
-        projected.y < 0.0 || projected.y > 1.0 ||
-        projected.z < 0.0 || projected.z > 1.0)
-        // Outside the shadow camera there is no occlusion evidence. Spot range
-        // and cone attenuation are evaluated separately from shadow visibility.
-        return 1.0;
-
-    float bias = max(0.0025 * (1.0 - dot(normal, lightDir)), 0.0005);
-    vec2 texelSize = 1.0 / vec2(textureSize(shadowMap, 0));
-    if (spotShadowBias.x > 0.0)
-    {
-        float distance = lightSpacePos.w;
-        float worldTexel = spotShadowBias.y * distance * texelSize.x;
-        float worldBias = worldTexel * max(2.0 * (1.0 - dot(normal, lightDir)), 0.5);
-        worldBias = min(worldBias, distance * 0.1);
-        // z01 = far/(far-near) - near*far/((far-near)*distance).
-        // Convert a receiver offset toward the light into the matching depth difference.
-        bias = spotShadowBias.x * worldBias / (distance * (distance - worldBias));
-    }
-    float visibility = 0.0;
-    for (int x = -1; x <= 1; ++x) {
-        for (int y = -1; y <= 1; ++y) {
-            visibility += texture(
-                shadowMap,
-                vec3(projected.xy + vec2(x, y) * texelSize, projected.z - bias));
-        }
-    }
-    return visibility / 9.0;
 }
 
 vec3 ResolveSurfaceNormal()
@@ -252,6 +377,8 @@ void main()
 
     vec3 N = ResolveSurfaceNormal();
     vec3 V = normalize(-fragPos);
+    vec3 worldPosition = (inverseView * vec4(fragPos, 1.0)).xyz;
+    float linearDepth = max(-fragPos.z, 0.0);
 
     if (material.shadingModel == 1)
     {
@@ -275,8 +402,8 @@ void main()
                         light.spotAnglesAndShadow.x, light.spotAnglesAndShadow.y);
             }
             float nDotL = max(dot(N, L), 0.0) * attenuation;
-            float visibility = lightIndex == shadowLightIndex
-                ? CalculateShadowVisibility(fragLightSpacePos, N, L) : 1.0;
+            float visibility = CalculateShadowVisibility(int(light.spotAnglesAndShadow.w),
+                worldPosition, linearDepth, dot(N, L), false);
             float lightBand = step(clamp(material.toonThreshold, 0.0, 1.0), nDotL);
             if (lightIndex == keyLightIndex &&
                 material.faceShadowEnabled &&
@@ -296,7 +423,7 @@ void main()
         float rim = pow(1.0 - max(dot(N, V), 0.0), 3.0) * material.rimLightStrength;
         indirectDiffuse = vec4(opaqueForSsao ? vec3(0.03) * albedo : vec3(0.0),
             clamp(material.opacity * albedoSample.a, 0.0, 1.0));
-        color = vec4(toonLighting + material.rimLightColor * rim,
+        color = vec4(ApplyCascadeDebug(toonLighting + material.rimLightColor * rim, linearDepth),
             clamp(material.opacity * albedoSample.a, 0.0, 1.0));
         return;
     }
@@ -358,9 +485,8 @@ void main()
         vec3 specular = distribution * geometry * fresnel /
             max(4.0 * nDotV * nDotL, 0.0001);
         vec3 diffuseWeight = (vec3(1.0) - fresnel) * (1.0 - metallic);
-        float visibility = lightIndex == shadowLightIndex
-            ? CalculateShadowVisibility(fragLightSpacePos, N, L)
-            : 1.0;
+        float visibility = CalculateShadowVisibility(int(light.spotAnglesAndShadow.w),
+            worldPosition, linearDepth, dot(N, L), false);
         vec3 radiance = light.colorAndIntensity.rgb *
             light.colorAndIntensity.w * attenuation;
         directLighting += (diffuseWeight * albedo / PI + specular) *
@@ -368,8 +494,8 @@ void main()
     }
 
     vec3 reflectDirView = reflect(-V, N);
-    vec3 reflectDirWorld = EnvironmentDirection(normalize(viewToWorld * reflectDirView));
-    vec3 normalWorld = EnvironmentDirection(normalize(viewToWorld * N));
+    vec3 reflectDirWorld = EnvironmentDirection(normalize(mat3(inverseView) * reflectDirView));
+    vec3 normalWorld = EnvironmentDirection(normalize(mat3(inverseView) * N));
     vec3 environmentFresnel = f0 + (max(vec3(1.0-roughness),f0)-f0) * pow(1.0-nDotV,5.0);
     vec3 diffuseWeight = (vec3(1.0)-environmentFresnel)*(1.0-metallic);
     // Irradiance map stores E/pi. All IBL textures contain linear scene radiance.
@@ -383,6 +509,6 @@ void main()
     indirectDiffuse = vec4(opaqueForSsao ? min(environmentDiffuse * ao, vec3(65504.0)) : vec3(0.0),
         clamp(material.opacity * albedoSample.a, 0.0, 1.0));
     color = vec4(
-        min(ambient + directLighting, vec3(65504.0)),
+        ApplyCascadeDebug(min(ambient + directLighting, vec3(65504.0)), linearDepth),
         clamp(material.opacity * albedoSample.a, 0.0, 1.0));
 }

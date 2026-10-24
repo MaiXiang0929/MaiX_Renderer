@@ -4,14 +4,14 @@
 enum class RenderPassType
 {
     Shadow, Reflection, Forward, Outline, Translucency, SSAO,
-    Bloom, PostProcess, EditorPrimitive, Present, Count
+    Bloom, PostProcess, EditorPrimitive, Present, ShadowPreview, Count
 };
 
 inline const char* RenderPassName(RenderPassType type)
 {
     static constexpr const char* names[] = {
         "Shadow", "Reflection", "Forward", "Outline", "Translucency",
-        "SSAO", "Bloom", "PostProcess", "EditorPrimitive", "Present"};
+        "SSAO", "Bloom", "PostProcess", "EditorPrimitive", "Present", "ShadowPreview"};
     return type >= RenderPassType::Shadow && type < RenderPassType::Count
         ? names[static_cast<unsigned int>(type)] : "Unknown";
 }

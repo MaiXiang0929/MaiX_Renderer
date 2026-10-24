@@ -7,6 +7,7 @@
 
 #include "cyMatrix.h"
 #include "Engine/Rendering/Renderer/Scene/LightSceneProxy.h"
+#include "Engine/Rendering/Renderer/View/ShadowFrame.h"
 
 constexpr std::size_t MaxForwardLights = 16;
 
@@ -15,6 +16,7 @@ struct alignas(16) GpuLightData
     std::array<float, 4> positionAndType{};
     std::array<float, 4> directionAndRange{};
     std::array<float, 4> colorAndIntensity{};
+    // inner/outer cone cosine, castsShadow, per-frame shadow record index (-1 absent).
     std::array<float, 4> spotAnglesAndShadow{};
 };
 
@@ -39,4 +41,5 @@ LightUploadData BuildLightUploadData(
     const std::vector<LightSceneProxy>& lights,
     const cy::Matrix4f& view,
     LightId shadowLightId,
-    LightId keyLightId);
+    LightId keyLightId,
+    const ShadowFrame* shadowFrame = nullptr);

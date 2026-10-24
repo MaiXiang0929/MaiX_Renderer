@@ -50,6 +50,7 @@ bool CaptureSceneDocument(SceneState& scene,const Renderer& renderer,const Scene
         const auto resources=renderer.GetSceneResources();
         SceneDocument d;
         d.postProcess=scene.postProcess;
+        d.shadowSettings=scene.shadowSettings;
         d.environment=scene.environment;
         if (!scene.environmentSource.empty())
         {
@@ -145,6 +146,7 @@ bool ReplaceSceneFromDocument(SceneState& active,Renderer& renderer,const SceneA
     if (!ValidateSceneDocument(d,error)) return false;
     SceneState candidate;
     candidate.postProcess=d.postProcess;
+    candidate.shadowSettings=d.shadowSettings;
     candidate.environment=d.environment;
     struct Rollback
     {

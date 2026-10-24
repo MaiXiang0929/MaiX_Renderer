@@ -8,6 +8,7 @@
 #include "Engine/Rendering/Renderer/Scene/LightSceneProxy.h"
 #include "Engine/Rendering/Renderer/Pipeline/PassResourceContract.h"
 #include "Engine/Rendering/Renderer/Pipeline/RenderSettings.h"
+#include "Engine/Rendering/Renderer/View/ShadowFrame.h"
 
 class CubemapTexture;
 class Mesh;
@@ -18,6 +19,11 @@ struct TessellationSettings;
 /// @details 这里只保存矩阵、光源和视口等 CPU 数据，不持有任何 OpenGL 资源。
 struct RenderFrameData
 {
+    ShadowFrame shadowFrame;
+    bool shadowCascadeDebug = false;
+    int shadowPreviewLight = -1;
+    int shadowPreviewSlice = 0;
+    bool shadowPreviewReflection = false;
     EnvironmentSettings environment;
     PostProcessSettings postProcess; // Value snapshot; the scene remains the authoring owner.
     unsigned int viewportWidth = 0;
@@ -52,7 +58,6 @@ struct RenderPassContext
 
     RenderView& mainView;
     RenderView& reflectionView;
-    RenderView& shadowView;
     Mesh& presentMesh;
     Mesh& skyboxMesh;
     Mesh& groundMesh;
@@ -62,6 +67,7 @@ struct RenderPassContext
 
     // Pipeline 只在当前 Pass 执行期间注入受限访问器，不保留跨帧纹理字段。
     PassResources* passResources = nullptr;
+    std::vector<RenderView>* shadowViews = nullptr;
     PassResources& Resources() const
     {
         if (!passResources)

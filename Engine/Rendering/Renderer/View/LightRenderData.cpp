@@ -41,7 +41,8 @@ LightUploadData BuildLightUploadData(
     const std::vector<LightSceneProxy>& lights,
     const cy::Matrix4f& view,
     LightId shadowLightId,
-    LightId keyLightId)
+    LightId keyLightId,
+    const ShadowFrame* shadowFrame)
 {
     LightUploadData upload;
 
@@ -85,8 +86,22 @@ LightUploadData BuildLightUploadData(
             std::cos(innerAngle),
             std::cos(outerAngle),
             light.castsShadow ? 1.0f : 0.0f,
-            0.0f
+            -1.0f
         };
+
+        if (shadowFrame && light.castsShadow)
+        {
+            for (std::size_t index = 0;
+                index < std::min(shadowFrame->lights.size(), std::size_t(MaxShadowLights));
+                ++index)
+            {
+                if (shadowFrame->lights[index].lightId == light.id)
+                {
+                    gpuLight.spotAnglesAndShadow[3] = static_cast<float>(index);
+                    break;
+                }
+            }
+        }
 
         if (shadowLightId != InvalidLightId &&
             light.id == shadowLightId &&

@@ -44,12 +44,15 @@ public:
 private:
     RHIDevice& m_Device;
     static constexpr unsigned ForwardLightsBindingPoint = 0;
+    static constexpr unsigned ForwardShadowsBindingPoint = 2;
 
     bool BindForwardLightsBlock(const Shader& shader) const;
     LightUploadData UploadLights(
         const RenderView& view,
         LightId shadowLightId,
-        LightId keyLightId);
+        LightId keyLightId,
+        const ShadowFrame& shadowFrame);
+    void UploadShadows(RenderPassContext& context, const RenderView& view, Shader& shader);
     void RenderItems(
         RenderPassContext& context,
         RenderView& renderView,
@@ -72,6 +75,7 @@ private:
     Framebuffer m_Framebuffer;
     InstanceBuffer m_InstanceBuffer;
     RHIBufferHandle m_LightBuffer = 0;
+    RHIBufferHandle m_ShadowBuffer = 0;
     bool m_LightLimitWarningIssued = false;
     std::vector<InstanceTransformData> m_InstanceTransforms;
 };

@@ -25,7 +25,8 @@ ResourceFormat ExpectedFormat(PassResourceId id)
     case PassResourceId::Irradiance:
     case PassResourceId::PrefilteredEnvironment: return ResourceFormat::Cubemap16F;
     case PassResourceId::BrdfLut: return ResourceFormat::RGBA16F;
-    case PassResourceId::ShadowDepth: return ResourceFormat::Depth24;
+    case PassResourceId::ShadowDepth: return ResourceFormat::DepthArray;
+    case PassResourceId::ShadowCubeDepth: return ResourceFormat::DepthCubeArray;
     case PassResourceId::ForwardDepth: return ResourceFormat::Depth24Stencil8;
     case PassResourceId::SsaoAO: return ResourceFormat::R8;
     case PassResourceId::ForwardIndirect:
@@ -48,7 +49,7 @@ const char* RenderResourceName(PassResourceId id)
         "Environment", "Irradiance", "PrefilteredEnvironment", "BrdfLut",
         "ShadowDepth", "ReflectionColor", "ForwardColor", "ForwardDepth",
         "OutlinedColor", "SceneHdrColor", "SsaoAO", "SsaoColor", "Bloom",
-        "PostColor", "Overlay", "FinalColor", "ForwardIndirect", "OutlinedIndirect", "SceneIndirect"};
+        "PostColor", "Overlay", "FinalColor", "ForwardIndirect", "OutlinedIndirect", "SceneIndirect", "ShadowCubeDepth", "ShadowPreview"};
     return static_cast<std::size_t>(id) < RenderResourceCount ? names[Index(id)] : "Unknown";
 }
 
@@ -70,12 +71,21 @@ PassResourceContract BuildPassResourceContract(RenderPassType pass, PassResource
     const auto surface = [&] {
         read(Id::Environment, Access::Sample, true);
         read(Id::Irradiance); read(Id::PrefilteredEnvironment); read(Id::BrdfLut);
-        if (features.shadows) read(Id::ShadowDepth);
+        if (features.shadows) { read(Id::ShadowDepth); read(Id::ShadowCubeDepth); }
     };
     switch (pass)
     {
+    case RenderPassType::ShadowPreview:
+        if (features.shadows && features.shadowPreview) {
+            read(Id::ShadowDepth); read(Id::ShadowCubeDepth);
+            write(Id::ShadowPreview, Access::ColorWrite, Load::Clear);
+        }
+        break;
     case RenderPassType::Shadow:
-        if (features.shadows) write(Id::ShadowDepth, Access::DepthWrite, Load::None, Load::Clear);
+        if (features.shadows) {
+            write(Id::ShadowDepth, Access::DepthWrite, Load::None, Load::Clear);
+            write(Id::ShadowCubeDepth, Access::DepthWrite, Load::None, Load::Clear);
+        }
         break;
     case RenderPassType::Reflection:
         surface();
@@ -186,6 +196,7 @@ void FrameResources::BeginFrame(unsigned int width, unsigned int height)
 {
     m_Bindings = {};
     m_Produced = {};
+    m_WrittenLayers = {};
     m_Width = width;
     m_Height = height;
 }
@@ -195,6 +206,7 @@ void FrameResources::Bind(PassResourceId id, RenderResourceBinding binding)
     if (binding.imported != IsImported(id))
         throw ResourceContractError("Only renderer-owned environment resources can be imported.");
     m_Bindings[index] = binding;
+    m_WrittenLayers[index].assign(binding.requiredLayers, false);
     m_Produced[index] = binding.imported;
 }
 bool FrameResources::IsProduced(PassResourceId id) const { return m_Produced[Index(id)]; }
@@ -226,10 +238,18 @@ void PassResources::ValidateBinding(PassResourceId id, bool optional) const
     RenderTargetExtent expected{m_Frame.m_Width, m_Frame.m_Height};
     if (id == PassResourceId::ReflectionColor)
         expected = CalculateReflectionTargetExtent(m_Frame.m_Width, m_Frame.m_Height);
+    else if (id == PassResourceId::ShadowPreview)
+        expected = {256,256};
     else if (id == PassResourceId::Bloom || id == PassResourceId::SsaoAO)
         expected = CalculateBloomTargetExtent(m_Frame.m_Width, m_Frame.m_Height);
-    else if (id == PassResourceId::ShadowDepth)
-        expected = {2048, 2048};
+    else if (id == PassResourceId::ShadowDepth || id == PassResourceId::ShadowCubeDepth)
+    {
+        if (!binding.width || binding.width != binding.height || !binding.layers ||
+            !binding.requiredLayers || binding.requiredLayers > binding.layers ||
+            (id == PassResourceId::ShadowCubeDepth && binding.layers % 6 != 0))
+            Fail(id, "has invalid shadow array dimensions or layers.");
+        return;
+    }
     if (!expected.width || !expected.height || binding.width != expected.width || binding.height != expected.height)
         Fail(id, "has an incompatible extent.");
 }
@@ -255,7 +275,7 @@ const RenderResourceBinding& PassResources::Output(PassResourceId id) const
 {
     const auto& declaration = FindOutput(id);
     ValidateBinding(id, false);
-    const bool depth = id == PassResourceId::ShadowDepth || id == PassResourceId::ForwardDepth;
+    const bool depth = id == PassResourceId::ShadowDepth || id == PassResourceId::ShadowCubeDepth || id == PassResourceId::ForwardDepth;
     if (declaration.access != (depth ? ResourceAccess::DepthWrite : ResourceAccess::ColorWrite))
         Fail(id, "has an incompatible output access.");
     return m_Frame.m_Bindings[Index(id)];
@@ -301,6 +321,9 @@ void PassResources::Publish(PassResourceId id)
 {
     const auto& declaration = FindOutput(id);
     const auto& binding = Output(id);
+    if (id == PassResourceId::ShadowDepth || id == PassResourceId::ShadowCubeDepth)
+        for (bool written : m_Frame.m_WrittenLayers[Index(id)])
+            if (!written) Fail(id, "contains an incomplete shadow layer.");
     if (declaration.colorLoad == AttachmentLoad::Preserve)
         Read(declaration.preservedSource, ResourceAccess::PreserveColor);
     // 更新同一物理颜色的阶段后，旧内容身份失效；这不是额外的 GPU 内存分配。

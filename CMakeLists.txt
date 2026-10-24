@@ -72,6 +72,7 @@ add_library(MaiXRendering STATIC
     Engine/Rendering/Passes/ReflectionPass.cpp
     Engine/Rendering/Passes/SSAOPass.cpp
     Engine/Rendering/Passes/ShadowPass.cpp
+    Engine/Rendering/Passes/ShadowPreviewPass.cpp
     Engine/Rendering/Passes/TranslucencyPass.cpp
     Engine/Rendering/Renderer/Core/Renderer.cpp
     Engine/Rendering/Renderer/Diagnostics/GpuDebugScope.cpp
@@ -90,6 +91,7 @@ add_library(MaiXRendering STATIC
     Engine/Rendering/Renderer/Scene/RenderScene.cpp
     Engine/Rendering/Renderer/View/Frustum.cpp
     Engine/Rendering/Renderer/View/LightRenderData.cpp
+    Engine/Rendering/Renderer/View/ShadowFrameBuilder.cpp
     Engine/Rendering/Renderer/View/RenderBatch.cpp
 )
 target_link_libraries(MaiXRendering PUBLIC MaiXCore MaiXAsset MaiXRHI MaiXPNG)
@@ -122,6 +124,7 @@ add_executable(MaiX_Renderer
     Editor/Inspector/InspectorPanel.cpp
     Editor/Inspector/EnvironmentPanel.cpp
     Editor/Inspector/RenderSettingsPanel.cpp
+    Editor/Inspector/ShadowSettingsPanel.cpp
     Editor/MaterialEditor/MaterialEditorPanel.cpp
     Editor/SceneHierarchy/SceneHierarchyPanel.cpp
     Editor/Session/EditorFonts.cpp

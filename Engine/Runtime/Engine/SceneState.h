@@ -13,6 +13,7 @@
 struct SceneState
 {
     PostProcessSettings postProcess;
+    ShadowSettings shadowSettings;
     EnvironmentSettings environment;
     std::filesystem::path environmentSource; // Empty selects the built-in six-face sky.
     World world;

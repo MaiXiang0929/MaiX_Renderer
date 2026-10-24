@@ -21,7 +21,18 @@ std::uint64_t NewId()
 }
 GLenum TextureTarget(RHITextureKind kind)
 {
-    return kind == RHITextureKind::Cubemap ? GL_TEXTURE_CUBE_MAP : GL_TEXTURE_2D;
+    switch (kind)
+    {
+    case RHITextureKind::Texture2D: return GL_TEXTURE_2D;
+    case RHITextureKind::Cubemap: return GL_TEXTURE_CUBE_MAP;
+    case RHITextureKind::Texture2DArray: return GL_TEXTURE_2D_ARRAY;
+    case RHITextureKind::CubemapArray: return GL_TEXTURE_CUBE_MAP_ARRAY;
+    }
+    throw RHIError("Unsupported texture kind");
+}
+bool IsArray(RHITextureKind kind)
+{
+    return kind == RHITextureKind::Texture2DArray || kind == RHITextureKind::CubemapArray;
 }
 GLenum BufferTarget(RHIBufferUsage use)
 {
@@ -144,13 +155,15 @@ template<class F> Rollback(F) -> Rollback<F>;
 
 struct Bindings
 {
-    GLint draw, read, texture, cube, renderbuffer, array, uniform, vao, unpack;
+    GLint draw, read, texture, cube, textureArray, cubeArray, renderbuffer, array, uniform, vao, unpack;
     Bindings()
     {
         glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &draw);
         glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &read);
         glGetIntegerv(GL_TEXTURE_BINDING_2D, &texture);
         glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &cube);
+        glGetIntegerv(GL_TEXTURE_BINDING_2D_ARRAY, &textureArray);
+        glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP_ARRAY, &cubeArray);
         glGetIntegerv(GL_RENDERBUFFER_BINDING, &renderbuffer);
         glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &array);
         glGetIntegerv(GL_UNIFORM_BUFFER_BINDING, &uniform);
@@ -163,6 +176,8 @@ struct Bindings
         glBindFramebuffer(GL_READ_FRAMEBUFFER, read);
         glBindTexture(GL_TEXTURE_2D, texture);
         glBindTexture(GL_TEXTURE_CUBE_MAP, cube);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, textureArray);
+        glBindTexture(GL_TEXTURE_CUBE_MAP_ARRAY, cubeArray);
         glBindRenderbuffer(GL_RENDERBUFFER, renderbuffer);
         glBindVertexArray(vao);
         glBindBuffer(GL_ARRAY_BUFFER, array);
@@ -211,6 +226,39 @@ class OpenGLDevice final : public RHIDevice, public RHICommandList
             throw RHIError("Uniform program is not bound");
         return glGetUniformLocation(object, name.c_str());
     }
+    RHITextureHandle CreateDepthArray(const RHITargetDesc &desc)
+    {
+        Bindings saved;
+        GLuint object = 0;
+        glGenTextures(1, &object);
+        if (!object)
+            return {};
+        Rollback candidate{[&] { glDeleteTextures(1, &object); }};
+        const GLenum target = TextureTarget(desc.depthKind);
+        glBindTexture(target, object);
+        glTexImage3D(target, 0, GL_DEPTH_COMPONENT24, desc.width, desc.height, desc.layers, 0,
+                     GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+        glTexParameteri(target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(target, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+        glTexParameteri(target, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+        glTexParameteri(target, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+        if (glGetError() != GL_NO_ERROR)
+            return {};
+        RHITextureDesc texture;
+        texture.width = desc.width;
+        texture.height = desc.height;
+        texture.kind = desc.depthKind;
+        texture.format = RHITextureFormat::Depth24;
+        texture.wrap = RHIWrap::ClampEdge;
+        texture.compareDepth = true;
+        const RHITextureHandle handle{NewId()};
+        m_Textures.emplace(handle.id, Texture{object, texture, true});
+        candidate.active = false;
+        return handle;
+    }
 
   public:
     OpenGLDevice()
@@ -220,6 +268,10 @@ class OpenGLDevice final : public RHIDevice, public RHICommandList
         GLint value = 0;
         glGetIntegerv(GL_MAX_TEXTURE_SIZE, &value);
         m_Caps.maxTextureSize = value;
+        glGetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS, &value);
+        m_Caps.maxArrayTextureLayers = value;
+        glGetIntegerv(GL_MAX_CUBE_MAP_TEXTURE_SIZE, &value);
+        m_Caps.maxCubeMapTextureSize = value;
         glGetIntegerv(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, &value);
         m_Caps.uniformBufferAlignment = value;
         glGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, &value);
@@ -269,9 +321,11 @@ class OpenGLDevice final : public RHIDevice, public RHICommandList
     RHITextureHandle CreateTexture(const RHITextureDesc &desc,
                                    const std::array<const void *, 6> &data) override
     {
-        if (!desc.width || !desc.height || desc.width > m_Caps.maxTextureSize ||
+        if ((desc.kind != RHITextureKind::Texture2D && desc.kind != RHITextureKind::Cubemap) ||
+            !desc.width || !desc.height || desc.width > m_Caps.maxTextureSize ||
             desc.height > m_Caps.maxTextureSize ||
-            (desc.kind == RHITextureKind::Cubemap && desc.width != desc.height))
+            (desc.kind == RHITextureKind::Cubemap &&
+             (desc.width != desc.height || desc.width > m_Caps.maxCubeMapTextureSize)))
             return {};
         Bindings saved;
         GLuint object = 0;
@@ -514,8 +568,15 @@ class OpenGLDevice final : public RHIDevice, public RHICommandList
     }
     RHITarget CreateTarget(const RHITargetDesc &desc) override
     {
+        const bool arrayDepth = IsArray(desc.depthKind);
         if (!desc.width || !desc.height || desc.width > m_Caps.maxTextureSize ||
-            desc.height > m_Caps.maxTextureSize || (!desc.color && !desc.depth) || (desc.secondaryColor && !desc.color))
+            desc.height > m_Caps.maxTextureSize || (!desc.color && !desc.depth) ||
+            (desc.secondaryColor && !desc.color) || !desc.layers ||
+            (!arrayDepth && (desc.depthKind != RHITextureKind::Texture2D || desc.layers != 1)) ||
+            (arrayDepth && (!desc.depth || desc.color || desc.secondaryColor || desc.mipmaps ||
+                            desc.layers > m_Caps.maxArrayTextureLayers)) ||
+            (desc.depthKind == RHITextureKind::CubemapArray &&
+             (desc.width != desc.height || desc.width > m_Caps.maxCubeMapTextureSize || desc.layers % 6)))
             return {};
         Bindings saved;
         Target target;
@@ -570,7 +631,15 @@ class OpenGLDevice final : public RHIDevice, public RHICommandList
             const GLenum buffers[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
             glDrawBuffers(2, buffers);
         }
-        if (desc.depth && (desc.sampleableDepth || desc.shadow))
+        if (arrayDepth)
+        {
+            target.handles.depth = CreateDepthArray(desc);
+            if (!target.handles.depth)
+                return {};
+            glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+                                      Find(m_Textures, target.handles.depth).object, 0, 0);
+        }
+        else if (desc.depth && (desc.sampleableDepth || desc.shadow))
         {
             texture.format = desc.shadow ? RHITextureFormat::Depth24 : RHITextureFormat::Depth24Stencil8;
             texture.mipmaps = false;
@@ -643,12 +712,42 @@ class OpenGLDevice final : public RHIDevice, public RHICommandList
             bindings.texture = Native(next.handles.color);
         if (old.handles.secondaryColor != 0 && bindings.texture == static_cast<GLint>(Native(old.handles.secondaryColor)))
             bindings.texture = next.handles.secondaryColor ? Native(next.handles.secondaryColor) : 0;
-        if (old.handles.depth != 0 && bindings.texture == static_cast<GLint>(Native(old.handles.depth)))
-            bindings.texture = Native(next.handles.depth);
+        if (old.handles.depth != 0)
+        {
+            GLint *binding = old.desc.depthKind == RHITextureKind::Texture2DArray ? &bindings.textureArray
+                             : old.desc.depthKind == RHITextureKind::CubemapArray ? &bindings.cubeArray
+                                                                                 : &bindings.texture;
+            if (*binding == static_cast<GLint>(Native(old.handles.depth)))
+                *binding = next.handles.depth && old.desc.depthKind == next.desc.depthKind
+                               ? Native(next.handles.depth) : 0;
+        }
     }
     void BeginTarget(RHITargetHandle handle, bool color, bool depth, float alpha) override
     {
         const auto &target = Find(m_Targets, handle);
+        if (IsArray(target.desc.depthKind))
+            throw RHIError("Array render targets require an explicit target layer");
+        ActivateTarget(handle, target, color, depth, alpha);
+    }
+    void BeginTargetLayer(RHITargetHandle handle, unsigned layer, bool clearDepth) override
+    {
+        const auto &target = Find(m_Targets, handle);
+        if (!IsArray(target.desc.depthKind) || layer >= target.desc.layers)
+            throw RHIError("Invalid depth array target or layer");
+        // Restore caller framebuffer bindings if attachment validation fails.
+        {
+            Bindings saved;
+            glBindFramebuffer(GL_FRAMEBUFFER, target.object);
+            glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+                                      Find(m_Textures, target.handles.depth).object, 0, layer);
+            if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE ||
+                glGetError() != GL_NO_ERROR)
+                throw RHIError("Depth array target layer attachment failed");
+        }
+        ActivateTarget(handle, target, false, clearDepth, 0);
+    }
+    void ActivateTarget(RHITargetHandle handle, const Target &target, bool color, bool depth, float alpha)
+    {
         m_ActiveTarget = handle;
         glBindFramebuffer(GL_FRAMEBUFFER, target.object);
         glViewport(0, 0, target.desc.width, target.desc.height);

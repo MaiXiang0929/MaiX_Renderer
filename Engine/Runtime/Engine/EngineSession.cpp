@@ -34,7 +34,8 @@ RenderFrameData EngineSession::PrepareFrame(Camera &camera, unsigned width, unsi
 {
     if (!m_Renderer)
         return {};
-    if (!IsValidEnvironmentSettings(m_Scene.environment) || !IsValidPostProcessSettings(m_Scene.postProcess) || !RegisterSceneActors(m_Scene))
+    if (!IsValidEnvironmentSettings(m_Scene.environment) || !IsValidPostProcessSettings(m_Scene.postProcess) ||
+        !IsValidShadowSettings(m_Scene.shadowSettings) || !RegisterSceneActors(m_Scene))
     {
         if (!m_RegistrationFailed)
             std::cerr << "[Scene] Invalid scene settings or actor registration failed; frame rejected.\n";

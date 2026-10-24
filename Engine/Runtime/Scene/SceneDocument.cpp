@@ -214,6 +214,7 @@ bool ValidateSceneDocument(const SceneDocument& d, std::string& error)
             {
                 const auto& l=*a.light;
                 Check(static_cast<int>(l.type)>=0&&static_cast<int>(l.type)<=2,"Invalid light type.");
+                Check(IsValidLightShadowSettings(l),"Invalid light shadow settings.");
                 Check(Finite(l.color)&&l.color.x>=0&&l.color.y>=0&&l.color.z>=0,"Invalid light color.");
                 Check(std::isfinite(l.intensity)&&l.intensity>=0&&std::isfinite(l.range)&&l.range>0,"Invalid light intensity/range.");
                 Check(std::isfinite(l.innerConeAngle)&&std::isfinite(l.outerConeAngle)&&l.innerConeAngle>=0&&l.outerConeAngle>0&&l.innerConeAngle<=l.outerConeAngle&&l.outerConeAngle<1.5707964f,"Invalid spotlight cone.");
@@ -236,6 +237,7 @@ bool ValidateSceneDocument(const SceneDocument& d, std::string& error)
         Check(!d.mainLight || (records.count(d.mainLight)&&records.at(d.mainLight)->light),"Invalid main light reference.");
         Check(std::isfinite(d.groundY)&&std::isfinite(d.sceneRadius)&&d.sceneRadius>0&&std::isfinite(d.modelDiameter)&&d.modelDiameter>=0&&Finite(d.defaultBoundsMin)&&Finite(d.defaultBoundsMax)&&Finite(d.objCenter),"Invalid scene framing values.");
         Check(IsValidPostProcessSettings(d.postProcess),"Invalid scene post-process settings (non-finite or out of range).");
+        Check(IsValidShadowSettings(d.shadowSettings),"Invalid scene shadow settings.");
         error.clear(); return true;
     }
     catch (const std::exception& e) { error=e.what(); return false; }
@@ -246,13 +248,16 @@ bool EncodeSceneDocument(const SceneDocument& d,std::string& text,std::string& e
     if (!ValidateSceneDocument(d,error)) return false;
     try
     {
-        J j={{"format","MaiX Scene"},{"version",2},{"actors",J::array()},{"materials",J::array()},
+        J j={{"format","MaiX Scene"},{"version",3},{"actors",J::array()},{"materials",J::array()},
             {"defaultModel",d.defaultModel},{"mainLight",d.mainLight},{"reflectionGroundEnabled",d.reflectionGroundEnabled},
             {"groundY",d.groundY},{"modelDiameter",d.modelDiameter},{"sceneRadius",d.sceneRadius},
             {"defaultBoundsMin",Vec(d.defaultBoundsMin)},{"defaultBoundsMax",Vec(d.defaultBoundsMax)},{"objCenter",Vec(d.objCenter)}};
         j["environment"]={{"source",d.environmentSource?Asset(*d.environmentSource):J(nullptr)},
             {"intensity",d.environment.intensity},{"rotationDegrees",d.environment.rotationDegrees}};
         const auto& p=d.postProcess;
+        const auto& shadows=d.shadowSettings;
+        j["shadows"]={{"multiLight",shadows.multiLight},{"maxLights",shadows.maxLights},
+            {"resolution",shadows.resolution},{"pointResolution",shadows.pointResolution}};
         j["postProcess"]={{"fxaaEnabled",p.fxaaEnabled},{"toneMappingEnabled",p.toneMappingEnabled},{"exposureCompensation",p.exposureCompensation},
             {"bloomEnabled",p.bloomEnabled},{"bloomThreshold",p.bloomThreshold},{"bloomIntensity",p.bloomIntensity},
             {"ssaoEnabled",p.ssaoEnabled},{"ssaoRadius",p.ssaoRadius},{"ssaoIntensity",p.ssaoIntensity},{"ssaoBias",p.ssaoBias}};
@@ -284,7 +289,9 @@ bool EncodeSceneDocument(const SceneDocument& d,std::string& text,std::string& e
             {
                 const auto& l=*a.light;
                 value["light"]={{"type",static_cast<int>(l.type)},{"color",Vec(l.color)},{"intensity",l.intensity},{"range",l.range},
-                    {"innerConeAngle",l.innerConeAngle},{"outerConeAngle",l.outerConeAngle},{"castsShadow",l.castsShadow}};
+                    {"innerConeAngle",l.innerConeAngle},{"outerConeAngle",l.outerConeAngle},{"castsShadow",l.castsShadow},
+                    {"shadowBias",l.shadowBias},{"shadowNormalBias",l.shadowNormalBias},{"cascadeCount",l.cascadeCount},
+                    {"shadowDistance",l.shadowDistance},{"splitLambda",l.splitLambda}};
             }
             if (a.camera) value["camera"]={{"fovDegrees",a.camera->fovDegrees},{"nearPlane",a.camera->nearPlane},{"farPlane",a.camera->farPlane}};
             j["actors"].push_back(std::move(value));
@@ -311,10 +318,26 @@ bool DecodeSceneDocument(const std::string& text,SceneDocument& output,std::stri
             return true;
         });
         Fields(j,{"format","version","actors","materials","defaultModel","mainLight","reflectionGroundEnabled","groundY",
-            "modelDiameter","sceneRadius","defaultBoundsMin","defaultBoundsMax","objCenter","postProcess","environment"});
+            "modelDiameter","sceneRadius","defaultBoundsMin","defaultBoundsMax","objCenter","postProcess","environment","shadows"});
         const auto version=Key(j.at("version"));
-        Check(j.at("format")=="MaiX Scene"&&(version==1||version==2),"Unsupported scene format/version.");
+        Check(j.at("format")=="MaiX Scene"&&(version==1||version==2||version==3),"Unsupported scene format/version.");
         SceneDocument d;
+        if (version==3)
+        {
+            const auto& shadows=j.at("shadows"); Fields(shadows,{"multiLight","maxLights","resolution","pointResolution"});
+            d.shadowSettings.multiLight=shadows.at("multiLight").get<bool>();
+            const auto maxLights=Key(shadows.at("maxLights")), resolution=Key(shadows.at("resolution")), pointResolution=Key(shadows.at("pointResolution"));
+            Check(maxLights>=1&&maxLights<=4&&resolution<=2048&&pointResolution<=2048,"Invalid shadow budget or resolution.");
+            d.shadowSettings.maxLights=static_cast<unsigned>(maxLights);
+            d.shadowSettings.resolution=static_cast<unsigned>(resolution);
+            d.shadowSettings.pointResolution=static_cast<unsigned>(pointResolution);
+        }
+        else
+        {
+            Check(!j.contains("shadows"),"Old scene versions cannot contain shadow settings.");
+            d.shadowSettings.multiLight=false; d.shadowSettings.maxLights=1;
+            d.shadowSettings.resolution=2048;
+        }
         if (j.contains("environment"))
         {
             const auto& env=j.at("environment"); Fields(env,{"source","intensity","rotationDegrees"});
@@ -323,7 +346,7 @@ bool DecodeSceneDocument(const std::string& text,SceneDocument& output,std::stri
             if (!env.at("source").is_null()) d.environmentSource=ReadAsset(env.at("source"));
         }
         d.postProcess.fxaaEnabled=false; // Old v1/v2 scenes retain their authored appearance.
-        if (version==2)
+        if (version>=2)
         {
             const auto& p=j.at("postProcess");
             Fields(p,{"fxaaEnabled","toneMappingEnabled","exposureCompensation","bloomEnabled","bloomThreshold","bloomIntensity",
@@ -387,11 +410,22 @@ bool DecodeSceneDocument(const std::string& text,SceneDocument& output,std::stri
             if (v.contains("light"))
             {
                 a.light.emplace(); auto& l=*a.light; const auto& light=v.at("light");
-                Fields(light,{"type","color","intensity","range","innerConeAngle","outerConeAngle","castsShadow"});
+                if (version==3)
+                    Fields(light,{"type","color","intensity","range","innerConeAngle","outerConeAngle","castsShadow",
+                        "shadowBias","shadowNormalBias","cascadeCount","shadowDistance","splitLambda"});
+                else Fields(light,{"type","color","intensity","range","innerConeAngle","outerConeAngle","castsShadow"});
                 const auto type=Key(light.at("type")); Check(type<=2,"Invalid light type."); l.type=static_cast<LightType>(type);
                 l.color=Vector(light.at("color")); l.intensity=Number(light.at("intensity")); l.range=Number(light.at("range"));
                 l.innerConeAngle=Number(light.at("innerConeAngle")); l.outerConeAngle=Number(light.at("outerConeAngle"));
                 l.castsShadow=light.at("castsShadow").get<bool>();
+                if (version==3)
+                {
+                    l.shadowBias=Number(light.at("shadowBias")); l.shadowNormalBias=Number(light.at("shadowNormalBias"));
+                    const auto cascades=Key(light.at("cascadeCount")); Check(cascades==1||cascades==2||cascades==4,"Invalid cascade count.");
+                    l.cascadeCount=static_cast<unsigned>(cascades);
+                    l.shadowDistance=Number(light.at("shadowDistance")); l.splitLambda=Number(light.at("splitLambda"));
+                }
+                else { l.cascadeCount=1; if (l.type==LightType::Point) l.castsShadow=false; }
             }
             if (v.contains("camera"))
             {

@@ -15,13 +15,11 @@ out vec3 fragNormal;
 out vec3 fragTangent;
 out float fragTangentSign;
 out vec2 fragTexCoord;
-out vec4 fragLightSpacePos;
 out vec3 fragFaceForward;
 out vec3 fragFaceRight;
 
 uniform mat4 mvp;
 uniform mat4 mv;
-uniform mat4 lightMvp;
 uniform sampler2D displacementMap;
 uniform bool hasDisplacementMap;
 uniform float displacementScale;
@@ -59,7 +57,6 @@ void main()
     fragTangent = normalize(mat3(mv) * tangent.xyz);
     fragTangentSign = tangent.w < 0.0 ? -1.0 : 1.0;
     fragTexCoord = uv;
-    fragLightSpacePos = lightMvp * vec4(position, 1.0);
 
     fragFaceForward = normalize(mat3(mv) * faceForwardLocal);
     vec3 faceRightView = mat3(mv) * faceRightLocal;
