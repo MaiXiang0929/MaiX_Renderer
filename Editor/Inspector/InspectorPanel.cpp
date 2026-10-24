@@ -240,6 +240,23 @@ bool InspectorPanel::Draw(EditorSelection &selection, SceneState &scene, bool &c
     ImGui::SeparatorText("Light Parameters");
 
     bool changed = false;
+    if (ImGui::BeginCombo("Type", LightTypeName(light->proxy.type)))
+    {
+        for (const auto type : {LightType::Directional, LightType::Point, LightType::Spot})
+            if (ImGui::Selectable(LightTypeName(type), light->proxy.type == type))
+            {
+                light->proxy.type = type;
+                if (!SupportsShadowMap(type))
+                    light->proxy.castsShadow = false;
+                changed = true;
+            }
+        ImGui::EndCombo();
+    }
+    if (light->proxy.id == scene.mainLightId)
+        ImGui::TextUnformatted("Main Light");
+    else if (ImGui::Button("Set as Main Light"))
+        scene.mainLightId = light->proxy.id;
+    ImGui::TextWrapped("Main light drives shadows and the default NPR key light.");
     changed |= ImGui::ColorEdit3("Color", &light->proxy.color.x);
     changed |= ImGui::DragFloat("Intensity", &light->proxy.intensity, 0.05f, 0.0f, 100.0f);
     EditorValueConstraints::SanitizeColor(light->proxy.color);
@@ -259,7 +276,7 @@ bool InspectorPanel::Draw(EditorSelection &selection, SceneState &scene, bool &c
         EditorValueConstraints::SanitizeSpotConeDegrees(innerDegrees, outerDegrees);
         light->proxy.innerConeAngle = innerDegrees * Pi / 180.0f;
         light->proxy.outerConeAngle = outerDegrees * Pi / 180.0f;
-        ImGui::TextDisabled("Cone follows the light direction.");
+        ImGui::TextWrapped("Cone angles are half-angles. Rotation aims local -Z; scale does not change Range.");
     }
 
     const bool shadowSupported = SupportsShadowMap(light->proxy.type);
@@ -271,7 +288,12 @@ bool InspectorPanel::Draw(EditorSelection &selection, SceneState &scene, bool &c
     else if (light->proxy.id != scene.mainLightId)
         ImGui::TextDisabled("Only the scene main light currently casts shadows.");
     if (changed)
+    {
+        // Transform and visibility edits above may not have reached PrepareFrame yet.
+        light->transform = scene.world.Find(light->actor)->world;
+        light->proxy.visible = scene.world.IsVisible(light->actor);
         ApplySceneLightTransform(*light, renderer);
+    }
 
     ImGui::End();
     return false;

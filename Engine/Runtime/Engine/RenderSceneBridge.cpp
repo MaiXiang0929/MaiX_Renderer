@@ -4,6 +4,50 @@
 #include "Engine/Rendering/Renderer/Core/Renderer.h"
 #include "Engine/Runtime/Engine/SceneState.h"
 #include <algorithm>
+#include <stdexcept>
+
+LightId CreateSceneLight(SceneState &scene, Renderer &renderer, LightType type,
+                         const Transform &local, std::string &error)
+{
+    SceneLight light;
+    switch (type)
+    {
+    case LightType::Directional: light.name = "Directional Light"; break;
+    case LightType::Point: light.name = "Point Light"; break;
+    case LightType::Spot: light.name = "Spot Light"; break;
+    default: error = "Unsupported light type."; return InvalidLightId;
+    }
+    light.proxy.type = type;
+    light.proxy.castsShadow = SupportsShadowMap(type);
+    light.transform = local;
+    try
+    {
+        scene.lights.reserve(scene.lights.size() + 1);
+        light.proxy.id = renderer.AddLight(light.proxy);
+        if (!light.IsValid())
+            throw std::runtime_error("Could not register light.");
+        light.actor = scene.world.Create(light.name, local, ActorKind::Light, light.proxy.id);
+        if (!light.actor.IsValid())
+            throw std::runtime_error("Invalid light transform.");
+        light.transform = scene.world.Find(light.actor)->world;
+        ApplySceneLightTransform(light, renderer);
+        const auto id = light.proxy.id;
+        scene.lights.push_back(std::move(light));
+        if (scene.mainLightId == InvalidLightId)
+            scene.mainLightId = id;
+        error.clear();
+        return id;
+    }
+    catch (const std::exception &exception)
+    {
+        if (light.actor.IsValid())
+            scene.world.Destroy(light.actor);
+        if (light.IsValid())
+            renderer.RemoveLight(light.proxy.id);
+        error = exception.what();
+        return InvalidLightId;
+    }
+}
 
 bool RegisterSceneActors(SceneState &scene)
 {

@@ -137,6 +137,12 @@ HDR 文件及单份解码 RGBA 浮点缓冲分别限制为 256 MiB，要求 2:1�
 
 Scene 显示实际对象层级。`Create Empty` 创建组合根节点；把模型、灯光或相机拖到另一个对象上，或在 Inspector 的 `Parent` 中选择父级。换父级和 `Detach to Root` 保持世界变换。Inspector 的 `Local Transform` 编辑相对父级的位置、旋转和缩放，视口 Gizmo 编辑世界变换，`F` 可聚焦空对象。`Name` 输入后按 Enter 改名。
 
+`Scene → Create Light` 可创建 `Directional`（方向光）、`Point`（点光源）或 `Spot`（聚光灯），创建后自动选中。新灯是根对象，位于场景记录中心上方 3 米，局部 -Z 默认朝下；可用 `Local Transform` 或 Gizmo 调整位置和朝向。新方向光/聚光灯默认开启 `Cast Shadow`，点光源关闭；仅场景没有主灯时，新灯自动成为主灯。
+
+选中灯光后，Inspector 的 `Type` 切换类型，保留对象身份、层级、变换、颜色、强度和锥角等参数。切为 Point 会关闭 `Cast Shadow`，切回支持阴影的类型后需手动开启。`Set as Main Light` 指定阴影与默认 NPR Key Light 来源，Scene 树以 `(main light)` 标识；其他灯仍参与照明，但不会生成阴影。删除主灯后不自动选取其他灯，可显式指定或创建新灯。灯光类型、参数、层级和主灯选择随场景保存，计入未保存修改检测。
+
+聚光灯操作：`Create Light → Spot`，在 Inspector 点 `Set as Main Light`（已是主灯时显示 `Main Light`），确认 `Cast Shadow` 开启。通过 Rotation 将局部 -Z 对准模型，调整 `Range` 和 `Inner Cone / Outer Cone`；锥角数值是半角，缩放不改变 Range。检查照明范围与阴影，再保存并重开场景核对设置。画面与交互待用户验收。
+
 Inspector 的 `Visible` 控制对象自己的显示开关；父级隐藏会作用于整棵子树，Scene 树用 `(hidden)` 标识有效隐藏对象，`Hidden by parent` 表示开关虽开启但被祖先隐藏。恢复父级不会覆盖子对象自己的开关。隐藏模型不进入主视图、反射或阴影，隐藏灯光不参与照明与阴影；隐藏对象不显示辅助图标/Gizmo，也不参与视口拾取，仍可在 Scene 树选中并通过 Inspector 编辑。相机隐藏只影响编辑图标，其取景仍可使用。
 
 隐藏不会卸载模型或材质，也不会取消资源引用保护。隐藏期间的变换继续由 World 同步，恢复后保留最新位置。EngineSession 的 `PrepareFrame` 统一完成注册、状态同步与多视图帧准备，失效 Actor/组件绑定会拒绝该帧输出。
