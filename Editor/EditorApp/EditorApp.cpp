@@ -1314,7 +1314,7 @@ void EditorApp::Render() {
     m_AssetImportPanel->Draw(nativeWindowHandle);
     if (m_Workspace->ShowStatistics())
         m_StatisticsPanel->Draw(*m_Renderer);
-    const auto removedActor=m_SceneHierarchyPanel->Draw(m_EditorSelection,m_Engine.Scene());
+    const auto removedActor=m_SceneHierarchyPanel->Draw(m_EditorSelection,m_Engine.Scene(),*m_Renderer);
     if (removedActor.IsValid()) {
         DestroySceneActor(m_Engine.Scene(),*m_Renderer,removedActor);
         if (!m_EditorSelection.ResolveActor(m_Engine.Scene()).IsValid()) m_EditorSelection.Clear();

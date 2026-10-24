@@ -12,7 +12,7 @@ struct ModelId;
 class SceneHierarchyPanel
 {
 public:
-    ActorId Draw(EditorSelection& selection, SceneState& scene);
+    ActorId Draw(EditorSelection& selection, SceneState& scene, class Renderer& renderer);
 private:
     std::string m_Error;
 };
