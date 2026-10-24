@@ -90,9 +90,9 @@ cmake --build --preset windows-ninja-debug
 
 ## 编辑器操作
 
-默认工作区采用左侧 Scene、中央 Viewport、右侧 Inspector 的布局，左侧与中央下方由 Content Browser 和 Console 共用标签区。Material Editor 打开后继续与 Inspector 共用标签。`View → Theme → Light / Dark` 切换雾蓝与柔粉的浅色/深色主题；`View → UI Scale` 调整界面缩放，并叠加窗口所在显示器的内容缩放。主题与缩放保存在用户目录的 `MaiX_Renderer/imgui.ini` 中，切换主题不重置布局。`Reset Layout` 恢复新版默认布局。
+默认工作区采用左侧 Scene、中央 Viewport、右侧通高 Inspector 的布局，左侧与中央下方由 Content Browser 和 Console 共用标签区。默认左右面板约占总宽度的 16.5% 和 30.5%，底部资源区约占工作区高度的 42%；仍可拖拽调整。Material Editor 打开后继续与 Inspector 共用标签。`View → Theme → Light / Dark` 切换浅色/深色主题；`View → UI Scale` 调整界面缩放，并叠加窗口所在显示器的内容缩放。主题与缩放保存在用户目录的 `MaiX_Renderer/imgui.ini` 中，切换主题不重置布局。已有布局继续保留，`View → Reset Layout` 应用新的默认比例。菜单栏右侧显示项目名称，底部状态栏显示当前选择与项目。
 
-Viewport 顶部工具栏提供移动、旋转、缩放与世界/局部空间切换；不可用于当前对象的操作会禁用。工具栏不计入视口图像的拾取和渲染范围。Inspector 中 Transform、Materials 使用折叠分组，导入尺寸和源单位位于默认收起的 Asset Info。资源浏览器只浏览当前用户项目的 `Assets/`，提供统一雾蓝文件夹图标、相对路径导航和当前目录名称过滤。下列场景快捷键在 Viewport 获得焦点时生效；鼠标场景操作从视口图像内开始。
+Viewport 顶部工具栏提供移动、旋转、缩放与世界/局部空间切换，宽度允许时显示操作文字；不可用于当前对象的操作会禁用。工具栏不计入视口图像的拾取和渲染范围。Scene 顶部 `...` 菜单提供 Create Empty、Create Light、Detach to Root 与 Delete Subtree，删除项显示包含自身的子树对象数；对象树支持拖拽换父级。Inspector 顶部显示对象身份与 Visible，Name/Parent 使用左侧标签，Local Transform、Materials 与灯光/相机参数分组显示；导入尺寸和源单位位于默认收起的 Asset Info。资源浏览器只浏览当前用户项目的 `Assets/`，路径与筛选默认共用一行，空间不足时筛选另起一行。目录树、文件图标和 FBX 双击导入沿用原有交互。下列场景快捷键在 Viewport 获得焦点时生效；鼠标场景操作从视口图像内开始。
 
 引擎内置 `assets/`（字体、天空盒、默认模型和场景）及其构建副本与用户内容分离。`File → New Project...` 选择电脑上的可写父目录，再输入名称，创建 `名称/名称.maixproject` 与 `Assets/Scenes/Main.maixscene`；默认场景包含 Ground、Monkey、点光源和 Camera。项目不能放入引擎内置资源、Shader 或构建部署目录；同名项目目录已存在时拒绝创建，构建只部署引擎资源。
 

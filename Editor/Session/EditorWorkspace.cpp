@@ -24,6 +24,11 @@
 
 namespace
 {
+constexpr ImGuiWindowFlags StatusBarFlags = ImGuiWindowFlags_NoTitleBar |
+    ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoDocking |
+    ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar |
+    ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoNavFocus;
+
 std::shared_ptr<Texture2D> LoadSmallPreview(RHIDevice& device, const std::filesystem::path& path)
 {
     std::vector<unsigned char> source;
@@ -72,13 +77,11 @@ void EditorWorkspace::BuildDefaultLayout(ImGuiID dockspaceId)
     ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace);
     ImGui::DockBuilderSetNodeSize(dockspaceId, ImGui::GetMainViewport()->WorkSize);
 
-    const float scale = EditorTheme::GetScale();
-    const auto size = ImGui::GetMainViewport()->WorkSize;
     ImGuiID left = dockspaceId;
-    const float inspectorRatio = std::clamp(390*scale/size.x,0.20f,0.32f);
+    constexpr float inspectorRatio = 0.305f;
     ImGuiID inspector = ImGui::DockBuilderSplitNode(left, ImGuiDir_Right, inspectorRatio, nullptr, &left);
-    ImGuiID bottom = ImGui::DockBuilderSplitNode(left, ImGuiDir_Down, 0.26f, nullptr, &left);
-    const float sceneRatio = std::clamp(260*scale/(size.x*(1-inspectorRatio)),0.17f,0.30f);
+    ImGuiID bottom = ImGui::DockBuilderSplitNode(left, ImGuiDir_Down, 0.42f, nullptr, &left);
+    constexpr float sceneRatio = 0.165f / (1.0f-inspectorRatio);
     ImGuiID scene = ImGui::DockBuilderSplitNode(left, ImGuiDir_Left, sceneRatio, nullptr, &left);
 
     ImGui::DockBuilderDockWindow("Viewport", left);
@@ -178,10 +181,25 @@ void EditorWorkspace::BeginFrame(AssetImportPanel& assetImport, void* nativeWind
                 m_ResetLayout = true;
             ImGui::EndMenu();
         }
+        const float projectX = ImGui::GetWindowWidth() - ImGui::GetStyle().WindowPadding.x -
+            ImGui::CalcTextSize(m_Project.Name().c_str()).x;
+        if (projectX > ImGui::GetCursorPosX()+20*EditorTheme::GetScale())
+        {
+            ImGui::SetCursorPosX(projectX);
+            ImGui::TextDisabled("%s",m_Project.Name().c_str());
+        }
         ImGui::EndMainMenuBar();
     }
 
-    // 布局版本更新时更换稳定 ID，使旧版停靠配置在首次启动时重建；之后仍保存用户调整。
+    // Register next-frame work insets before docking; draw selection after panel edits.
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,
+        ImVec2(8*EditorTheme::GetScale(),3*EditorTheme::GetScale()));
+    ImGui::BeginViewportSideBar("##MaiXStatusBar",ImGui::GetMainViewport(),ImGuiDir_Down,
+        ImGui::GetFrameHeight(),StatusBarFlags);
+    ImGui::End();
+    ImGui::PopStyleVar();
+
+    // Keep the stable ID: existing user docking is retained; Reset Layout applies new defaults.
     const ImGuiID dockspaceId = ImGui::DockSpaceOverViewport(
         ImHashStr("MaiXEditorDockspaceV3"), ImGui::GetMainViewport(),
         ImGuiDockNodeFlags_PassthruCentralNode);
@@ -191,6 +209,34 @@ void EditorWorkspace::BeginFrame(AssetImportPanel& assetImport, void* nativeWind
         BuildDefaultLayout(dockspaceId);
     m_LayoutChecked = true;
     m_ResetLayout = false;
+}
+
+void EditorWorkspace::DrawStatusBar(const char* selectionLabel)
+{
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,
+        ImVec2(8*EditorTheme::GetScale(),3*EditorTheme::GetScale()));
+    if (ImGui::Begin("##MaiXStatusBar",nullptr,StatusBarFlags))
+    {
+        ImGui::PushStyleVar(ImGuiStyleVar_CellPadding,ImVec2(4*EditorTheme::GetScale(),0));
+        if (ImGui::BeginTable("##Status",2))
+        {
+            const float projectWidth = std::min(ImGui::CalcTextSize(m_Project.Name().c_str()).x,
+                ImGui::GetContentRegionAvail().x*.4f);
+            ImGui::TableSetupColumn("Selection",ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("Project",ImGuiTableColumnFlags_WidthFixed,projectWidth);
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(selectionLabel);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s",selectionLabel);
+            ImGui::TableNextColumn();
+            ImGui::TextDisabled("%s",m_Project.Name().c_str());
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s",m_Project.Root().u8string().c_str());
+            ImGui::EndTable();
+        }
+        ImGui::PopStyleVar();
+    }
+    ImGui::End();
+    ImGui::PopStyleVar();
 }
 
 EditorViewportRegion EditorWorkspace::BeginViewport(const std::function<void()>& drawToolbar)
@@ -291,10 +337,10 @@ void EditorWorkspace::DrawDirectoryNode(const std::filesystem::path& path, int d
     const auto itemMin=ImGui::GetItemRectMin();
     const float iconX=itemMin.x+ImGui::GetTreeNodeToLabelSpacing();
     const float scale=EditorTheme::GetScale();
-    EditorWidgets::DrawIcon(EditorWidgets::Icon::Folder,ImVec2(iconX,itemMin.y+5*scale),16*scale);
+    EditorWidgets::DrawIcon(EditorWidgets::Icon::Folder,ImVec2(iconX,itemMin.y+3*scale),16*scale);
     auto* draw=ImGui::GetWindowDrawList();
     draw->PushClipRect(itemMin,ImGui::GetItemRectMax(),true);
-    draw->AddText(ImVec2(iconX+22*scale,itemMin.y+5*scale),ImGui::GetColorU32(ImGuiCol_Text),label.c_str());
+    draw->AddText(ImVec2(iconX+22*scale,itemMin.y+3*scale),ImGui::GetColorU32(ImGuiCol_Text),label.c_str());
     draw->PopClipRect();
     if (ImGui::IsItemClicked() && path != m_CurrentDirectory)
     {
@@ -337,10 +383,6 @@ void EditorWorkspace::DrawContentBrowser(AssetImportPanel& assetImport)
         ImGui::End();
         return;
     }
-    ImGui::TextUnformatted(m_Project.Root().empty() ? "No project available" :
-        m_Project.Name().c_str());
-    if (ImGui::IsItemHovered() && !m_Project.Root().empty())
-        ImGui::SetTooltip("%s", m_Project.Root().u8string().c_str());
     if (!m_Project.Diagnostic().empty())
         ImGui::TextWrapped("%s", m_Project.Diagnostic().c_str());
     if (!m_Project.IsReady())
@@ -351,35 +393,56 @@ void EditorWorkspace::DrawContentBrowser(AssetImportPanel& assetImport)
     }
     std::error_code relativeError;
     const auto relative = std::filesystem::relative(m_CurrentDirectory,m_AssetRoot,relativeError);
-    if (!relativeError && relative != ".")
-        ImGui::TextDisabled("%s", relative.generic_u8string().c_str());
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::InputTextWithHint("##AssetFilter","Filter current folder...",m_AssetFilter,sizeof(m_AssetFilter));
+    std::string location = m_Project.Name() + " / Assets";
+    if (!relativeError && relative != ".") location += " / " + relative.generic_u8string();
+    const float scale = EditorTheme::GetScale();
+    const float available = ImGui::GetContentRegionAvail().x;
+    const bool inlineFilter = available >= 360*scale;
+    if (ImGui::BeginTable("##BrowserToolbar",inlineFilter ? 2 : 1))
+    {
+        ImGui::TableSetupColumn("Path",ImGuiTableColumnFlags_WidthStretch);
+        if (inlineFilter)
+            ImGui::TableSetupColumn("Filter",ImGuiTableColumnFlags_WidthFixed,std::min(200*scale,available*.35f));
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(location.c_str());
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s",m_CurrentDirectory.u8string().c_str());
+        if (!inlineFilter) ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        ImGui::InputTextWithHint("##AssetFilter","Filter current folder...",m_AssetFilter,sizeof(m_AssetFilter));
+        ImGui::EndTable();
+    }
     if (!m_BrowserError.empty()) ImGui::TextWrapped("%s", m_BrowserError.c_str());
     ImGui::Separator();
 
-    const float treeWidth = std::min(240*EditorTheme::GetScale(),std::max(100.0f,ImGui::GetContentRegionAvail().x*.23f));
-    ImGui::BeginChild("AssetTree", ImVec2(treeWidth, 0.0f), ImGuiChildFlags_Borders);
+    const float treeWidth = std::min(200*scale,std::max(85*scale,ImGui::GetContentRegionAvail().x*.23f));
+    ImGui::BeginChild("AssetTree", ImVec2(treeWidth, 0.0f));
     DrawDirectoryNode(m_AssetRoot, 0);
     ImGui::EndChild();
+    const auto treeMax = ImGui::GetItemRectMax();
+    const auto treeMin = ImGui::GetItemRectMin();
+    ImGui::GetWindowDrawList()->AddLine(ImVec2(treeMax.x+3*scale,treeMin.y),
+        ImVec2(treeMax.x+3*scale,treeMax.y),ImGui::GetColorU32(ImGuiCol_Separator));
     ImGui::SameLine();
-    ImGui::BeginChild("AssetList", ImVec2(0.0f, 0.0f), ImGuiChildFlags_Borders);
+    ImGui::BeginChild("AssetList", ImVec2(0.0f, 0.0f));
 
-    const float tileWidth = 104.0f*EditorTheme::GetScale();
+    const float tileWidth = 88.0f*scale;
     const int columns = std::max(1, static_cast<int>(ImGui::GetContentRegionAvail().x / tileWidth));
     std::optional<std::filesystem::path> requestedDirectory;
     const auto drawTile = [](EditorWidgets::Icon icon, ImTextureID preview = 0) {
         const float scale = EditorTheme::GetScale();
-        const bool pressed = ImGui::InvisibleButton("##Asset", ImVec2(88*scale,66*scale));
+        const bool pressed = ImGui::InvisibleButton("##Asset", ImVec2(72*scale,48*scale));
         const auto p = ImGui::GetItemRectMin();
         auto* draw = ImGui::GetWindowDrawList();
         if (ImGui::IsItemHovered())
             draw->AddRectFilled(p,ImGui::GetItemRectMax(),ImGui::GetColorU32(ImGuiCol_HeaderHovered),4*scale);
-        const ImVec2 origin(p.x+19*scale,p.y+7*scale);
+        const ImVec2 origin(p.x+18*scale,p.y+6*scale);
         if (preview)
-            draw->AddImage(preview,origin,ImVec2(origin.x+50*scale,origin.y+50*scale),ImVec2(0,1),ImVec2(1,0));
+            draw->AddImage(preview,origin,ImVec2(origin.x+36*scale,origin.y+36*scale),ImVec2(0,1),ImVec2(1,0));
         else
-            EditorWidgets::DrawIcon(icon,origin,50*scale);
+            EditorWidgets::DrawIcon(icon,origin,36*scale);
         return pressed;
     };
     if (ImGui::BeginTable("AssetTiles", columns))

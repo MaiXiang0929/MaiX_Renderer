@@ -65,15 +65,20 @@ void DrawIcon(Icon icon, ImVec2 position, float size)
     }
 }
 
-bool IconButton(const char* id, Icon icon, const char* tooltip, bool selected)
+bool IconButton(const char* id, Icon icon, const char* tooltip, bool selected, const char* label)
 {
     const float scale = EditorTheme::GetScale();
     if (selected) ImGui::PushStyleColor(ImGuiCol_Button, EditorTheme::GetPalette().selected);
-    const bool pressed = ImGui::Button(id,ImVec2(29*scale,29*scale));
+    const float height = std::max(26*scale, ImGui::GetFrameHeight());
+    const float width = label ? height + ImGui::CalcTextSize(label).x + 8*scale : height;
+    const bool pressed = ImGui::Button(id,ImVec2(width,height));
     if (selected) ImGui::PopStyleColor();
     const auto p = ImGui::GetItemRectMin();
-    DrawIcon(icon,ImVec2(p.x+6*scale,p.y+6*scale),17*scale);
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s",tooltip);
+    DrawIcon(icon,ImVec2(p.x+5*scale,p.y+(height-16*scale)*.5f),16*scale);
+    if (label)
+        ImGui::GetWindowDrawList()->AddText(ImVec2(p.x+height,p.y+(height-ImGui::GetFontSize())*.5f),
+            ImGui::GetColorU32(ImGuiCol_Text),label);
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s",tooltip);
     return pressed;
 }
 
@@ -94,18 +99,52 @@ bool IconSelectable(const char* id, Icon icon, const char* label, bool selected)
     return pressed;
 }
 
-void ObjectHeader(Icon icon, const char* name, const char* type)
+bool ObjectHeader(Icon icon, const char* name, const char* type, bool* visible)
 {
     const float scale = EditorTheme::GetScale();
-    const auto p = ImGui::GetCursorScreenPos();
-    DrawIcon(icon,ImVec2(p.x+4*scale,p.y+5*scale),28*scale);
-    ImGui::Dummy(ImVec2(40*scale,38*scale));
-    ImGui::SameLine();
-    ImGui::BeginGroup();
-    ImGui::TextWrapped("%s",name);
-    ImGui::TextDisabled("%s",type);
-    ImGui::EndGroup();
-    ImGui::Spacing();
+    bool changed = false;
+    const bool inlineVisible = visible && ImGui::GetContentRegionAvail().x >= 255*scale;
+    if (ImGui::BeginTable("##ObjectHeader", inlineVisible ? 3 : 2))
+    {
+        ImGui::TableSetupColumn("Icon",ImGuiTableColumnFlags_WidthFixed,30*scale);
+        ImGui::TableSetupColumn("Identity",ImGuiTableColumnFlags_WidthStretch);
+        if (inlineVisible)
+            ImGui::TableSetupColumn("Visible",ImGuiTableColumnFlags_WidthFixed,
+                ImGui::GetFrameHeight()+ImGui::CalcTextSize("Visible").x+ImGui::GetStyle().ItemInnerSpacing.x);
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        DrawIcon(icon,ImGui::GetCursorScreenPos(),26*scale);
+        ImGui::Dummy(ImVec2(26*scale,32*scale));
+        ImGui::TableNextColumn();
+        ImGui::TextWrapped("%s",name);
+        ImGui::TextDisabled("%s",type);
+        if (inlineVisible)
+        {
+            ImGui::TableNextColumn();
+            changed = ImGui::Checkbox("Visible",visible);
+        }
+        ImGui::EndTable();
+    }
+    if (visible && !inlineVisible) changed = ImGui::Checkbox("Visible",visible);
+    return changed;
+}
+
+bool BeginProperties(const char* id)
+{
+    if (!ImGui::BeginTable(id,2,ImGuiTableFlags_SizingStretchProp)) return false;
+    ImGui::TableSetupColumn("Label",ImGuiTableColumnFlags_WidthFixed,85*EditorTheme::GetScale());
+    ImGui::TableSetupColumn("Value",ImGuiTableColumnFlags_WidthStretch);
+    return true;
+}
+
+void PropertyLabel(const char* label)
+{
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(label);
+    ImGui::TableNextColumn();
+    ImGui::SetNextItemWidth(-FLT_MIN);
 }
 
 bool Section(const char* label, bool defaultOpen)
@@ -121,8 +160,8 @@ bool DragVector3(const char* label, float* values, float speed, float minimum, f
     bool changed = false;
     const float scale = EditorTheme::GetScale();
     const float width = ImGui::GetContentRegionAvail().x / scale;
-    const bool labelAbove = width < 360.0f;
-    const bool axesStacked = width < 285.0f;
+    const bool labelAbove = width < 310.0f;
+    const bool axesStacked = width < 210.0f;
     const int columns = axesStacked ? 2 : labelAbove ? 3 : 4;
     ImGui::PushID(label);
     if (labelAbove) ImGui::TextUnformatted(label);
@@ -151,6 +190,13 @@ bool DragVector3(const char* label, float* values, float speed, float minimum, f
             }
             ImGui::TableNextColumn();
             ImGui::PushID(index);
+            // Axes stay explicit even when the numeric value consumes the full field.
+            if (!axesStacked)
+            {
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(axes[index]), "%c", "XYZ"[index]);
+                ImGui::SameLine(0,3*scale);
+            }
             ImGui::SetNextItemWidth(-FLT_MIN);
             auto& fonts = ImGui::GetIO().Fonts->Fonts;
             if (fonts.Size > 1) ImGui::PushFont(fonts[1]);
@@ -186,7 +232,7 @@ void DrawDockTabAccents()
         const ImVec2 clipMax(central ? std::min(bar.Max.x,node->TabBar->ScrollingRectMaxX) : bar.Max.x,bar.Max.y);
         draw->PushClipRect(clipMin,clipMax,true);
         draw->AddLine(ImVec2(x,bar.Max.y-1),ImVec2(x+tab->Width,bar.Max.y-1),
-            ImGui::ColorConvertFloat4ToU32(EditorTheme::GetPalette().pink),2*EditorTheme::GetScale());
+            ImGui::ColorConvertFloat4ToU32(EditorTheme::GetPalette().blue),2*EditorTheme::GetScale());
         draw->PopClipRect();
     }
 }

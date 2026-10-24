@@ -1339,6 +1339,9 @@ void EditorApp::Render() {
         ApplyMaterialEditRequest(request);
     }
     m_Workspace->DrawBottomPanels(*m_AssetImportPanel);
+    const auto* selectedActor = m_Engine.Scene().world.Find(m_EditorSelection.ResolveActor(m_Engine.Scene()));
+    const std::string selectionLabel = selectedActor ? selectedActor->name + " selected" : "No selection";
+    m_Workspace->DrawStatusBar(selectionLabel.c_str());
     EditorWidgets::DrawDockTabAccents();
     ImGui::Render();
     glBindFramebuffer(GL_FRAMEBUFFER, 0);

@@ -75,21 +75,34 @@ bool InspectorPanel::Draw(EditorSelection &selection, SceneState &scene, bool &c
         ImGui::End();
         return false;
     }
+    auto icon = EditorWidgets::Icon::World;
+    const char* type = "Empty";
+    if (actor->kind == ActorKind::Model) { icon = EditorWidgets::Icon::Mesh; type = "Mesh"; }
+    else if (actor->kind == ActorKind::Camera) { icon = EditorWidgets::Icon::Camera; type = "Camera"; }
+    else if (actor->kind == ActorKind::Light)
+    {
+        icon = EditorWidgets::Icon::Light;
+        const auto* light = FindSceneLight(lights, selection.lightId);
+        type = light ? LightTypeName(light->proxy.type) : "Light";
+    }
     bool visible = actor->visible;
-    if (ImGui::Checkbox("Visible", &visible))
+    if (EditorWidgets::ObjectHeader(icon,actor->name.c_str(),type,&visible))
         scene.world.SetVisible(actorId, visible);
     if (visible && !scene.world.IsVisible(actorId))
         ImGui::TextDisabled("Hidden by parent");
     std::array<char, 256> name{};
     std::snprintf(name.data(), name.size(), "%s", actor->name.c_str());
-    if (ImGui::InputText("Name", name.data(), name.size(), ImGuiInputTextFlags_EnterReturnsTrue))
+    const bool properties = EditorWidgets::BeginProperties("##Identity");
+    if (properties) EditorWidgets::PropertyLabel("Name");
+    if (properties && ImGui::InputText("##Name", name.data(), name.size(), ImGuiInputTextFlags_EnterReturnsTrue))
         scene.world.Rename(actorId, name.data());
     actor = scene.world.Find(actorId);
     const auto parentId = actor->parent;
     const auto *parent = scene.world.Find(parentId);
     ActorId requestedParent = parentId;
     bool reparent = false;
-    if (ImGui::BeginCombo("Parent", parent ? parent->name.c_str() : "Scene Root"))
+    if (properties) EditorWidgets::PropertyLabel("Parent");
+    if (properties && ImGui::BeginCombo("##Parent", parent ? parent->name.c_str() : "Scene Root"))
     {
         if (ImGui::Selectable("Scene Root", !parentId.IsValid()))
         {
@@ -112,6 +125,7 @@ bool InspectorPanel::Draw(EditorSelection &selection, SceneState &scene, bool &c
         }
         ImGui::EndCombo();
     }
+    if (properties) ImGui::EndTable();
     if (reparent)
         scene.world.Reparent(actorId, requestedParent, true, m_Error);
     actor = scene.world.Find(actorId);
@@ -130,8 +144,6 @@ bool InspectorPanel::Draw(EditorSelection &selection, SceneState &scene, bool &c
     SynchronizeSceneActors(scene, renderer);
     if (selection.type == EditorSelectionType::Empty)
     {
-        EditorWidgets::ObjectHeader(EditorWidgets::Icon::World, scene.world.Find(actorId)->name.c_str(),
-                                    "Empty");
         ImGui::End();
         return false;
     }
@@ -146,8 +158,6 @@ bool InspectorPanel::Draw(EditorSelection &selection, SceneState &scene, bool &c
             ImGui::End();
             return false;
         }
-        EditorWidgets::ObjectHeader(EditorWidgets::Icon::Mesh,
-                                    model->name.empty() ? "Model" : model->name.c_str(), "Mesh");
         bool openMaterialEditor = false;
         if (EditorWidgets::Section("Materials"))
         {
@@ -162,7 +172,7 @@ bool InspectorPanel::Draw(EditorSelection &selection, SceneState &scene, bool &c
                 const std::string label = "Slot " + std::to_string(index + 1) + ": " +
                                           (snapshot.name.empty() ? "Material" : snapshot.name);
                 ImGui::PushID(static_cast<int>(handles[index].id));
-                if (ImGui::Selectable(label.c_str(),
+                if (EditorWidgets::IconSelectable("##Material", EditorWidgets::Icon::Mesh, label.c_str(),
                                       !materialSelection.AllMaterials() &&
                                           materialSelection.Owner() == model->id &&
                                           materialSelection.Material().id == handles[index].id))
@@ -204,10 +214,16 @@ bool InspectorPanel::Draw(EditorSelection &selection, SceneState &scene, bool &c
     if (selection.IsCameraSelected(camera.id))
     {
         const auto previousCamera = camera;
-        EditorWidgets::ObjectHeader(EditorWidgets::Icon::Camera, camera.name.c_str(), "Camera");
-        ImGui::DragFloat("Vertical FOV", &camera.fovDegrees, 0.5f, 1, 150, "%.1f deg");
-        ImGui::DragFloat("Near (m)", &camera.nearPlane, 0.01f, 0.0001f, 1000, "%.4f");
-        ImGui::DragFloat("Far (m)", &camera.farPlane, 1, 0.001f, 100000);
+        if (EditorWidgets::Section("Camera") && EditorWidgets::BeginProperties("##Camera"))
+        {
+            EditorWidgets::PropertyLabel("Vertical FOV");
+            ImGui::DragFloat("##FOV", &camera.fovDegrees, 0.5f, 1, 150, "%.1f deg");
+            EditorWidgets::PropertyLabel("Near (m)");
+            ImGui::DragFloat("##Near", &camera.nearPlane, 0.01f, 0.0001f, 1000, "%.4f");
+            EditorWidgets::PropertyLabel("Far (m)");
+            ImGui::DragFloat("##Far", &camera.farPlane, 1, 0.001f, 100000);
+            ImGui::EndTable();
+        }
         auto finiteVector = [](const cy::Vec3f &value) {
             return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
         };
@@ -234,13 +250,16 @@ bool InspectorPanel::Draw(EditorSelection &selection, SceneState &scene, bool &c
         return false;
     }
 
-    EditorWidgets::ObjectHeader(EditorWidgets::Icon::Light,
-                                light->name.empty() ? "Light" : light->name.c_str(),
-                                LightTypeName(light->proxy.type));
-    ImGui::SeparatorText("Light Parameters");
+    if (!EditorWidgets::Section("Light Parameters"))
+    {
+        ImGui::End();
+        return false;
+    }
 
     bool changed = false;
-    if (ImGui::BeginCombo("Type", LightTypeName(light->proxy.type)))
+    const bool lightProperties = EditorWidgets::BeginProperties("##Light");
+    if (lightProperties) EditorWidgets::PropertyLabel("Type");
+    if (lightProperties && ImGui::BeginCombo("##Type", LightTypeName(light->proxy.type)))
     {
         for (const auto type : {LightType::Directional, LightType::Point, LightType::Spot})
             if (ImGui::Selectable(LightTypeName(type), light->proxy.type == type))
@@ -252,32 +271,45 @@ bool InspectorPanel::Draw(EditorSelection &selection, SceneState &scene, bool &c
             }
         ImGui::EndCombo();
     }
+    if (lightProperties) ImGui::EndTable();
     if (light->proxy.id == scene.mainLightId)
         ImGui::TextUnformatted("Main Light");
     else if (ImGui::Button("Set as Main Light"))
         scene.mainLightId = light->proxy.id;
-    ImGui::TextWrapped("Main light drives shadows and the default NPR key light.");
-    changed |= ImGui::ColorEdit3("Color", &light->proxy.color.x);
-    changed |= ImGui::DragFloat("Intensity", &light->proxy.intensity, 0.05f, 0.0f, 100.0f);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Main light drives shadows and the default NPR key light.");
+    const bool lightValues = EditorWidgets::BeginProperties("##LightValues");
+    if (lightValues)
+    {
+        EditorWidgets::PropertyLabel("Color");
+        changed |= ImGui::ColorEdit3("##Color", &light->proxy.color.x);
+        EditorWidgets::PropertyLabel("Intensity");
+        changed |= ImGui::DragFloat("##Intensity", &light->proxy.intensity, 0.05f, 0.0f, 100.0f);
+    }
     EditorValueConstraints::SanitizeColor(light->proxy.color);
 
-    if (light->proxy.type != LightType::Directional)
+    if (lightValues && light->proxy.type != LightType::Directional)
     {
-        changed |= ImGui::DragFloat("Range", &light->proxy.range, 0.1f, 0.01f, 1000.0f);
+        EditorWidgets::PropertyLabel("Range (m)");
+        changed |= ImGui::DragFloat("##Range", &light->proxy.range, 0.1f, 0.01f, 1000.0f);
     }
     EditorValueConstraints::SanitizeLightScalars(light->proxy.intensity, light->proxy.range);
 
-    if (light->proxy.type == LightType::Spot)
+    if (lightValues && light->proxy.type == LightType::Spot)
     {
         float innerDegrees = light->proxy.innerConeAngle * 180.0f / Pi;
         float outerDegrees = light->proxy.outerConeAngle * 180.0f / Pi;
-        changed |= ImGui::DragFloat("Inner Cone", &innerDegrees, 0.5f, 0.0f, 89.0f, "%.1f deg");
-        changed |= ImGui::DragFloat("Outer Cone", &outerDegrees, 0.5f, 1.0f, 89.0f, "%.1f deg");
+        EditorWidgets::PropertyLabel("Inner Cone");
+        changed |= ImGui::DragFloat("##InnerCone", &innerDegrees, 0.5f, 0.0f, 89.0f, "%.1f deg");
+        EditorWidgets::PropertyLabel("Outer Cone");
+        changed |= ImGui::DragFloat("##OuterCone", &outerDegrees, 0.5f, 1.0f, 89.0f, "%.1f deg");
         EditorValueConstraints::SanitizeSpotConeDegrees(innerDegrees, outerDegrees);
         light->proxy.innerConeAngle = innerDegrees * Pi / 180.0f;
         light->proxy.outerConeAngle = outerDegrees * Pi / 180.0f;
-        ImGui::TextWrapped("Cone angles are half-angles. Rotation aims local -Z; scale does not change Range.");
     }
+    if (lightValues) ImGui::EndTable();
+    if (light->proxy.type == LightType::Spot)
+        ImGui::TextWrapped("Cone half-angles; local -Z aims the light.");
 
     const bool shadowSupported = SupportsShadowMap(light->proxy.type);
     ImGui::BeginDisabled(!shadowSupported);

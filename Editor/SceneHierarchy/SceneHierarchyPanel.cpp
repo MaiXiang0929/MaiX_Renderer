@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #include "Editor/SceneHierarchy/SceneHierarchyPanel.h"
 #include "Editor/Session/EditorWidgets.h"
+#include "Editor/Session/EditorTheme.h"
 #include "Engine/Runtime/Engine/RenderSceneBridge.h"
 #include <algorithm>
 #include <functional>
@@ -15,25 +16,43 @@ ActorId SceneHierarchyPanel::Draw(EditorSelection &selection, SceneState &scene,
     }
     ActorId removed, reparent, parent;
     bool detach = false;
-    if (ImGui::Button("Create Empty"))
-        selection.SelectActor(scene.world.Create("Empty"), scene);
-    ImGui::SameLine();
-    if (ImGui::Button("Create Light"))
-        ImGui::OpenPopup("Create Light Menu");
-    if (ImGui::BeginPopup("Create Light Menu"))
+    const float scale = EditorTheme::GetScale();
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextDisabled("Scene Root");
+    ImGui::SameLine(std::max(ImGui::GetCursorPosX(),
+        ImGui::GetWindowContentRegionMax().x - 28*scale));
+    if (ImGui::Button("...",ImVec2(28*scale,0))) ImGui::OpenPopup("Scene Actions");
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Create objects or manage the selection. Drag objects onto their parent.");
+    if (ImGui::BeginPopup("Scene Actions"))
     {
-        const LightType types[] = {LightType::Directional, LightType::Point, LightType::Spot};
-        const char *names[] = {"Directional", "Point", "Spot"};
-        for (int i = 0; i < 3; ++i)
-            if (ImGui::MenuItem(names[i]))
-            {
-                Transform local;
-                local.position = scene.objCenter + cy::Vec3f(0, 3, 0);
-                local.rotationDegrees = {-90, 0, 0};
-                const auto id = CreateSceneLight(scene, renderer, types[i], local, m_Error);
-                if (id != InvalidLightId)
-                    selection.SelectLight(id);
-            }
+        if (ImGui::MenuItem("Create Empty"))
+            selection.SelectActor(scene.world.Create("Empty"), scene);
+        if (ImGui::BeginMenu("Create Light"))
+        {
+            const LightType types[] = {LightType::Directional, LightType::Point, LightType::Spot};
+            const char *names[] = {"Directional", "Point", "Spot"};
+            for (int i = 0; i < 3; ++i)
+                if (ImGui::MenuItem(names[i]))
+                {
+                    Transform local;
+                    local.position = scene.objCenter + cy::Vec3f(0, 3, 0);
+                    local.rotationDegrees = {-90, 0, 0};
+                    const auto id = CreateSceneLight(scene, renderer, types[i], local, m_Error);
+                    if (id != InvalidLightId) selection.SelectLight(id);
+                }
+            ImGui::EndMenu();
+        }
+        ImGui::Separator();
+        const auto selected = selection.ResolveActor(scene);
+        const auto* actor = scene.world.Find(selected);
+        if (ImGui::MenuItem("Detach to Root",nullptr,false,actor && actor->parent.IsValid()))
+        {
+            reparent = selected;
+            detach = true;
+        }
+        const auto label = "Delete Subtree (" + std::to_string(scene.world.Subtree(selected).size()) + ")";
+        if (ImGui::MenuItem(label.c_str(),nullptr,false,actor != nullptr)) removed = selected;
         ImGui::EndPopup();
     }
     const auto selected = selection.ResolveActor(scene);
@@ -44,7 +63,8 @@ ActorId SceneHierarchyPanel::Draw(EditorSelection &selection, SceneState &scene,
                 continue;
             const bool hasChildren = std::any_of(scene.world.Actors().begin(), scene.world.Actors().end(),
                                                  [&](const Actor &child) { return child.parent == a.id; });
-            auto flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
+            auto flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth |
+                ImGuiTreeNodeFlags_FramePadding;
             if (!hasChildren)
                 flags |= ImGuiTreeNodeFlags_Leaf;
             if (a.id == selected)
@@ -52,9 +72,22 @@ ActorId SceneHierarchyPanel::Draw(EditorSelection &selection, SceneState &scene,
             const auto key = std::to_string(a.id.value);
             ImGui::PushID(key.c_str());
             const bool mainLight = a.kind == ActorKind::Light && a.componentId == scene.mainLightId;
-            const bool open = ImGui::TreeNodeEx("node", flags, "%s%s%s", a.name.c_str(),
-                mainLight ? " (main light)" : "",
-                scene.world.IsVisible(a.id)?"":" (hidden)");
+            const bool visible = scene.world.IsVisible(a.id);
+            const bool open = ImGui::TreeNodeEx("node", flags, "");
+            const auto min = ImGui::GetItemRectMin();
+            const auto max = ImGui::GetItemRectMax();
+            const float iconX = min.x+ImGui::GetTreeNodeToLabelSpacing();
+            const auto icon = a.kind == ActorKind::Model ? EditorWidgets::Icon::Mesh :
+                a.kind == ActorKind::Light ? EditorWidgets::Icon::Light :
+                a.kind == ActorKind::Camera ? EditorWidgets::Icon::Camera : EditorWidgets::Icon::World;
+            auto* list = ImGui::GetWindowDrawList();
+            list->PushClipRect(min,max,true);
+            EditorWidgets::DrawIcon(icon,ImVec2(iconX,min.y+3*scale),16*scale);
+            const auto label = a.name + (mainLight ? " (main light)" : "") + (visible ? "" : " (hidden)");
+            list->AddText(ImVec2(iconX+22*scale,min.y+ImGui::GetStyle().FramePadding.y),
+                ImGui::GetColorU32(visible ? ImGuiCol_Text : ImGuiCol_TextDisabled),label.c_str());
+            list->PopClipRect();
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s",label.c_str());
             if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
                 selection.SelectActor(a.id, scene);
             if (ImGui::BeginDragDropSource())
@@ -81,19 +114,6 @@ ActorId SceneHierarchyPanel::Draw(EditorSelection &selection, SceneState &scene,
         }
     };
     draw({});
-    ImGui::Separator();
-    ImGui::TextDisabled("Drag an object onto its parent.");
-    ImGui::BeginDisabled(!selected.IsValid());
-    if (ImGui::Button("Detach to Root"))
-    {
-        reparent = selected;
-        detach = true;
-    }
-    const auto count = scene.world.Subtree(selected).size();
-    const auto label = "Delete Subtree (" + std::to_string(count) + ")";
-    if (ImGui::Button(label.c_str()))
-        removed = selected;
-    ImGui::EndDisabled();
     if (reparent.IsValid())
         scene.world.Reparent(reparent, detach ? ActorId{} : parent, true, m_Error);
     if (!m_Error.empty())
