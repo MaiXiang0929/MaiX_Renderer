@@ -152,6 +152,7 @@ struct RHIPipelineState
     bool depthTest = true, depthWrite = true, blend = false, wireframe = false;
     RHICompare depthCompare = RHICompare::Less;
     RHICull cull = RHICull::None;
+    bool frontCounterClockwise = true;
     RHIBlendFactor sourceRgb = RHIBlendFactor::One, destinationRgb = RHIBlendFactor::Zero;
     RHIBlendFactor sourceAlpha = RHIBlendFactor::One, destinationAlpha = RHIBlendFactor::Zero;
     bool offsetFill = false, offsetLine = false;

@@ -20,6 +20,14 @@ enum class ShadingModel
     Toon
 };
 
+// Legacy preserves the pre-v4 no-culling/original-normal rendering path.
+enum class SurfaceSide { Front, Back, Double, Legacy };
+constexpr bool IsValidSurfaceSide(SurfaceSide side)
+{
+    return side == SurfaceSide::Front || side == SurfaceSide::Back ||
+        side == SurfaceSide::Double || side == SurfaceSide::Legacy;
+}
+
 constexpr float MinimumOutlineThickness = 0.0f;
 constexpr float MaximumOutlineThickness = 0.2f;
 

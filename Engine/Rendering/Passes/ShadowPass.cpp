@@ -15,6 +15,7 @@
 #include "Engine/Rendering/Renderer/Pipeline/RenderSettings.h"
 #include "Engine/Rendering/Renderer/Diagnostics/RenderSubmissionStats.h"
 #include "Engine/Rendering/Renderer/View/RenderView.h"
+#include "Engine/Rendering/Renderer/View/MaterialFacing.h"
 
 bool ShadowPass::Init(unsigned int width, unsigned int height)
 {
@@ -154,6 +155,8 @@ void ShadowPass::RenderDepth(RenderPassContext& context, const RenderView& view,
             RenderSubmissionStats::Get().RecordMaterialBind(item.material);
             item.material->BindCoverage(shader, 0);
             item.material->BindDisplacement(shader, 3);
+            ApplySurfaceFacing(state, item.material->GetProperties().surfaceSide, item.reversedWinding);
+            m_Device.Commands().SetPipelineState(state);
             item.mesh->DrawPatches();
         }
     }
@@ -274,6 +277,8 @@ void ShadowPass::RenderDepth(RenderPassContext& context, const RenderView& view,
                     preparePoint(*activeShader);
                 }
                 firstItem.material->BindCoverage(*activeShader, 0);
+                ApplySurfaceFacing(state, firstItem.material->GetProperties().surfaceSide, firstItem.reversedWinding);
+                m_Device.Commands().SetPipelineState(state);
                 for (std::size_t firstInstance = 0;
                     firstInstance < instanceCount;
                     firstInstance += InstanceBuffer::MaxInstancesPerDraw)
@@ -315,6 +320,8 @@ void ShadowPass::RenderDepth(RenderPassContext& context, const RenderView& view,
                 shadowView.viewProjection * shadowCaster->model;
             activeShader->SetMatrix4("lightMvp", &lightMvp.cell[0]);
             shadowCaster->material->BindCoverage(*activeShader, 0);
+            ApplySurfaceFacing(state, shadowCaster->material->GetProperties().surfaceSide, shadowCaster->reversedWinding);
+            m_Device.Commands().SetPipelineState(state);
             firstItem.mesh->Draw();
         }
     }

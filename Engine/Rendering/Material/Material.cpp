@@ -72,6 +72,8 @@ void Material::Bind(Shader& shader, unsigned int firstTextureUnit) const
     shader.SetFloat("material.roughness", m_Properties.roughness);
     shader.SetFloat("material.ambientOcclusion", m_Properties.ambientOcclusion);
     shader.SetFloat("material.normalScale", m_Properties.normalScale);
+    shader.SetInt("material.surfaceSide", static_cast<int>(m_Properties.surfaceSide));
+    shader.SetInt("surfaceSide", static_cast<int>(m_Properties.surfaceSide));
     shader.SetFloat("material.opacity", m_Properties.opacity);
     shader.SetInt("material.shadingModel",
         m_Properties.shadingModel == ShadingModel::Toon ? 1 : 0);

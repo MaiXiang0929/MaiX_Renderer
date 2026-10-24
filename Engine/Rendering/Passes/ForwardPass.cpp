@@ -12,6 +12,7 @@
 #include "Engine/Rendering/Renderer/Pipeline/RenderSettings.h"
 #include "Engine/Rendering/Renderer/Scene/LightSceneProxy.h"
 #include "Engine/Rendering/Renderer/View/RenderView.h"
+#include "Engine/Rendering/Renderer/View/MaterialFacing.h"
 
 namespace
 {
@@ -257,6 +258,8 @@ void ForwardPass::RenderItems(
     const std::vector<RenderItem>& items,
     bool allowWireframeOverlay)
 {
+    RHIScopedPipelineState surfaceScope(m_Device.Commands());
+    auto surfaceState = surfaceScope.saved;
     Shader& shader = context.tessellation.enabled
         ? m_TessellationShader
         : m_StandardShader;
@@ -276,6 +279,8 @@ void ForwardPass::RenderItems(
         shader.SetMatrix4("mvp", &mvp.cell[0]);
         shader.SetMatrix4("mv", &mv.cell[0]);
         item.material->Bind(shader, 0);
+        ApplySurfaceFacing(surfaceState, item.material->GetProperties().surfaceSide, item.reversedWinding);
+        m_Device.Commands().SetPipelineState(surfaceState);
 
         if (!context.tessellation.enabled)
         {
@@ -303,6 +308,8 @@ void ForwardPass::RenderOpaqueBatches(
     RenderPassContext& context,
     RenderView& renderView)
 {
+    RHIScopedPipelineState surfaceScope(m_Device.Commands());
+    auto surfaceState = surfaceScope.saved;
     std::size_t uploadChunkCount = 0;
     for (const OpaqueRenderBatch& batch : renderView.opaqueBatches)
     {
@@ -381,6 +388,9 @@ void ForwardPass::RenderOpaqueBatches(
             renderView.opaqueItems[batch.firstItem];
         if (firstItem.mesh == nullptr || firstItem.material == nullptr)
             continue;
+
+        ApplySurfaceFacing(surfaceState, firstItem.material->GetProperties().surfaceSide, firstItem.reversedWinding);
+        m_Device.Commands().SetPipelineState(surfaceState);
 
         if (ShouldUseInstancing(batch))
         {

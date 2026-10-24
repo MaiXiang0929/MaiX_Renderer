@@ -26,6 +26,7 @@ struct MaterialData
     float normalScale;
     float opacity;
     int shadingModel;
+    int surfaceSide; // Front=0, Back=1, Double=2, Legacy=3.
     float toonThreshold;
     float toonShadowStrength;
     vec3 toonShadowColor;
@@ -307,7 +308,7 @@ float CalculateSpotAttenuation(
     return smoothstep(outerConeCos, innerConeCos, coneCos);
 }
 
-vec3 ResolveSurfaceNormal()
+vec3 ResolveAuthoredSurfaceNormal()
 {
     vec3 N = normalize(fragNormal);
     if (!material.hasNormalMap)
@@ -320,6 +321,18 @@ vec3 ResolveSurfaceNormal()
     tangentNormal.xy *= clamp(material.normalScale, 0.0, 2.0);
     tangentNormal = normalize(tangentNormal);
     return normalize(mat3(T, B, N) * tangentNormal);
+}
+
+vec3 ResolveSurfaceNormal()
+{
+    vec3 N = ResolveAuthoredSurfaceNormal();
+    // Raster front winding already includes model/view reflection parity.
+    // Flip the complete perturbed normal: this is equivalent to reversing
+    // all three TBN axes, rather than only the geometric normal.
+    if (material.surfaceSide == 1 ||
+        (material.surfaceSide == 2 && !gl_FrontFacing))
+        return -N;
+    return N;
 }
 
 float CalculateFaceLightBand(vec3 lightDirection)

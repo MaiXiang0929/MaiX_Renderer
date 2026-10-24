@@ -18,7 +18,8 @@ const MaterialResource* MaterialResourceStore::Get(MaterialHandle h) const
 }
 MaterialHandle MaterialResourceStore::Create(Material material)
 {
-    if (m_Resources.size() >= InvalidRenderResourceId) return {};
+    if (!IsValidSurfaceSide(material.GetProperties().surfaceSide) ||
+        m_Resources.size() >= InvalidRenderResourceId) return {};
     MaterialHandle h{static_cast<RenderResourceId>(m_Resources.size())};
     if (material.GetName().empty()) material.SetName("Material " + std::to_string(h.id));
     material.GetProperties() = SanitizeMaterialProperties(material.GetProperties());
@@ -73,6 +74,7 @@ bool MaterialResourceStore::CommitInstance(MaterialHandle h, MaterialInstance in
 }
 bool MaterialResourceStore::UpdateBase(MaterialHandle h, const MaterialProperties& properties, BlendMode blend)
 {
+    if (!IsValidSurfaceSide(properties.surfaceSide)) return false;
     const auto* entry = Get(h);
     if (!entry || entry->instance) return false;
     Material candidate = entry->effective;

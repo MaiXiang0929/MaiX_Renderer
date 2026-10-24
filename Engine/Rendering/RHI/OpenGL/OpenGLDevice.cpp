@@ -937,6 +937,8 @@ class OpenGLDevice final : public RHIDevice, public RHICommandList
         state.cull = !glIsEnabled(GL_CULL_FACE) ? RHICull::None
                      : value == GL_FRONT        ? RHICull::Front
                                                 : RHICull::Back;
+        glGetIntegerv(GL_FRONT_FACE, &value);
+        state.frontCounterClockwise = value == GL_CCW;
         GLint modes[2];
         glGetIntegerv(GL_POLYGON_MODE, modes);
         state.wireframe = modes[0] == GL_LINE;
@@ -968,6 +970,7 @@ class OpenGLDevice final : public RHIDevice, public RHICommandList
                             Blend(state.destinationAlpha));
         Enable(GL_CULL_FACE, state.cull != RHICull::None);
         glCullFace(state.cull == RHICull::Front ? GL_FRONT : GL_BACK);
+        glFrontFace(state.frontCounterClockwise ? GL_CCW : GL_CW);
         glPolygonMode(GL_FRONT_AND_BACK, state.wireframe ? GL_LINE : GL_FILL);
         Enable(GL_POLYGON_OFFSET_FILL, state.offsetFill);
         Enable(GL_POLYGON_OFFSET_LINE, state.offsetLine);
