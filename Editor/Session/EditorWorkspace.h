@@ -47,6 +47,7 @@ public:
     void DrawViewportImage(unsigned int textureId);
     void EndViewport();
     void DrawBottomPanels(AssetImportPanel& assetImport);
+    void DrawStatusBar(const char* selectionLabel);
     void AddLog(std::string message);
     void SynchronizeProject();
     void SetSceneFileMenu(std::function<void()> draw) { m_SceneFileMenu = std::move(draw); }

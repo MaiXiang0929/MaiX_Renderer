@@ -35,22 +35,23 @@ void EditorViewportController::DrawToolbar(const EditorSelection &selection,
     const bool directional = light && light->proxy.type == LightType::Directional;
     const bool cameraLocked = cameraView && selection.type == EditorSelectionType::Camera;
     const auto displayed = GetEffectiveOperation(selection.type, light);
+    const bool labels = ImGui::GetContentRegionAvail().x >= 340*EditorTheme::GetScale();
     ImGui::BeginDisabled(cameraLocked || directional);
-    if (IconButton("##Translate", Icon::Move, "Move (W)", displayed == ImGuizmo::TRANSLATE))
+    if (IconButton("##Translate", Icon::Move, "Move (W)", displayed == ImGuizmo::TRANSLATE, labels ? "Move" : nullptr))
         SetOperation(ImGuizmo::TRANSLATE);
     ImGui::EndDisabled();
     ImGui::SameLine();
     ImGui::BeginDisabled(cameraLocked || (light && !directional));
-    if (IconButton("##Rotate", Icon::Rotate, "Rotate (E)", displayed == ImGuizmo::ROTATE))
+    if (IconButton("##Rotate", Icon::Rotate, "Rotate (E)", displayed == ImGuizmo::ROTATE, labels ? "Rotate" : nullptr))
         SetOperation(ImGuizmo::ROTATE);
     ImGui::EndDisabled();
     ImGui::SameLine();
     ImGui::BeginDisabled(selection.type != EditorSelectionType::Model &&
                          selection.type != EditorSelectionType::Empty);
-    if (IconButton("##Scale", Icon::Scale, "Scale (R)", displayed == ImGuizmo::SCALE))
+    if (IconButton("##Scale", Icon::Scale, "Scale (R)", displayed == ImGuizmo::SCALE, labels ? "Scale" : nullptr))
         SetOperation(ImGuizmo::SCALE);
     ImGui::EndDisabled();
-    ImGui::SameLine(0, 14 * EditorTheme::GetScale());
+    ImGui::SameLine(0, 10 * EditorTheme::GetScale());
     if (IconButton("##Space", m_Mode == ImGuizmo::WORLD ? Icon::World : Icon::Local,
                    "Toggle world/local space (Q)"))
         ToggleSpace();
