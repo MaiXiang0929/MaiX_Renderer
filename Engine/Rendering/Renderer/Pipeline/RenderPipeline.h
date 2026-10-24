@@ -20,6 +20,7 @@
 #include "Engine/Rendering/Passes/ReflectionPass.h"
 #include "Engine/Rendering/Renderer/Pipeline/RenderPass.h"
 #include "Engine/Rendering/Passes/ShadowPass.h"
+#include "Engine/Rendering/Passes/ShadowPreviewPass.h"
 #include "Engine/Rendering/Passes/TranslucencyPass.h"
 #include "Engine/Rendering/Renderer/Diagnostics/GpuPassProfiler.h"
 
@@ -33,6 +34,7 @@ public:
     bool ReloadShaders();
     void Execute(RenderPassContext& context);
     RHITextureHandle GetFinalColorTexture() const { return m_FinalColorTexture; }
+    RHITextureHandle GetShadowPreviewTexture() const { return m_ShadowPreviewTexture; }
 
     const std::vector<RenderPass*>& GetPasses() const
     {
@@ -56,6 +58,7 @@ private:
     SSAOPass m_SSAOPass;
     EditorPrimitivePass m_EditorPrimitivePass;
     ShadowPass m_ShadowPass;
+    ShadowPreviewPass m_ShadowPreviewPass;
     ReflectionPass m_ReflectionPass;
     BloomPass m_BloomPass;
     PostProcessPass m_PostProcessPass;
@@ -63,5 +66,6 @@ private:
     GpuPassProfiler m_GpuProfiler;
     std::vector<RenderPass*> m_Passes;
     RHITextureHandle m_FinalColorTexture = 0;
+    RHITextureHandle m_ShadowPreviewTexture = 0;
     std::string m_LastResourceError;
 };

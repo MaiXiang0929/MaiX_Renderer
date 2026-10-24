@@ -15,6 +15,7 @@ const char* ToString(RenderPassType type)
     switch (type)
     {
     case RenderPassType::Shadow: return "Shadow";
+    case RenderPassType::ShadowPreview: return "ShadowPreview";
     case RenderPassType::Reflection: return "Reflection";
     case RenderPassType::Forward: return "Forward";
     case RenderPassType::Outline: return "Outline";
@@ -31,7 +32,14 @@ const char* ToString(RenderPassType type)
 
 std::size_t TextureTargetIndex(RHITextureKind target)
 {
-    return target == RHITextureKind::Cubemap ? 1 : 0;
+    switch (target)
+    {
+    case RHITextureKind::Texture2D: return 0;
+    case RHITextureKind::Cubemap: return 1;
+    case RHITextureKind::Texture2DArray: return 2;
+    case RHITextureKind::CubemapArray: return 3;
+    }
+    throw RHIError("Unsupported texture kind in submission statistics");
 }
 }
 

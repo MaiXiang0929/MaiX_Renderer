@@ -386,8 +386,13 @@ bool Renderer::LoadEnvironment(const std::filesystem::path& source, std::string&
 
 void Renderer::ExecutePipeline(RenderFrameData& frame)
 {
-    frame.shadowsEnabled = frame.shadowsEnabled && m_ShadowsEnabled && frame.shadowLightId != InvalidLightId;
+    frame.shadowsEnabled = frame.shadowsEnabled && m_ShadowsEnabled && !frame.shadowFrame.views.empty();
     frame.editorPrimitivesEnabled = frame.editorPrimitivesEnabled && m_EditorPrimitivesEnabled;
+    frame.shadowCascadeDebug = m_ShadowDebug.cascades;
+    frame.shadowPreviewLight = m_ShadowDebug.preview ? m_ShadowDebug.light : -1;
+    frame.shadowPreviewSlice = m_ShadowDebug.slice;
+    frame.shadowPreviewReflection = m_ShadowDebug.reflection;
+    m_LastShadowFrame = frame.shadowsEnabled ? frame.shadowFrame : ShadowFrame{};
 
     RenderView mainView;
     mainView.type = RenderViewType::Main;
@@ -428,11 +433,20 @@ void Renderer::ExecutePipeline(RenderFrameData& frame)
     reflectionView.viewportHeight = frame.viewportHeight;
     m_RenderScene.BuildRenderView(reflectionView);
 
-    RenderView shadowView;
-    shadowView.type = RenderViewType::Shadow;
-    shadowView.viewProjection = frame.lightVP;
-    shadowView.frustum = Frustum::FromViewProjection(frame.lightVP);
-    m_RenderScene.BuildRenderView(shadowView);
+    std::vector<RenderView> shadowViews;
+    if (frame.shadowsEnabled)
+    {
+        shadowViews.reserve(frame.shadowFrame.views.size());
+        for (const auto& planned : frame.shadowFrame.views)
+        {
+            RenderView view;
+            view.type = RenderViewType::Shadow;
+            view.viewProjection = planned.viewProjection;
+            view.frustum = Frustum::FromViewProjection(planned.viewProjection);
+            m_RenderScene.BuildRenderView(view);
+            shadowViews.push_back(std::move(view));
+        }
+    }
 
     // Renderer 注入场景绘制资源；Pipeline 组织 Pass，并绑定各 Pass 自己拥有的渲染目标。
     RenderPassContext context{
@@ -440,7 +454,6 @@ void Renderer::ExecutePipeline(RenderFrameData& frame)
         *m_Device,
         mainView,
         reflectionView,
-        shadowView,
         m_PresentMesh,
         m_SkyboxMesh,
         m_GroundMesh,
@@ -448,6 +461,7 @@ void Renderer::ExecutePipeline(RenderFrameData& frame)
         m_Tessellation,
         frame.postProcess
     };
+    context.shadowViews = &shadowViews;
     m_RenderPipeline.Execute(context);
 }
 

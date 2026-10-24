@@ -64,6 +64,7 @@ struct SceneActorRecord
 struct SceneDocument
 {
     PostProcessSettings postProcess;
+    ShadowSettings shadowSettings;
     EnvironmentSettings environment;
     std::optional<SceneAssetPath> environmentSource;
     std::vector<SceneActorRecord> actors;

@@ -16,9 +16,9 @@ enum class PassResourceId
     Environment, Irradiance, PrefilteredEnvironment, BrdfLut,
     ShadowDepth, ReflectionColor, ForwardColor, ForwardDepth,
     OutlinedColor, SceneHdrColor, SsaoAO, SsaoColor, Bloom,
-    PostColor, Overlay, FinalColor, ForwardIndirect, OutlinedIndirect, SceneIndirect, Count
+    PostColor, Overlay, FinalColor, ForwardIndirect, OutlinedIndirect, SceneIndirect, ShadowCubeDepth, ShadowPreview, Count
 };
-enum class ResourceFormat { RGBA8, RGBA16F, R8, Depth24, Depth24Stencil8, Cubemap, Cubemap16F };
+enum class ResourceFormat { RGBA8, RGBA16F, R8, Depth24, Depth24Stencil8, Cubemap, Cubemap16F, DepthArray, DepthCubeArray };
 enum class ResourceAccess { Sample, PreserveColor, DepthTest, ColorWrite, DepthWrite };
 enum class AttachmentLoad { None, Clear, Preserve };
 
@@ -30,6 +30,7 @@ struct PassResourceFeatures
     bool shadows = true;
     bool ssao = false;
     bool bloom = true;
+    bool shadowPreview = false;
 };
 struct ResourceInput
 {
@@ -48,7 +49,7 @@ struct ResourceOutput
 struct PassResourceContract
 {
     RenderPassType pass = RenderPassType::Count;
-    std::array<ResourceInput, 9> inputs{};
+    std::array<ResourceInput, 12> inputs{};
     std::array<ResourceOutput, 3> outputs{};
     std::size_t inputCount = 0;
     std::size_t outputCount = 0;
@@ -72,6 +73,8 @@ struct RenderResourceBinding
     bool imported = false;
     bool mipmaps = false;
     RHITextureHandle otherColorTexture = 0; // Sibling attachment for feedback validation.
+    unsigned layers = 1;
+    unsigned requiredLayers = 1;
 };
 
 class ResourceContractError : public RHIError
@@ -93,6 +96,7 @@ private:
     friend class PassResources;
     std::array<RenderResourceBinding, RenderResourceCount> m_Bindings{};
     std::array<bool, RenderResourceCount> m_Produced{};
+    std::array<std::vector<bool>, RenderResourceCount> m_WrittenLayers;
     unsigned int m_Width = 0;
     unsigned int m_Height = 0;
 };
@@ -115,6 +119,8 @@ public:
     // GL 操作集中在实现文件；清空/保留行为来自同一份输出声明。
     void BeginTarget(PassResourceId id) const;
     void EndTarget(PassResourceId id, bool generateMipmaps = true) const;
+    void BeginLayer(PassResourceId id, unsigned layer);
+    void EndLayer(PassResourceId id);
 
 private:
     [[noreturn]] void Fail(PassResourceId id, const char* reason) const;
@@ -125,4 +131,6 @@ private:
     const PassResourceContract& m_Contract;
     RHICommandList* m_Commands;
     std::array<bool, 3> m_Published{};
+    PassResourceId m_ActiveLayerResource = PassResourceId::Count;
+    unsigned m_ActiveLayer = 0;
 };

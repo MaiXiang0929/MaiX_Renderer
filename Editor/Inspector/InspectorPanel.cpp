@@ -265,8 +265,6 @@ bool InspectorPanel::Draw(EditorSelection &selection, SceneState &scene, bool &c
             if (ImGui::Selectable(LightTypeName(type), light->proxy.type == type))
             {
                 light->proxy.type = type;
-                if (!SupportsShadowMap(type))
-                    light->proxy.castsShadow = false;
                 changed = true;
             }
         ImGui::EndCombo();
@@ -277,7 +275,7 @@ bool InspectorPanel::Draw(EditorSelection &selection, SceneState &scene, bool &c
     else if (ImGui::Button("Set as Main Light"))
         scene.mainLightId = light->proxy.id;
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Main light drives shadows and the default NPR key light.");
+        ImGui::SetTooltip("Main light has shadow priority and drives the default NPR key light.");
     const bool lightValues = EditorWidgets::BeginProperties("##LightValues");
     if (lightValues)
     {
@@ -311,14 +309,26 @@ bool InspectorPanel::Draw(EditorSelection &selection, SceneState &scene, bool &c
     if (light->proxy.type == LightType::Spot)
         ImGui::TextWrapped("Cone half-angles; local -Z aims the light.");
 
-    const bool shadowSupported = SupportsShadowMap(light->proxy.type);
-    ImGui::BeginDisabled(!shadowSupported);
     changed |= ImGui::Checkbox("Cast Shadow", &light->proxy.castsShadow);
-    ImGui::EndDisabled();
-    if (!shadowSupported)
-        ImGui::TextDisabled("Point light shadows are not supported.");
-    else if (light->proxy.id != scene.mainLightId)
-        ImGui::TextDisabled("Only the scene main light currently casts shadows.");
+    if (light->proxy.castsShadow)
+    {
+        ImGui::BeginDisabled(!scene.shadowSettings.multiLight);
+        changed |= ImGui::SliderFloat("Shadow bias (texels)", &light->proxy.shadowBias, 0, 10, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+        changed |= ImGui::SliderFloat("Normal bias (texels)", &light->proxy.shadowNormalBias, 0, 10, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Slope-dependent receiver offset, measured in shadow texels.");
+        if (light->proxy.type == LightType::Directional)
+        {
+            int cascades = light->proxy.cascadeCount == 1 ? 0 : light->proxy.cascadeCount == 2 ? 1 : 2;
+            if (ImGui::Combo("Cascades", &cascades, "1 (scene fit)\0 2\0 4\0"))
+            { light->proxy.cascadeCount = cascades == 0 ? 1 : cascades == 1 ? 2 : 4; changed = true; }
+            changed |= ImGui::DragFloat("Shadow distance", &light->proxy.shadowDistance, 0.5f, 0.2f, 100000, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+            changed |= ImGui::SliderFloat("Split lambda", &light->proxy.splitLambda, 0, 1, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("0: uniform split distances; 1: logarithmic splits favoring nearby detail.");
+        }
+        ImGui::EndDisabled();
+        if (!scene.shadowSettings.multiLight)
+            ImGui::TextWrapped("Legacy scope uses original bias and a single map. Enable Multiple shadow lights in Render Settings to edit shadow quality.");
+    }
     if (changed)
     {
         // Transform and visibility edits above may not have reached PrepareFrame yet.

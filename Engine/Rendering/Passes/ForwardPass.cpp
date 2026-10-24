@@ -15,6 +15,22 @@
 
 namespace
 {
+// Seven vec4 values follow four mat4 values: identical std140 stride in GLSL.
+struct alignas(16) GpuShadowData
+{
+    std::array<cy::Matrix4f, MaxShadowCascades> matrices{};
+    std::array<float, 4> layerAndType{};
+    std::array<float, 4> positionAndNear{};
+    std::array<float, 4> farBiasNormalLegacy{};
+    std::array<float, 4> splits{};
+    std::array<float, 4> worldTexels{};
+    std::array<float, 4> depthRanges{};
+    std::array<float, 4> cascadeParameters{};
+};
+static_assert(sizeof(GpuShadowData) == 368, "Shadow UBO must match GLSL std140.");
+static_assert(offsetof(GpuShadowData, layerAndType) == 256);
+static_assert(offsetof(GpuShadowData, cascadeParameters) == 352);
+
 void BindEnvironmentSettings(Shader& shader, const EnvironmentSettings& settings)
 {
     const float angle = settings.rotationDegrees * 0.017453292519943295f;
@@ -39,6 +55,7 @@ InstanceTransformData BuildInstanceTransform(
 ForwardPass::~ForwardPass()
 {
     m_Device.DestroyBuffer(m_LightBuffer);
+    m_Device.DestroyBuffer(m_ShadowBuffer);
 }
 
 bool ForwardPass::Init()
@@ -46,7 +63,9 @@ bool ForwardPass::Init()
     const bool loaded = ReloadShaders();
     const bool instanceBufferInitialized = m_InstanceBuffer.Init();
     m_LightBuffer=m_Device.CreateBuffer({RHIBufferUsage::Uniform,sizeof(GpuLightData)*MaxForwardLights,true});
-    return loaded && instanceBufferInitialized && m_LightBuffer != 0;
+    m_ShadowBuffer = m_Device.CreateBuffer({RHIBufferUsage::Uniform,
+        sizeof(GpuShadowData) * MaxShadowLights, true});
+    return loaded && instanceBufferInitialized && m_LightBuffer != 0 && m_ShadowBuffer != 0;
 }
 
 bool ForwardPass::Resize(unsigned int width, unsigned int height)
@@ -87,21 +106,24 @@ bool ForwardPass::ReloadShaders()
     const bool tessellationBlockBound = tessellationLoaded &&
         BindForwardLightsBlock(m_TessellationShader);
     return standardBlockBound && instancedStandardBlockBound &&
-        tessellationBlockBound && skyboxLoaded && groundLoaded;
+        tessellationBlockBound && skyboxLoaded && groundLoaded &&
+        m_Device.BindUniformBlock(m_GroundShader.GetProgramID(), "ForwardShadows", ForwardShadowsBindingPoint);
 }
 
 bool ForwardPass::BindForwardLightsBlock(const Shader& shader) const
 {
-    return m_Device.BindUniformBlock(shader.GetProgramID(),"ForwardLights",ForwardLightsBindingPoint);
+    return m_Device.BindUniformBlock(shader.GetProgramID(),"ForwardLights",ForwardLightsBindingPoint) &&
+        m_Device.BindUniformBlock(shader.GetProgramID(),"ForwardShadows",ForwardShadowsBindingPoint);
 }
 
 LightUploadData ForwardPass::UploadLights(
     const RenderView& view,
     LightId shadowLightId,
-    LightId keyLightId)
+    LightId keyLightId,
+    const ShadowFrame& shadowFrame)
 {
     const LightUploadData upload = BuildLightUploadData(
-        view.lights, view.view, shadowLightId, keyLightId);
+        view.lights, view.view, shadowLightId, keyLightId, &shadowFrame);
 
     m_Device.UpdateBuffer(m_LightBuffer,0,sizeof(upload.lights),upload.lights.data());
     m_Device.Commands().BindUniformBuffer(m_LightBuffer,ForwardLightsBindingPoint,0,sizeof(upload.lights));
@@ -117,26 +139,75 @@ LightUploadData ForwardPass::UploadLights(
     return upload;
 }
 
+void ForwardPass::UploadShadows(RenderPassContext& context, const RenderView& view, Shader& shader)
+{
+    const ShadowFrame& frame = context.frame.shadowFrame;
+    std::array<GpuShadowData, MaxShadowLights> data{};
+    const std::size_t count = std::min(frame.lights.size(), std::size_t(MaxShadowLights));
+    const bool reflection = view.type == RenderViewType::Reflection;
+    for (std::size_t index = 0; index < count; ++index)
+    {
+        const ShadowLightFrame& source = frame.lights[index];
+        GpuShadowData& destination = data[index];
+        const bool reflectionCascades = reflection && source.reflectionBaseLayer >= 0;
+        destination.matrices = reflectionCascades ? source.reflectionMatrices : source.matrices;
+        destination.layerAndType = {
+            static_cast<float>(reflectionCascades ? source.reflectionBaseLayer : source.baseLayer),
+            static_cast<float>(source.type), static_cast<float>(source.cascadeCount),
+            static_cast<float>(source.cubeIndex)};
+        destination.positionAndNear = {source.position.x, source.position.y, source.position.z, source.nearPlane};
+        destination.farBiasNormalLegacy = {source.farPlane, source.bias, source.normalBias, source.legacy ? 1.0f : 0.0f};
+        destination.splits = source.splits;
+        destination.worldTexels = reflectionCascades ? source.reflectionWorldTexelSizes : source.worldTexelSizes;
+        destination.depthRanges = reflectionCascades ? source.reflectionDepthRanges : source.depthRanges;
+        destination.cascadeParameters = {source.cascadeNear,
+            source.legacy ? context.frame.spotShadowBias.x : 0.0f,
+            source.legacy ? context.frame.spotShadowBias.y : 0.0f, 0.0f};
+    }
+    m_Device.UpdateBuffer(m_ShadowBuffer, 0, sizeof(data), data.data());
+    m_Device.Commands().BindUniformBuffer(m_ShadowBuffer, ForwardShadowsBindingPoint, 0, sizeof(data));
+    const bool enabled = context.frame.shadowsEnabled;
+    m_Device.Commands().BindTexture(enabled ? context.Resources().Texture(PassResourceId::ShadowDepth) : 0,
+        5, RHITextureKind::Texture2DArray);
+    m_Device.Commands().BindTexture(enabled ? context.Resources().Texture(PassResourceId::ShadowCubeDepth) : 0,
+        9, RHITextureKind::CubemapArray);
+    shader.SetInt("shadowMap", 5);
+    shader.SetInt("shadowCubeMap", 9);
+    shader.SetInt("shadowsEnabled", enabled ? 1 : 0);
+    shader.SetInt("shadowLightCount", static_cast<int>(count));
+    shader.SetInt("shadowDebugCascades", context.frame.shadowCascadeDebug ? 1 : 0);
+    const cy::Matrix4f inverseView = view.view.GetInverse();
+    shader.SetMatrix4("inverseView", inverseView.cell);
+}
+
 void ForwardPass::Execute(RenderPassContext& context)
 {
     // CPU 侧切换主颜色目标；随后所有绘制命令写入同一个 Framebuffer。
     context.Resources().BeginTarget(PassResourceId::ForwardColor);
     const RHITextureHandle reflectionTexture = context.Resources().Texture(PassResourceId::ReflectionColor);
-    const RHITextureHandle shadowTexture = context.frame.shadowsEnabled
-        ? context.Resources().Texture(PassResourceId::ShadowDepth) : 0;
-
     RenderSkybox(context, context.frame.view);
 
     if (context.frame.reflectionGroundEnabled)
     {
         m_GroundShader.Bind();
         BindEnvironmentSettings(m_GroundShader, context.frame.environment);
-        m_GroundShader.SetVec3("spotShadowBias", context.frame.spotShadowBias.x, context.frame.spotShadowBias.y, 0.0f);
+        UploadShadows(context, context.mainView, m_GroundShader);
+        m_GroundShader.SetMatrix4("view", context.mainView.view.cell);
+        int groundShadowIndex = -1;
+        for (std::size_t index = 0; index < context.frame.shadowFrame.lights.size(); ++index)
+            if (context.frame.shadowFrame.lights[index].lightId == context.frame.keyLightId)
+                groundShadowIndex = static_cast<int>(index);
+        m_GroundShader.SetInt("groundShadowIndex", groundShadowIndex);
+        cy::Vec3f groundLightDirection(0.0f, -1.0f, 0.0f);
+        for (const LightSceneProxy& light : context.mainView.lights)
+            if (light.id == context.frame.keyLightId)
+                groundLightDirection = light.direction;
+        m_GroundShader.SetVec3("groundLightDirection", groundLightDirection.x,
+            groundLightDirection.y, groundLightDirection.z);
         m_GroundShader.SetMatrix4("mvp", &context.frame.groundMvp.cell[0]);
         m_GroundShader.SetMatrix4("model", &context.frame.groundModel.cell[0]);
         m_GroundShader.SetMatrix4(
             "reflectionVP", &context.frame.reflectionVP.cell[0]);
-        m_GroundShader.SetMatrix4("lightVP", &context.frame.lightVP.cell[0]);
         m_GroundShader.SetVec3(
             "cameraWorldPos",
             context.frame.cameraWorldPosition.x,
@@ -146,15 +217,6 @@ void ForwardPass::Execute(RenderPassContext& context)
         m_GroundShader.SetInt("cubemap", 0);
         m_Device.Commands().BindTexture(reflectionTexture,1);
         m_GroundShader.SetInt("reflectionTex", 1);
-        m_Device.Commands().BindTexture(shadowTexture,2);
-        m_GroundShader.SetInt("shadowMap", 2);
-        m_GroundShader.SetInt(
-            "shadowsEnabled", context.frame.shadowsEnabled ? 1 : 0);
-        const auto shadowLight = std::find_if(context.mainView.lights.begin(), context.mainView.lights.end(),
-            [&](const LightSceneProxy& light) { return light.id == context.frame.shadowLightId; });
-        const auto lightPosition = shadowLight != context.mainView.lights.end() ?
-            shadowLight->position : cy::Vec3f(0.0f);
-        m_GroundShader.SetVec3("shadowLightPosition", lightPosition.x, lightPosition.y, lightPosition.z);
         context.groundMesh.Draw();
     }
 
@@ -211,10 +273,8 @@ void ForwardPass::RenderItems(
 
         const cy::Matrix4f mv = view * item.model;
         const cy::Matrix4f mvp = viewProjection * item.model;
-        const cy::Matrix4f lightMvp = context.frame.lightVP * item.model;
         shader.SetMatrix4("mvp", &mvp.cell[0]);
         shader.SetMatrix4("mv", &mv.cell[0]);
-        shader.SetMatrix4("lightMvp", &lightMvp.cell[0]);
         item.material->Bind(shader, 0);
 
         if (!context.tessellation.enabled)
@@ -333,12 +393,8 @@ void ForwardPass::RenderOpaqueBatches(
                     renderView.view.GetInverse();
                 const cy::Matrix4f projectionFromView =
                     renderView.viewProjection * viewToWorld;
-                const cy::Matrix4f lightFromView =
-                    context.frame.lightVP * viewToWorld;
                 activeShader->SetMatrix4(
                     "projectionFromView", &projectionFromView.cell[0]);
-                activeShader->SetMatrix4(
-                    "lightFromView", &lightFromView.cell[0]);
             }
 
             firstItem.material->Bind(*activeShader, 0);
@@ -367,11 +423,8 @@ void ForwardPass::RenderOpaqueBatches(
         const cy::Matrix4f mv = renderView.view * firstItem.model;
         const cy::Matrix4f mvp =
             renderView.viewProjection * firstItem.model;
-        const cy::Matrix4f lightMvp =
-            context.frame.lightVP * firstItem.model;
         activeShader->SetMatrix4("mvp", &mvp.cell[0]);
         activeShader->SetMatrix4("mv", &mv.cell[0]);
-        activeShader->SetMatrix4("lightMvp", &lightMvp.cell[0]);
         firstItem.material->Bind(*activeShader, 0);
         firstItem.mesh->Draw();
     }
@@ -383,24 +436,16 @@ void ForwardPass::PrepareSurfaceShader(
     Shader& shader,
     bool tessellationEnabled)
 {
-    const cy::Matrix4f& view = renderView.view;
     shader.Bind();
     BindEnvironmentSettings(shader, context.frame.environment);
-    shader.SetVec3("spotShadowBias", context.frame.spotShadowBias.x, context.frame.spotShadowBias.y, 0.0f);
     const LightUploadData lightUpload = UploadLights(
         renderView,
         context.frame.shadowLightId,
-        context.frame.keyLightId);
+        context.frame.keyLightId,
+        context.frame.shadowFrame);
     shader.SetInt("lightCount", static_cast<int>(lightUpload.lightCount));
-    shader.SetInt("shadowLightIndex", lightUpload.shadowLightIndex);
+    UploadShadows(context, renderView, shader);
     shader.SetInt("keyLightIndex", lightUpload.keyLightIndex);
-
-    const float viewToWorld[9] = {
-        view.cell[0], view.cell[4], view.cell[8],
-        view.cell[1], view.cell[5], view.cell[9],
-        view.cell[2], view.cell[6], view.cell[10]
-    };
-    shader.SetMatrix3("viewToWorld",viewToWorld);
 
     if (tessellationEnabled)
     {
@@ -417,12 +462,6 @@ void ForwardPass::PrepareSurfaceShader(
     m_Device.Commands().BindTexture(context.Resources().Texture(PassResourceId::BrdfLut),8);
     shader.SetInt("brdfLut",8);
     shader.SetFloat("prefilterMaxLod",static_cast<float>(EnvironmentLighting::PrefilterMaxMip));
-    const RHITextureHandle shadowTexture = context.frame.shadowsEnabled
-        ? context.Resources().Texture(PassResourceId::ShadowDepth) : 0;
-    m_Device.Commands().BindTexture(shadowTexture,5);
-    shader.SetInt("shadowMap", 5);
-    shader.SetInt(
-        "shadowsEnabled", context.frame.shadowsEnabled ? 1 : 0);
 
 }
 

@@ -41,7 +41,9 @@ class RHIError : public std::runtime_error
 enum class RHITextureKind
 {
     Texture2D,
-    Cubemap
+    Cubemap,
+    Texture2DArray,
+    CubemapArray
 };
 enum class RHITextureFormat
 {
@@ -135,6 +137,8 @@ struct RHITargetDesc
     bool color = true, depth = true, sampleableDepth = false, mipmaps = false;
     bool shadow = false;
     bool secondaryColor = false; // Optional second color attachment, same format, no mipmaps.
+    unsigned layers = 1; // Array layer count; cubemap arrays use 6*N layer-faces.
+    RHITextureKind depthKind = RHITextureKind::Texture2D;
 };
 // Target exclusively owns its attachments. Returned texture handles are borrowed.
 struct RHITarget
@@ -158,4 +162,5 @@ struct RHICapabilities
     unsigned maxTextureSize = 0, uniformBufferAlignment = 1, maxTextureUnits = 0;
     std::size_t maxUniformBlockSize = 0;
     bool timerQueries = false, debugGroups = false;
+    unsigned maxArrayTextureLayers = 0, maxCubeMapTextureSize = 0;
 };

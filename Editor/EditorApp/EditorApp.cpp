@@ -36,6 +36,7 @@
 #include "Engine/Asset/Importer/ImageLoader.h"
 #include "Editor/Viewport/EditorViewportController.h"
 #include "Editor/Inspector/InspectorPanel.h"
+#include "Editor/Inspector/ShadowSettingsPanel.h"
 #include "Editor/MaterialEditor/MaterialEditorPanel.h"
 #include "Editor/SceneHierarchy/SceneHierarchyPanel.h"
 #include "Editor/Session/EditorWorkspace.h"
@@ -1295,7 +1296,10 @@ void EditorApp::Render() {
     }
 
     if (m_Workspace->ShowRenderSettings())
-        DrawRenderSettingsPanel(m_Engine.Scene().postProcess, [&] { DrawEnvironmentControls(m_Engine.Scene(),*m_Renderer,nativeWindowHandle); });
+        DrawRenderSettingsPanel(m_Engine.Scene().postProcess, [&] {
+            DrawShadowSettingsControls(m_Engine.Scene(),*m_Renderer);
+            DrawEnvironmentControls(m_Engine.Scene(),*m_Renderer,nativeWindowHandle);
+        });
 
     const SceneFrameSettings frameSettings{m_Renderer->IsTessellationEnabled(),
         m_Renderer->GetDisplacementScale(), m_Renderer->AreEditorPrimitivesEnabled()};

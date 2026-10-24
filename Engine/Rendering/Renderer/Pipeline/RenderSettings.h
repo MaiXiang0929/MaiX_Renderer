@@ -2,6 +2,22 @@
 #pragma once
 #include <cmath>
 
+struct ShadowSettings
+{
+    bool multiLight = true;
+    unsigned maxLights = 4;
+    unsigned resolution = 1024;
+    unsigned pointResolution = 512;
+};
+inline bool IsValidShadowSettings(const ShadowSettings& settings)
+{
+    const auto resolution = [](unsigned value) {
+        return value == 256 || value == 512 || value == 1024 || value == 2048;
+    };
+    return settings.maxLights >= 1 && settings.maxLights <= 4 &&
+        resolution(settings.resolution) && resolution(settings.pointResolution);
+}
+
 struct EnvironmentSettings
 {
     float intensity = 1.0f;

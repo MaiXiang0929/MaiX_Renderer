@@ -11,6 +11,8 @@ in TC_OUT
 } teIn[];
 
 out vec2 fragTexCoord;
+out vec3 shadowWorldPosition;
+uniform mat4 inverseLightVP;
 uniform mat4 lightMvp;
 uniform sampler2D displacementMap;
 uniform bool hasDisplacementMap;
@@ -37,4 +39,6 @@ void main()
         position += normal * texture(displacementMap, uv).r * displacementScale;
 
     gl_Position = lightMvp * vec4(position, 1.0);
+    vec4 world = inverseLightVP * gl_Position;
+    shadowWorldPosition = world.xyz / world.w;
 }

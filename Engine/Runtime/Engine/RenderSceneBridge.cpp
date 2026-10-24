@@ -18,7 +18,7 @@ LightId CreateSceneLight(SceneState &scene, Renderer &renderer, LightType type,
     default: error = "Unsupported light type."; return InvalidLightId;
     }
     light.proxy.type = type;
-    light.proxy.castsShadow = SupportsShadowMap(type);
+    light.proxy.castsShadow = type != LightType::Point; // Point shadow cost is opt-in in the Inspector.
     light.transform = local;
     try
     {

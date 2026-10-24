@@ -16,6 +16,7 @@ const char* ToString(RenderPassType type)
     switch (type)
     {
     case RenderPassType::Shadow: return "Shadow";
+    case RenderPassType::ShadowPreview: return "ShadowPreview";
     case RenderPassType::Reflection: return "Reflection";
     case RenderPassType::Forward: return "Forward";
     case RenderPassType::Outline: return "Outline";

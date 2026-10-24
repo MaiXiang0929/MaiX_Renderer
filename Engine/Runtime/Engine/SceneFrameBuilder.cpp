@@ -3,6 +3,7 @@
 #include "Engine/Core/Math/CameraClipRange.h"
 #include "Engine/Rendering/Renderer/View/DirectionalShadow.h"
 #include "Engine/Rendering/Renderer/View/SpotShadow.h"
+#include "Engine/Rendering/Renderer/View/ShadowFrameBuilder.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -44,8 +45,9 @@ RenderFrameData BuildSceneFrame(SceneState &scene, Camera &camera, unsigned int 
         const auto& light = editableMainLight->proxy;
         if (light.type == LightType::Spot)
             shadowEnabled = BuildSpotShadow(light, lightVP, spotShadowBias);
-        else
+        else if (light.type == LightType::Directional)
             lightVP = FitDirectionalShadow(sceneBounds, light.direction, shadowPadding);
+        else shadowEnabled = false;
     }
     // 反射视图仍由 Engine frame builder 根据场景地面位置计算，Pass 只消费结果。
     float groundY = scene.groundY;
@@ -161,9 +163,14 @@ RenderFrameData BuildSceneFrame(SceneState &scene, Camera &camera, unsigned int 
     frame.view = viewMatrix;
     frame.lightVP = lightVP;
     frame.spotShadowBias = spotShadowBias;
-    frame.shadowsEnabled = shadowEnabled;
+    std::vector<LightSceneProxy> lights;
+    lights.reserve(scene.lights.size());
+    for (const auto& light : scene.lights) lights.push_back(light.proxy);
+    frame.shadowFrame = BuildShadowFrame(lights, scene.mainLightId, scene.shadowSettings, sceneBounds,
+        projMatrix, viewMatrix, reflectView, scene.reflectionGroundEnabled, shadowPadding);
+    frame.shadowsEnabled = !frame.shadowFrame.views.empty();
     frame.reflectionGroundEnabled = scene.reflectionGroundEnabled;
-    frame.shadowLightId = frame.shadowsEnabled ? scene.mainLightId : InvalidLightId;
+    frame.shadowLightId = shadowEnabled ? scene.mainLightId : InvalidLightId;
     frame.keyLightId = editableMainLight ? scene.mainLightId : InvalidLightId;
     frame.reflectionView = reflectView;
     frame.groundModel = groundModel;

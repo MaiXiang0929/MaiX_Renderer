@@ -1,7 +1,7 @@
 // 反射地面顶点着色器
 // 将世界空间位置传入片段着色器，用于投影到反射纹理和 cubemap 采样
 
-#version 330 core
+#version 400 core
 
 layout (location = 0) in vec3 pos;
 

@@ -11,7 +11,6 @@ layout(std140) uniform InstanceTransforms
 };
 
 uniform mat4 projectionFromView;
-uniform mat4 lightFromView;
 uniform vec3 faceForwardLocal;
 uniform vec3 faceRightLocal;
 
@@ -20,7 +19,6 @@ out vec3 fragNormal;
 out vec3 fragTangent;
 out float fragTangentSign;
 out vec2 fragTexCoord;
-out vec4 fragLightSpacePos;
 out vec3 fragFaceForward;
 out vec3 fragFaceRight;
 
@@ -36,7 +34,6 @@ void main()
     fragTangent = normalize(mat3(modelView) * tangent.xyz);
     fragTangentSign = tangent.w;
     fragTexCoord = texCoord;
-    fragLightSpacePos = lightFromView * viewPosition;
 
     fragFaceForward = normalize(mat3(modelView) * faceForwardLocal);
     vec3 faceRightView = mat3(modelView) * faceRightLocal;

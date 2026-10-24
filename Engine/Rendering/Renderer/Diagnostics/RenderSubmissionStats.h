@@ -58,7 +58,7 @@ public:
 private:
     static constexpr std::size_t PassCount = RenderSubmissionSnapshot::PassCount;
     static constexpr std::size_t TextureUnitCount = 16;
-    static constexpr std::size_t TextureTargetCount = 2;
+    static constexpr std::size_t TextureTargetCount = 4;
 
     struct TextureBinding
     {

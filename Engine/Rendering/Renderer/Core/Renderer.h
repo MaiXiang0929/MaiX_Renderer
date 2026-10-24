@@ -167,6 +167,14 @@ public:
 
     void SetShadowsEnabled(bool enabled) { m_ShadowsEnabled = enabled; }
     bool IsShadowsEnabled() const { return m_ShadowsEnabled; }
+    struct ShadowDebugSettings
+    {
+        bool cascades = false, preview = false, reflection = false;
+        int light = 0, slice = 0;
+    };
+    ShadowDebugSettings& ShadowDebug() { return m_ShadowDebug; }
+    const ShadowFrame& GetShadowFrame() const { return m_LastShadowFrame; }
+    RHITextureHandle GetShadowPreviewTexture() const { return m_RenderPipeline.GetShadowPreviewTexture(); }
 
     void SetEditorPrimitivesEnabled(bool enabled)
     {
@@ -221,5 +229,7 @@ private:
     std::array<std::size_t, 10> m_LastMainViewStats{};
     bool m_HasMainViewStats = false;
     bool m_ShadowsEnabled = true;
+    ShadowDebugSettings m_ShadowDebug;
+    ShadowFrame m_LastShadowFrame;
     bool m_EditorPrimitivesEnabled = true;
 };
