@@ -37,7 +37,7 @@ IBL 可使用内置六面 sRGB PNG 天空或 Radiance `.hdr` 全景；不包含 
 ### 场景与编辑器
 
 - RenderScene 使用 Primitive/Light Scene Proxy 构建主视图、反射视图和阴影视图；CPU 侧执行包围球视锥裁剪、不透明资源排序与 Instancing 批次准备。
-- Renderer 持有 Mesh/Material 资源，场景通过强类型 Handle 提交共享资源。FBX 导入支持多 Mesh、多材质分段、索引绘制、纹理和异步 CPU 解析。
+- Renderer 持有 Mesh/Material 资源，场景通过强类型 Handle 提交共享资源。FBX 导入支持多 Mesh、多材质分段、索引绘制和异步 CPU 解析；Base Color、Normal 与灰度 AO/Roughness/Metallic 输入自动绑定，分离数据图合成为 Linear ORM，保留材质倍率。
 - ImGui 提供 Scene Window、Inspector、Material Editor 和 Renderer Statistics；视口支持相机导航、模型/灯光拾取与 ImGuizmo Transform。
 - GPU Debug Group、每 Pass 提交统计和 GPU Timer Query 辅助定位渲染开销。
 
@@ -115,7 +115,7 @@ HDR 文件及单份解码 RGBA 浮点缓冲分别限制为 256 MiB，要求 2:1�
 
 `View → Render Settings` 编辑当前场景的 Exposure（EV）、ACES Tone Mapping、Bloom、SSAO 与抗锯齿设置；`Reset to Defaults` 恢复默认值（包括开启 FXAA），关闭效果保留其参数。曝光每增加 1 EV，线性亮度加倍；Bloom Threshold 使用曝光前的线性 HDR 值，SSAO Radius/Bias 使用场景世界单位。修改即时影响画面，并纳入未保存修改检测；通过 Save Scene 保存后，再次打开该场景恢复这些值；重启仍按项目默认场景打开。参数由 CPU 场景持有，每帧以快照传入渲染管线，GPU 资源仍由 Renderer/Pass 管理。
 
-新保存的场景使用 v4 格式，增加材质 Surface Side，并保留全局阴影范围/预算/分辨率及各灯 Bias、级联数、距离和分割系数。v1–v3 场景的材质迁移为 Legacy，保留原先不剔除与不翻转背面法线的表现；旧 v3 阴影配置保持原值。v1/v2 场景仍可读取，迁移为单主灯阴影、2048² 单图、方向光单级、点光源 Cast Shadow 关闭，保持旧画面；需要新能力时在 Render Settings 的 Shadows 开启 Multiple shadow lights，再编辑灯光参数。v1 使用原有后处理默认值；FXAA 在 v1 及缺少该字段的旧 v2 场景中关闭。非法、越界、缺失必需字段或未知字段拒绝加载，候选失败保留当前场景和参数。级联调试色、深度预览、全局阴影调试开关、细分调试、导航相机与 UI 配置不写入场景。
+新保存的场景使用 v5 格式，记录 Normal 转换和 ORM 合成来源配方，保留 v4 的 Surface Side，以及全局阴影范围/预算/分辨率及各灯 Bias、级联数、距离和分割系数。旧 v4 场景的面模式保持原值；v1–v3 场景的材质迁移为 Legacy，保留原先不剔除与不翻转背面法线的表现；旧 v3 阴影配置保持原值。v1/v2 场景仍可读取，迁移为单主灯阴影、2048² 单图、方向光单级、点光源 Cast Shadow 关闭，保持旧画面；需要新能力时在 Render Settings 的 Shadows 开启 Multiple shadow lights，再编辑灯光参数。v1 使用原有后处理默认值；FXAA 在 v1 及缺少该字段的旧 v2 场景中关闭。非法、越界、缺失必需字段或未知字段拒绝加载，候选失败保留当前场景和参数。级联调试色、深度预览、全局阴影调试开关、细分调试、导航相机与 UI 配置不写入场景。
 
 复制或搬移整个项目目录后，可在新位置打开 `.maixproject`；Assets 内相对引用会跟随项目，引擎引用仍指向内置内容，外部绝对引用仍要求原文件可访问。当前支持 FBX 模型与已有内置 Cube。含无来源生成纹理或仅供渲染验证的透明平面的场景，会明确拒绝保存；资产数据库、依赖归档、项目 Hub 与 Undo/Redo 尚未实现。
 
@@ -169,6 +169,15 @@ Material Editor 默认跟随所选模型，显示所属模型名称和材质列�
 `Surface Side` 在基础材质中选择，实例通过 `Edit Parent` 修改并随父材质更新：Front 只绘制正面，Back 只绘制背面并翻转光照法线，Double 绘制两面且背面翻转完整法线，Legacy 保留旧版两面可见但不翻转法线的行为。负缩放和镜面反射会修正逻辑正反面；同一材质的正负缩放实例按绕序分批。阴影使用同一面规则，Double 薄片两面都能投影；Masked 的孔洞继续一致裁剪。Front/Legacy 支持已有 Inverted Hull 描边，Back/Double 暂停描边并在面板提示；位移仍沿原始顶点法线。
 
 材质面模式验收：导入一张带 UV/法线贴图的薄片，在 Material Editor 依次切换 Front、Back、Double，绕到背面检查显隐与受光；把模型 X 缩放设为负值，再检查一次。开启灯光 Cast Shadow，对照地面阴影和 Masked 孔洞；在镜面场景检查反射。创建实例后通过 Edit Parent 改面模式，确认两者同步，保存并重开核对模式。旧场景应显示 Legacy，切换后再保存为 v4。材质面模式与双面光照的视觉、交互已由用户验收。
+
+
+`File → Asset Import` 打开导入面板，先选择 `Normal Y`：默认 `OpenGL (+Y)` 保留原图绿色通道，`DirectX (-Y, flip green)` 在 CPU 处理时翻转绿色，再点击 `Import FBX...`。File 菜单导入和 Content Browser 双击使用当前选项；已导入对象不随选项变化而重处理。FBX 用于图片寻址的 V 翻转保留作者的切线法线基方向；Normal 使用 Linear，Base Color 使用 sRGB；同一图片用于颜色与数据时创建对应 GPU 格式。Material Editor 的纹理区显示 `Sampling`、Normal 转换，以及 `Generated ORM` 的输入文件/内嵌身份、通道和输出尺寸。
+
+AO、Roughness、Metallic 支持明确直连的灰度输入，取 R 通道并合成为 ORM；缺失通道为 1，材质数值继续相乘，不把倍率重复烘焙进图。合成使用最大输入宽高和像素中心双线性重采样，单轴最多 16384、RGBA 输出最多 256 MiB。配方记录每个原图的项目/引擎/外部来源或 FBX 内嵌身份，保存重开时重新生成，不向用户 Assets 写入合成 PNG。实例沿用继承、替换、禁用和重置。
+
+导入范围限于库能识别的单 UV、Repeat、无逐图 UV 变换的明确文件输入；彩色标量图、不同 UV 集、非默认包裹模式、复杂/分层/程序节点、Glossiness 转 Roughness 及 Bump 转 Normal 等会显示警告并回退到常量。已有打包 ORM 可在材质编辑器手工选择，不按文件名猜测通道。新导入的缺失可选贴图会诊断；保存场景的依赖缺失时加载失败并保留旧场景。视觉效果与新导入交互待用户验收。
+
+PBR 导入验收：使用带 Base Color、Normal 和分离灰度 AO/Roughness/Metallic 的 FBX，确认自动绑定与法线凹凸、粗糙/金属区域；分别导入 +Y/-Y 法线，检查方向。修改材质倍率，测试实例继承与替换；检查负缩放、Double 背面和反射。保存重开以及搬移项目后应保持纹理、配方和画面；移走一个必需输入后重开，应报错且当前场景保留。
 
 ## 项目结构
 

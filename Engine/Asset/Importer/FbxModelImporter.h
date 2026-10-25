@@ -11,6 +11,7 @@ struct FbxImportOptions
 {
     bool flipUv = true;
     bool generateMissingNormals = true;
+    bool flipNormalGreen = false;
 };
 
 class FbxModelImporter

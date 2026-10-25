@@ -35,6 +35,7 @@ public:
     MaterialProperties& GetProperties() { return m_Properties; }
     const MaterialProperties& GetProperties() const { return m_Properties; }
 
+    static bool IsTextureCompatible(MaterialTextureSlot slot, const Texture2D& texture);
     bool SetTexture(
         MaterialTextureSlot slot,
         std::shared_ptr<Texture2D> texture,

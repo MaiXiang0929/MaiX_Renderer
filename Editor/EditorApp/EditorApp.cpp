@@ -58,6 +58,7 @@
 #include <filesystem>
 #include <iostream>
 #include <memory>
+#include <map>
 #include <optional>
 #include <string>
 #include <utility>
@@ -784,33 +785,50 @@ bool EditorApp::CommitImportedModel(
 
     try
     {
-        std::vector<std::shared_ptr<Texture2D>> textures(
-            model.textures.size());
-        for (std::size_t index = 0; index < model.textures.size(); ++index)
+        // Decoded CPU images can serve color and data roles. Only share uploads
+        // within this import when both source index and sampling space match.
+        std::map<std::pair<std::uint32_t, TextureColorSpace>,
+            std::shared_ptr<Texture2D>> textures;
+        const auto uploadTexture = [this, &model, &textures, &error](
+            std::uint32_t index, MaterialTextureSlot slot) -> std::shared_ptr<Texture2D>
         {
+            if (index >= model.textures.size())
+            {
+                error = "Imported material references an invalid texture index.";
+                return {};
+            }
+            const auto colorSpace = GetRequiredMaterialTextureColorSpace(slot);
+            const auto key = std::make_pair(index, colorSpace);
+            const auto cached = textures.find(key);
+            if (cached != textures.end())
+                return cached->second;
             const AssetImport::ImportedTextureData& importedTexture =
                 model.textures[index];
             if (!importedTexture.image.IsValid())
             {
-                return fail(
-                    "Imported texture data is invalid: " +
-                    importedTexture.name);
+                error = "Imported texture data is invalid: " + importedTexture.name;
+                return {};
             }
 
-            textures[index] = Texture2D::CreateRGBA8(m_Renderer->Device(),
+            auto texture = Texture2D::CreateRGBA8(m_Renderer->Device(),
                 importedTexture.image.width,
                 importedTexture.image.height,
                 importedTexture.image.pixels,
-                TextureColorSpace::SRGB);
-            if (!textures[index])
+                colorSpace);
+            if (!texture)
             {
-                return fail(
-                    "GPU texture creation failed: " +
-                    importedTexture.name);
+                error = "GPU texture creation failed: " + importedTexture.name;
+                return {};
             }
-            textures[index]->SetSource(std::filesystem::absolute(importedTexture.embedded ? model.sourcePath : importedTexture.sourcePath),
-                importedTexture.embedded ? importedTexture.sourceId : 0);
-        }
+            if (importedTexture.reconstruction)
+                texture->SetReconstructionSource(*importedTexture.reconstruction);
+            else if (importedTexture.embedded && importedTexture.sourceId && !model.sourcePath.empty())
+                texture->SetSource(std::filesystem::absolute(model.sourcePath), importedTexture.sourceId);
+            else if (!importedTexture.embedded && !importedTexture.sourcePath.empty())
+                texture->SetSource(std::filesystem::absolute(importedTexture.sourcePath));
+            textures.emplace(key, texture);
+            return texture;
+        };
 
         for (const AssetImport::ImportedMaterialData& importedMaterial :
             model.materials)
@@ -821,32 +839,44 @@ bool EditorApp::CommitImportedModel(
             properties.baseColor = importedMaterial.baseColor;
             properties.metallic = importedMaterial.metallic;
             properties.roughness = importedMaterial.roughness;
+            properties.ambientOcclusion = importedMaterial.ambientOcclusion;
             properties.opacity = importedMaterial.opacity;
             if (importedMaterial.opacity < 0.999f)
                 material.SetBlendMode(BlendMode::AlphaBlend);
 
-            if (importedMaterial.baseColorTexture !=
-                AssetImport::InvalidImportedTextureIndex)
+            const std::array<std::pair<MaterialTextureSlot, std::uint32_t>, 3> bindings = {{
+                {MaterialTextureSlot::BaseColor, importedMaterial.baseColorTexture},
+                {MaterialTextureSlot::Normal, importedMaterial.normalTexture},
+                {MaterialTextureSlot::OcclusionRoughnessMetallic, importedMaterial.ormTexture}}};
+            for (const auto& binding : bindings)
             {
-                if (importedMaterial.baseColorTexture >= textures.size())
-                {
-                    return fail(
-                        "Imported material references an invalid texture: " +
-                        importedMaterial.name);
-                }
-
+                if (binding.second == AssetImport::InvalidImportedTextureIndex)
+                    continue;
+                auto texture = uploadTexture(binding.second, binding.first);
+                if (!texture)
+                    return fail(error + " Material: " + importedMaterial.name);
                 const AssetImport::ImportedTextureData& importedTexture =
-                    model.textures[importedMaterial.baseColorTexture];
-                const std::string sourceLabel = importedTexture.embedded
-                    ? "Embedded: " + importedTexture.name
-                    : importedTexture.sourcePath.u8string();
+                    model.textures[binding.second];
+                std::string sourceLabel;
+                if (importedTexture.reconstruction)
+                {
+                    const auto& source = *importedTexture.reconstruction;
+                    sourceLabel = source.kind == AssetImport::TextureSourceKind::Orm
+                        ? "Generated ORM"
+                        : source.image.embeddedId
+                            ? "Embedded: " + importedTexture.name
+                            : source.image.path.u8string();
+                }
+                else
+                    sourceLabel = importedTexture.embedded ? "Embedded: " + importedTexture.name
+                        : importedTexture.sourcePath.u8string();
                 if (!material.SetTexture(
-                        MaterialTextureSlot::BaseColor,
-                        textures[importedMaterial.baseColorTexture],
+                        binding.first,
+                        std::move(texture),
                         sourceLabel))
                 {
                     return fail(
-                        "Unable to bind the base color texture for material: " +
+                        "Unable to bind an imported texture for material: " +
                         importedMaterial.name);
                 }
             }

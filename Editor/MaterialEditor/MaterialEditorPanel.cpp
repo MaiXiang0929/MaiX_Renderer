@@ -41,6 +41,43 @@ std::string TextureDisplayName(const std::string& source)
     const std::string filename = path.filename().u8string();
     return filename.empty() ? source : filename;
 }
+
+void DrawTextureSourceImage(const char* role, const AssetImport::TextureSourceImage& image)
+{
+    if (image.embeddedId)
+        ImGui::TextWrapped("%s: %s (embedded %llu)", role,
+            image.path.u8string().c_str(), static_cast<unsigned long long>(image.embeddedId));
+    else
+        ImGui::TextWrapped("%s: %s", role, image.path.u8string().c_str());
+}
+
+void DrawTextureReconstruction(const AssetImport::TextureSource& source)
+{
+    if (source.kind == AssetImport::TextureSourceKind::Orm)
+    {
+        ImGui::TextWrapped("Generated ORM: %u x %u", source.width, source.height);
+        const std::array<const char*, 3> roles = {"AO -> R", "Roughness -> G", "Metallic -> B"};
+        for (std::size_t index = 0; index < roles.size(); ++index)
+        {
+            if (!source.ormInputs[index])
+            {
+                ImGui::TextWrapped("%s: default 1", roles[index]);
+                continue;
+            }
+            const auto& input = *source.ormInputs[index];
+            DrawTextureSourceImage(roles[index], input.image);
+            ImGui::Text("Source channel %c", input.channel < 4 ? "RGBA"[input.channel] : '?');
+        }
+    }
+    else
+    {
+        DrawTextureSourceImage("Source", source.image);
+        if (source.kind == AssetImport::TextureSourceKind::Normal)
+            ImGui::TextWrapped("%s", source.flipGreen
+                ? "Normal Y: DirectX (-Y) -> OpenGL (+Y); Green flipped"
+                : "Normal Y: OpenGL (+Y); Green unchanged");
+    }
+}
 }
 
 void MaterialEditorPanel::Draw(
@@ -225,7 +262,7 @@ void MaterialEditorPanel::Draw(
     editField(MaterialParameter::Shininess, "Legacy Shininess", [&] { return ImGui::SliderFloat("##Value", &properties.shininess, 1.000f, 256.000f); });
     editField(MaterialParameter::EnvironmentReflectivity, "Environment Reflectivity", [&] { return ImGui::SliderFloat("##Value", &properties.environmentReflectivity, 0.000f, 1.000f); });
     editField(MaterialParameter::Metallic, "Metallic", [&] { return ImGui::SliderFloat("##Value", &properties.metallic, 0.000f, 1.000f); });
-    editField(MaterialParameter::Roughness, "Roughness", [&] { return ImGui::SliderFloat("##Value", &properties.roughness, 0.045f, 1.000f); });
+    editField(MaterialParameter::Roughness, "Roughness", [&] { return ImGui::SliderFloat("##Value", &properties.roughness, 0.000f, 1.000f); });
     editField(MaterialParameter::AmbientOcclusion, "Ambient Occlusion", [&] { return ImGui::SliderFloat("##Value", &properties.ambientOcclusion, 0.000f, 1.000f); });
     editField(MaterialParameter::NormalScale, "Normal Scale", [&] { return ImGui::SliderFloat("##Value", &properties.normalScale, 0.000f, 4.000f); });
     editField(MaterialParameter::Opacity, "Opacity", [&] { return ImGui::SliderFloat("##Value", &properties.opacity, 0.000f, 1.000f); });
@@ -285,6 +322,8 @@ void MaterialEditorPanel::Draw(
             static_cast<MaterialTextureSlot>(index);
         ImGui::PushID(static_cast<int>(index));
         ImGui::SeparatorText(names[index]);
+        ImGui::Text("Sampling: %s", GetRequiredMaterialTextureColorSpace(slot) ==
+            TextureColorSpace::SRGB ? "sRGB" : "Linear");
         if (snapshot.isInstance)
         {
             const auto mode = snapshot.textureModes[index];
@@ -307,15 +346,19 @@ void MaterialEditorPanel::Draw(
 
         ImGui::SameLine();
         ImGui::BeginGroup();
-        const std::string displayName =
-            TextureDisplayName(snapshot.textureSources[index]);
+        const auto& recipe = snapshot.textureRecipes[index];
+        const std::string displayName = recipe && recipe->kind == AssetImport::TextureSourceKind::Orm
+            ? "Generated ORM" : TextureDisplayName(snapshot.textureSources[index]);
         ImGui::TextWrapped("%s", displayName.c_str());
-        if (!snapshot.textureSources[index].empty() &&
+        if ((!recipe || recipe->kind != AssetImport::TextureSourceKind::Orm) &&
+            !snapshot.textureSources[index].empty() &&
             ImGui::IsItemHovered())
         {
             ImGui::SetTooltip("%s", snapshot.textureSources[index].c_str());
         }
         ImGui::EndGroup();
+        if (recipe)
+            DrawTextureReconstruction(*recipe);
 
         const float actionsWidth = ImGui::GetContentRegionAvail().x;
         if (ImGui::Button("Select..."))

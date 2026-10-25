@@ -76,11 +76,21 @@ bool CaptureSceneDocument(SceneState& scene,const Renderer& renderer,const Scene
                 t.mode=snapshot.isInstance?snapshot.textureModes[i]:TextureOverrideMode::Inherit;
                 if (snapshot.hasTextures[i]&&(!snapshot.isInstance||t.mode==TextureOverrideMode::Replace))
                 {
-                    Require(!snapshot.textureFiles[i].empty(),"Texture has no reload source: "+snapshot.name+
-                        " (generated textures are not supported by scene files).");
-                    Require(std::filesystem::is_regular_file(snapshot.textureFiles[i]),"Missing texture source: "+snapshot.textureFiles[i].u8string());
-                    t.source=MakeSceneAssetPath(snapshot.textureFiles[i],roots);
-                    t.embeddedId=snapshot.embeddedTextureIds[i];
+                    AssetImport::TextureSource source;
+                    if (snapshot.textureRecipes[i]) source=*snapshot.textureRecipes[i];
+                    else
+                    {
+                        Require(!snapshot.textureFiles[i].empty(),"Texture has no reload source: "+snapshot.name+
+                            " (generated textures need a supported reconstruction recipe).");
+                        source.image={snapshot.textureFiles[i],snapshot.embeddedTextureIds[i]};
+                    }
+                    const auto check=[](const AssetImport::TextureSourceImage& image) {
+                        Require(std::filesystem::is_regular_file(image.path),"Missing texture source: "+image.path.u8string());
+                    };
+                    if (source.kind==AssetImport::TextureSourceKind::Orm)
+                        for (const auto& input:source.ormInputs) { if (input) check(input->image); }
+                    else check(source.image);
+                    const auto mode=t.mode; t=MakeSceneTextureRecord(source,roots); t.mode=mode;
                 }
             }
             d.materials.push_back(std::move(m));
@@ -175,24 +185,23 @@ bool ReplaceSceneFromDocument(SceneState& active,Renderer& renderer,const SceneA
         };
         auto texture=[&](const SceneTextureRecord& record,MaterialTextureSlot slot)
         {
-            const auto file=ResolveSceneAssetPath(*record.source,roots);
+            const auto source=ResolveSceneTextureSource(record,roots);
             AssetImport::ImageData image;
-            if (record.embeddedId!=0)
+            std::string diagnostic;
+            const auto load=[&](const AssetImport::TextureSourceImage& input,AssetImport::ImageData& output,std::string& loadError)
             {
-                const auto& data=import(file);
-                const auto* embedded=AssetImport::FindEmbeddedTexture(data,record.embeddedId);
-                Require(embedded!=nullptr,"Embedded FBX texture identity is missing: "+file.u8string());
-                image=embedded->image;
-            }
-            else
-            {
-                std::string diagnostic;
-                const bool loaded=AssetImport::ImageLoader::LoadFromFile(file,image,diagnostic);
-                Require(loaded,"Cannot load texture '"+file.u8string()+"': "+diagnostic);
-            }
+                if (input.embeddedId==0) return AssetImport::ImageLoader::LoadFromFile(input.path,output,loadError);
+                const auto& data=import(input.path);
+                // Stable identity resolves the raw embedded original, never a prepared normal/ORM.
+                const auto* embedded=AssetImport::FindEmbeddedTexture(data,input.embeddedId);
+                if (!embedded) { loadError="Embedded FBX texture identity is missing: "+input.path.u8string(); return false; }
+                output=embedded->image; return true;
+            };
+            const bool rebuilt=AssetImport::BuildTextureSourceImage(source,load,image,diagnostic);
+            Require(rebuilt,"Cannot reconstruct texture: "+diagnostic);
             auto result=Texture2D::CreateRGBA8(renderer.Device(),image.width,image.height,image.pixels,GetRequiredMaterialTextureColorSpace(slot));
-            Require(static_cast<bool>(result),"GPU texture creation failed: "+file.u8string());
-            result->SetSource(file,record.embeddedId); return result;
+            Require(static_cast<bool>(result),"GPU texture creation failed during scene reconstruction.");
+            result->SetReconstructionSource(source); return result;
         };
         // Parents first, independent of material-table order.
         for (int instance=0;instance<=1;++instance)
@@ -203,10 +212,10 @@ bool ReplaceSceneFromDocument(SceneState& active,Renderer& renderer,const SceneA
                 if (!m.parent)
                 {
                     Material material; material.SetName(m.name); material.GetProperties()=m.properties; material.SetBlendMode(m.blend);
-                    for (size_t i=0;i<MaterialTextureSlotCount;++i) if (m.textures[i].source)
+                    for (size_t i=0;i<MaterialTextureSlotCount;++i) if (m.textures[i].source||m.textures[i].recipe)
                     {
                         const auto slot=static_cast<MaterialTextureSlot>(i);
-                        Require(material.SetTexture(slot,texture(m.textures[i],slot),m.textures[i].source->path),"Cannot bind base texture.");
+                        Require(material.SetTexture(slot,texture(m.textures[i],slot),m.textures[i].source?m.textures[i].source->path:"ORM"),"Cannot bind base texture.");
                     }
                     handle=renderer.CreateMaterial(std::move(material));
                 }
@@ -222,7 +231,7 @@ bool ReplaceSceneFromDocument(SceneState& active,Renderer& renderer,const SceneA
                         const auto slot=static_cast<MaterialTextureSlot>(i); const auto& t=m.textures[i];
                         if (t.mode==TextureOverrideMode::Disabled) Require(renderer.ClearMaterialTexture(handle,slot),"Cannot disable instance texture.");
                         if (t.mode==TextureOverrideMode::Replace)
-                            Require(renderer.UpdateMaterialTexture(handle,slot,texture(t,slot),t.source->path),"Cannot replace instance texture.");
+                            Require(renderer.UpdateMaterialTexture(handle,slot,texture(t,slot),t.source?t.source->path:"ORM"),"Cannot replace instance texture.");
                     }
                 }
             }

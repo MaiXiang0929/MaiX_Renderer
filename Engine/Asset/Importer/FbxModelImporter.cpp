@@ -193,7 +193,7 @@ std::filesystem::path ResolveTexturePath(
         {
             std::error_code error;
             if (std::filesystem::is_regular_file(attempt, error))
-                return attempt.lexically_normal();
+                return std::filesystem::absolute(attempt).lexically_normal();
         }
 
         const std::string wanted = Lowercase(supplied.filename().u8string());
@@ -229,15 +229,45 @@ std::filesystem::path ResolveTexturePath(
     return {};
 }
 
-const ufbx_texture* ResolveFileTexture(const ufbx_texture* texture)
+const ufbx_texture* SupportedTexture(ImportedModelData& model,const ufbx_scene& scene,
+    const ufbx_material& material,const ufbx_material_map& map,const char* input)
 {
-    if (texture == nullptr)
-        return nullptr;
-    if (texture->type == UFBX_TEXTURE_FILE)
-        return texture;
-    return texture->file_textures.count > 0
-        ? texture->file_textures.data[0]
-        : nullptr;
+    const ufbx_texture* texture=map.texture;
+    if(!texture) return nullptr;
+    std::string reason;
+    if(!map.texture_enabled || map.feature_disabled) reason="the material disables this texture input";
+    else if(texture->type!=UFBX_TEXTURE_FILE || texture->shader || texture->layers.count)
+        reason="layered/procedural/shader texture graphs are unsupported";
+    else if(texture->has_uv_transform) reason="nonidentity texture UV transforms are unsupported";
+    else if(texture->wrap_u!=UFBX_WRAP_REPEAT || texture->wrap_v!=UFBX_WRAP_REPEAT)
+        reason="texture wrap modes other than repeat are unsupported";
+    else
+    {
+        // ufbx exposes one mapped texture; inspect original connections so a
+        // duplicate property connection cannot be silently reduced to the first.
+        for(const ufbx_connection& selected:material.element.connections_dst)
+        {
+            if(selected.src!=&texture->element) continue;
+            unsigned count=0;
+            for(const ufbx_connection& connection:material.element.connections_dst)
+                if(connection.src->type==UFBX_ELEMENT_TEXTURE &&
+                    ToString(connection.dst_prop)==ToString(selected.dst_prop)) ++count;
+            if(count>1) { reason="multiple textures connected to one property are unsupported"; break; }
+        }
+        for(const ufbx_node* node:scene.nodes)
+        {
+            if(!reason.empty()) break;
+            if(!node->mesh || std::find(node->materials.begin(),node->materials.end(),&material)==node->materials.end()) continue;
+            const auto& uvSets=node->mesh->uv_sets;
+            if(uvSets.count!=1 || !node->mesh->vertex_uv.exists)
+                reason="materials require exactly one usable mesh UV set";
+            else if(texture->uv_set.length && ToString(texture->uv_set)!=ToString(uvSets.data[0].name))
+                reason="the texture selects a different mesh UV set";
+        }
+    }
+    if(reason.empty()) return texture;
+    model.warnings.push_back("Material '"+ToString(material.name)+"' "+input+" texture ignored: "+reason+".");
+    return nullptr;
 }
 
 std::uint32_t ImportTexture(
@@ -245,7 +275,7 @@ std::uint32_t ImportTexture(
     const ufbx_texture* texture,
     std::unordered_map<const void*, std::uint32_t>& imported)
 {
-    const ufbx_texture* fileTexture = ResolveFileTexture(texture);
+    const ufbx_texture* fileTexture = texture;
     if (fileTexture == nullptr)
         return InvalidImportedTextureIndex;
     const void* textureIdentity = fileTexture->video != nullptr
@@ -313,11 +343,85 @@ std::uint32_t ImportTexture(
         }
     }
 
+    TextureSource source;
+    source.image.path=result.embedded ? model.sourcePath : result.sourcePath;
+    source.image.embeddedId=result.embedded ? result.sourceId : 0;
+    result.reconstruction=std::move(source);
     const std::uint32_t index =
         static_cast<std::uint32_t>(model.textures.size());
     model.textures.push_back(std::move(result));
     imported.emplace(textureIdentity, index);
     return index;
+}
+
+std::uint32_t AppendDerivedTexture(ImportedModelData& model,const TextureSource& source,const std::string& name)
+{
+    ImportedTextureData derived;
+    derived.name=name;
+    std::string error;
+    const auto loader=[&](const TextureSourceImage& input,ImageData& image,std::string& loadError)
+    {
+        for(const auto& raw:model.textures)
+            if(raw.reconstruction && raw.reconstruction->kind==TextureSourceKind::Image &&
+                raw.reconstruction->image.path==input.path && raw.reconstruction->image.embeddedId==input.embeddedId)
+            { image=raw.image; return true; }
+        loadError="Raw imported texture is unavailable."; return false;
+    };
+    if(!BuildTextureSourceImage(source,loader,derived.image,error))
+    { model.warnings.push_back("Derived texture '"+name+"' ignored: "+error); return InvalidImportedTextureIndex; }
+    derived.reconstruction=source;
+    const auto index=static_cast<std::uint32_t>(model.textures.size());
+    model.textures.push_back(std::move(derived));
+    return index;
+}
+
+void ImportPbrTextures(ImportedModelData& model,const ufbx_scene& scene,const ufbx_material& material,
+    const FbxImportOptions& options,ImportedMaterialData& result,std::unordered_map<const void*,std::uint32_t>& imported)
+{
+    const auto& normal=material.pbr.normal_map.texture ? material.pbr.normal_map : material.fbx.normal_map;
+    const auto normalIndex=ImportTexture(model,SupportedTexture(model,scene,material,normal,"normal"),imported);
+    if(normalIndex!=InvalidImportedTextureIndex)
+    {
+        TextureSource source; source.kind=TextureSourceKind::Normal;
+        source.image=model.textures[normalIndex].reconstruction->image; source.flipGreen=options.flipNormalGreen;
+        result.normalTexture=AppendDerivedTexture(model,source,result.name+":Normal");
+    }
+    if(material.fbx.bump.texture)
+        model.warnings.push_back("Material '"+result.name+"' bump texture is unsupported; no height-to-normal conversion is performed.");
+    const auto& glossiness = material.pbr.glossiness;
+    if (glossiness.texture && glossiness.texture_enabled && !glossiness.feature_disabled)
+        model.warnings.push_back("Material '" + result.name + "' glossiness texture is unsupported; no glossiness-to-roughness conversion is performed.");
+    const std::array<const ufbx_material_map*,3> maps={&material.pbr.ambient_occlusion,&material.pbr.roughness,&material.pbr.metalness};
+    const std::array<const char*,3> names={"ambient occlusion","roughness","metallic"};
+    TextureSource packed; packed.kind=TextureSourceKind::Orm;
+    std::array<bool,3> accepted{};
+    for(unsigned channel=0;channel<3;++channel)
+    {
+        const auto& map=*maps[channel];
+        const auto index=ImportTexture(model,SupportedTexture(model,scene,material,map,names[channel]),imported);
+        if(index==InvalidImportedTextureIndex) continue;
+        const auto& raw=model.textures[index];
+        bool grayscale=true;
+        for(std::size_t i=0;i<raw.image.pixels.size();i+=4)
+            if(raw.image.pixels[i]!=raw.image.pixels[i+1] || raw.image.pixels[i]!=raw.image.pixels[i+2]) { grayscale=false; break; }
+        if(!grayscale)
+        { model.warnings.push_back("Material '"+result.name+"' "+names[channel]+" texture ignored: colored scalar image has ambiguous channel semantics."); continue; }
+        packed.ormInputs[channel]=TextureChannelInput{raw.reconstruction->image,0};
+        packed.width=std::max(packed.width,raw.image.width); packed.height=std::max(packed.height,raw.image.height);
+        accepted[channel]=true;
+    }
+    if(packed.width && packed.height)
+    {
+        result.ormTexture=AppendDerivedTexture(model,packed,result.name+":ORM");
+        // A connected map without an authored factor is multiplied by one, not
+        // the no-map metallic zero or roughness fallback. Explicit zero remains zero.
+        if(result.ormTexture!=InvalidImportedTextureIndex)
+        {
+            if(accepted[0] && !maps[0]->has_value) result.ambientOcclusion=1.0f;
+            if(accepted[1] && !maps[1]->has_value) result.roughness=1.0f;
+            if(accepted[2] && !maps[2]->has_value) result.metallic=1.0f;
+        }
+    }
 }
 
 void GenerateFallbackTangents(std::vector<Vertex>& vertices)
@@ -449,8 +553,7 @@ bool BuildMeshPart(
                     &mesh.vertex_uv, meshIndex);
                 vertex.TexCoord = {
                     static_cast<float>(uv.x),
-                    flipUv ? 1.0f - static_cast<float>(uv.y)
-                           : static_cast<float>(uv.y)
+                    static_cast<float>(uv.y)
                 };
             }
             flatVertices.push_back(vertex);
@@ -462,6 +565,11 @@ bool BuildMeshPart(
     // Runtime skinning is intentionally out of scope. Rebuild tangents from
     // the baked static pose so normal mapping follows the deformed geometry.
     GenerateFallbackTangents(flatVertices);
+    // V is flipped only for top-down image addressing. Build the baked-pose
+    // tangent frame from authored UVs so a +Y normal map keeps its authored B.
+    if (flipUv && mesh.vertex_uv.exists)
+        for (auto& vertex : flatVertices)
+            vertex.TexCoord.y = 1.0f - vertex.TexCoord.y;
 
     result.indices.resize(flatVertices.size());
     ufbx_vertex_stream stream{};
@@ -584,7 +692,9 @@ ModelImportResult FbxModelImporter::Import(
     const FbxImportOptions& options)
 {
     ModelImportResult result;
-    result.model.sourcePath = path;
+    std::error_code pathError;
+    result.model.sourcePath = std::filesystem::absolute(path,pathError).lexically_normal();
+    if(pathError) { result.error="Unable to resolve model path: "+path.u8string(); return result; }
     result.model.name = path.stem().u8string();
 
     std::vector<std::uint8_t> fileBytes;
@@ -669,21 +779,25 @@ ModelImportResult FbxModelImporter::Import(
         if (material->pbr.roughness.has_value)
             importedMaterial.roughness = std::clamp(
                 static_cast<float>(material->pbr.roughness.value_real),
-                0.045f, 1.0f);
+                0.0f, 1.0f);
         if (material->pbr.metalness.has_value)
             importedMaterial.metallic = std::clamp(
                 static_cast<float>(material->pbr.metalness.value_real),
+                0.0f, 1.0f);
+        if (material->pbr.ambient_occlusion.has_value)
+            importedMaterial.ambientOcclusion = std::clamp(
+                static_cast<float>(material->pbr.ambient_occlusion.value_real),
                 0.0f, 1.0f);
         if (material->pbr.opacity.has_value)
             importedMaterial.opacity = std::clamp(
                 static_cast<float>(material->pbr.opacity.value_real),
                 0.0f, 1.0f);
 
-        const ufbx_texture* baseTexture = baseColor.texture != nullptr
-            ? baseColor.texture
-            : material->fbx.diffuse_color.texture;
+        const auto& baseMap=baseColor.texture ? baseColor : material->fbx.diffuse_color;
+        const ufbx_texture* baseTexture=SupportedTexture(result.model,*scene,*material,baseMap,"base color");
         importedMaterial.baseColorTexture = ImportTexture(
             result.model, baseTexture, textureIndices);
+        ImportPbrTextures(result.model,*scene,*material,options,importedMaterial,textureIndices);
 
         const std::uint32_t materialIndex =
             static_cast<std::uint32_t>(result.model.materials.size());

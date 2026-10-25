@@ -47,6 +47,7 @@ private:
     const char* GetStatusLabel() const;
 
     Status m_Status = Status::Idle;
+    bool m_FlipNormalGreen = false;
     bool m_ShowWindow = false;
     std::filesystem::path m_SourcePath;
     std::future<AssetImport::ModelImportResult> m_ImportFuture;

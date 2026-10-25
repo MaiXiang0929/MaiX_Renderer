@@ -16,6 +16,7 @@
 #include "Engine/Rendering/RHI/RHIDevice.h"
 
 #include "Engine/Rendering/Renderer/Resources/TextureTypes.h"
+#include "Engine/Asset/Importer/TextureSource.h"
 
 class Texture2D
 {
@@ -40,8 +41,10 @@ public:
     bool IsValid() const { return !m_DeviceLifetime.expired() && m_TextureID != 0; }
     RHITextureHandle GetID() const { return IsValid() ? m_TextureID : RHITextureHandle{}; }
     TextureColorSpace GetColorSpace() const { return m_ColorSpace; }
-    void SetSource(std::filesystem::path path, std::uint64_t embeddedId = 0)
-    { m_SourcePath = std::move(path); m_EmbeddedId = embeddedId; }
+    void SetSource(std::filesystem::path path, std::uint64_t embeddedId = 0);
+    void SetReconstructionSource(const AssetImport::TextureSource& source);
+    const std::optional<AssetImport::TextureSource>& ReconstructionSource() const
+    { return m_ReconstructionSource; }
     const std::filesystem::path& SourcePath() const { return m_SourcePath; }
     std::uint64_t EmbeddedId() const { return m_EmbeddedId; }
 
@@ -58,4 +61,5 @@ private:
     TextureColorSpace m_ColorSpace = TextureColorSpace::Linear;
     std::filesystem::path m_SourcePath;
     std::uint64_t m_EmbeddedId = 0;
+    std::optional<AssetImport::TextureSource> m_ReconstructionSource;
 };

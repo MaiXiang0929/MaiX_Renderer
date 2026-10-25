@@ -11,6 +11,7 @@
 #include "cyMatrix.h"
 #include "cyVector.h"
 #include "Engine/Asset/Importer/ImageData.h"
+#include "Engine/Asset/Importer/TextureSource.h"
 #include "Engine/Asset/Geometry/Vertex.h"
 
 namespace AssetImport
@@ -25,6 +26,7 @@ struct ImportedTextureData
     ImageData image;
     bool embedded = false;
     std::uint64_t sourceId = 0; // Stable ufbx element identity + 1, independent of decoded array order.
+    std::optional<TextureSource> reconstruction;
 };
 
 struct ImportedMaterialData
@@ -33,8 +35,11 @@ struct ImportedMaterialData
     cy::Vec3f baseColor{ 1.0f, 1.0f, 1.0f };
     float metallic = 0.0f;
     float roughness = 0.5f;
+    float ambientOcclusion = 1.0f;
     float opacity = 1.0f;
     std::uint32_t baseColorTexture = InvalidImportedTextureIndex;
+    std::uint32_t normalTexture = InvalidImportedTextureIndex;
+    std::uint32_t ormTexture = InvalidImportedTextureIndex;
 };
 
 struct ImportedMeshData
