@@ -782,6 +782,7 @@ bool EditorApp::CommitImportedModel(
     const auto fail = [this, &pendingModel, &error](std::string message)
     {
         error = std::move(message);
+        if(pendingModel.actor.IsValid()) m_Engine.Scene().world.Destroy(pendingModel.actor);
         DestroyModelResources(pendingModel);
         return false;
     };
@@ -952,6 +953,11 @@ bool EditorApp::CommitImportedModel(
         pendingModel.name = MakeUniqueModelName(m_Engine.Scene().models, model.name);
         if (pendingModel.name.empty())
             return fail("Scene model name space exhausted.");
+        if(m_Engine.Content().Ready()) {
+            if(!m_Engine.Content().TrackMaterials(m_Engine.Scene(),*m_Renderer,pendingModel.materials,m_Engine.Scene().world.ContentRegion(),error)) return fail(error);
+            pendingModel.actor=m_Engine.Scene().world.Create(pendingModel.name,pendingModel.transform,ActorKind::Model,pendingModel.id.value);
+            if(!pendingModel.actor.IsValid()) return fail("Cannot create imported content actor.");
+        }
         m_Engine.Scene().models.push_back(std::move(pendingModel));
     }
     catch (const std::exception& exception)
@@ -1208,6 +1214,12 @@ void EditorApp::ApplyMaterialEditRequest(const MaterialEditRequest& request)
             // 所有可能分配的跟踪容器先准备，避免成功替换后无法记录新资源。
             model->materials.reserve(model->materials.size() + 1);
             created = m_Renderer->CreateMaterialInstance(request.material);
+            if(m_Engine.Content().Ready()&&created.IsValid()) {
+                const auto* actor=m_Engine.Scene().world.Find(model->actor); std::string error;
+                if(!actor||!m_Engine.Content().TrackMaterials(m_Engine.Scene(),*m_Renderer,{created},actor->contentRegion,error)) {
+                    m_Renderer->DestroyMaterial(created); return;
+                }
+            }
             replacement = created;
         }
         else if (!snapshot.isInstance) return;
@@ -1324,6 +1336,7 @@ void EditorApp::Render() {
     m_Workspace->BeginFrame(*m_AssetImportPanel, nativeWindowHandle, m_Appearance);
     HandleHistoryShortcuts();
     HandleSceneFileActions(nativeWindowHandle);
+    HandleWorldContentAction();
     const EditorViewportRegion viewport = m_Workspace->BeginViewport([&] {
         m_ViewportController->DrawToolbar(m_EditorSelection, m_Engine.Scene().lights, m_SceneCameraView);
     });
@@ -1368,7 +1381,11 @@ void EditorApp::Render() {
     if (m_Workspace->ShowStatistics())
         m_StatisticsPanel->Draw(*m_Renderer);
     const auto removedActor=m_SceneHierarchyPanel->Draw(m_EditorSelection,m_Engine.Scene(),*m_Renderer,
-        &m_History,[this](const char* reason) { InvalidateEditorHistory(reason); });
+        &m_History,[this](const char* reason) { InvalidateEditorHistory(reason); },&m_Engine.Content(),[this] {
+            const SceneAssetRoots roots{m_Project->AssetsRoot(),PlatformPaths::ExecutableDirectory()/"assets",std::filesystem::path(MAIX_ENGINE_SOURCE_DIR)/"assets"};
+            auto action=m_WorldPanel.Draw(m_Engine.Content(),m_Engine.Scene(),*m_Renderer,roots,m_EditorSelection);
+            if(action.kind!=WorldContentActionKind::None) m_WorldAction=std::move(action);
+        });
     if (removedActor.IsValid()) {
         std::string error;
         if (!m_History.Delete(removedActor,error)) m_Workspace->AddLog("[Delete] "+error);

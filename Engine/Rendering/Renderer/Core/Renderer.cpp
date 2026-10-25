@@ -317,6 +317,36 @@ bool Renderer::RemovePrimitive(PrimitiveId id)
 {
     return m_RenderScene.RemovePrimitive(id);
 }
+PrimitiveId Renderer::StagePrimitive(MeshHandle mesh,MaterialHandle material,const cy::Matrix4f& transform,
+    PrimitiveBounds bounds,bool shadow,std::vector<PrimitiveSceneProxy>& result)
+{
+    const auto* entry=m_MaterialResources.Get(material);
+    if (!mesh.IsValid()||mesh.id>=m_MeshResources.size()||!m_MeshResources[mesh.id]||!entry) return InvalidPrimitiveId;
+    PrimitiveSceneProxy proxy;
+    proxy.id=m_RenderScene.ReservePrimitiveId();
+    if (proxy.id==InvalidPrimitiveId) return InvalidPrimitiveId;
+    proxy.mesh=m_MeshResources[mesh.id].get(); proxy.material=&entry->effective;
+    proxy.materialId=material.id; proxy.meshId=mesh.id; proxy.localToWorld=transform;
+    proxy.localBounds=bounds; proxy.castsShadow=shadow; proxy.blendMode=entry->effective.GetBlendMode();
+    result.push_back(proxy); return proxy.id;
+}
+LightId Renderer::StageLight(LightSceneProxy light,std::vector<LightSceneProxy>& result)
+{
+    light.id=m_RenderScene.ReserveLightId();
+    if (light.id!=InvalidLightId) result.push_back(light);
+    return light.id;
+}
+bool Renderer::PrepareSceneUpdate(const std::vector<PrimitiveSceneProxy>& addedPrimitives,
+    const std::vector<LightSceneProxy>& addedLights,const std::vector<PrimitiveId>& removedPrimitives,
+    const std::vector<LightId>& removedLights,RenderScene& result,std::string& error) const
+{
+    for (const auto& p:addedPrimitives) {
+        const auto* entry=m_MaterialResources.Get({p.materialId});
+        if (p.meshId>=m_MeshResources.size()||!m_MeshResources[p.meshId]||p.mesh!=m_MeshResources[p.meshId].get()||
+            !entry||p.material!=&entry->effective) { error="Staged primitive resources are stale."; return false; }
+    }
+    return m_RenderScene.PrepareUpdate(addedPrimitives,addedLights,removedPrimitives,removedLights,result,error);
+}
 
 Renderer::SceneResourceSnapshot Renderer::GetSceneResources() const
 {

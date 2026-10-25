@@ -50,6 +50,8 @@ add_library(MaiXRuntime STATIC Engine/Runtime/Component/Camera.cpp
     Engine/Runtime/Scene/SceneModel.cpp Engine/Runtime/Scene/SceneLight.cpp Engine/Runtime/Scene/World.cpp
     Engine/Runtime/Engine/ApplicationOptions.cpp Engine/Runtime/Scene/SceneDocument.cpp
     Engine/Runtime/Scene/SceneDocumentFiles.cpp)
+target_sources(MaiXRuntime PRIVATE Engine/Runtime/Scene/ContentIdentity.cpp
+    Engine/Runtime/Scene/WorldContentDocument.cpp)
 target_link_libraries(MaiXRuntime PUBLIC MaiXCore MaiXAsset)
 target_compile_options(MaiXRuntime PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
 
@@ -103,6 +105,8 @@ target_link_libraries(MaiXRendering PUBLIC glfw3.lib)
 target_compile_options(MaiXRendering PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
 
 add_library(MaiXEngine STATIC Engine/Runtime/Engine/EngineSession.cpp
+    Engine/Runtime/Engine/SceneContent.cpp
+    Engine/Runtime/Engine/WorldContentSession.cpp
     Engine/Runtime/Engine/ScenePersistence.cpp
     Engine/Runtime/Engine/SceneSubtree.cpp
     Engine/Runtime/Engine/RenderSceneBridge.cpp Engine/Runtime/Engine/SceneFrameBuilder.cpp)
@@ -125,6 +129,7 @@ add_executable(MaiX_Renderer
     Editor/EditorApp/EditorAppScene.cpp
     Editor/EditorApp/EditorAppHistory.cpp
     Editor/EditorApp/EditorAppProject.cpp
+    Editor/EditorApp/EditorAppWorld.cpp
     Editor/EditorApp/Main.cpp
     Editor/Inspector/InspectorPanel.cpp
     Editor/Inspector/EnvironmentPanel.cpp
@@ -141,6 +146,7 @@ add_executable(MaiX_Renderer
     Editor/Session/EditorWidgets.cpp
     Editor/Session/EditorWorkspace.cpp
     Editor/Session/SceneFileDialogs.cpp
+    Editor/Session/WorldContentPanel.cpp
     Editor/Viewport/EditorViewportController.cpp
     Editor/Viewport/ViewportPicking.cpp
 )

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "Engine/Rendering/Renderer/Scene/RenderScene.h"
+#include <unordered_set>
 
 #include <algorithm>
 #include <tuple>
@@ -100,10 +101,36 @@ const PrimitiveSceneProxy* RenderScene::FindPrimitive(PrimitiveId id) const
     const auto found=std::find_if(m_Primitives.begin(),m_Primitives.end(),[&](const auto& p){return p.id==id;});
     return found==m_Primitives.end()?nullptr:&*found;
 }
+bool RenderScene::PrepareUpdate(const std::vector<PrimitiveSceneProxy>& addedPrimitives,
+    const std::vector<LightSceneProxy>& addedLights,const std::vector<PrimitiveId>& removedPrimitives,
+    const std::vector<LightId>& removedLights,RenderScene& result,std::string& error) const
+{
+    if (&result==this) { error="Render scene candidate aliases its input."; return false; }
+    RenderScene candidate=*this;
+    std::unordered_set<PrimitiveId> removedP;
+    std::unordered_set<LightId> removedL;
+    for (auto id:removedPrimitives) if (!removedP.insert(id).second||!candidate.RemovePrimitive(id)) { error="Missing/duplicate removal primitive."; return false; }
+    for (auto id:removedLights) if (!removedL.insert(id).second||!candidate.RemoveLight(id)) { error="Missing/duplicate removal light."; return false; }
+    std::unordered_set<PrimitiveId> primitives;
+    std::unordered_set<LightId> lights;
+    for (const auto& p:candidate.m_Primitives) primitives.insert(p.id);
+    for (const auto& l:candidate.m_Lights) lights.insert(l.id);
+    for (const auto& p:addedPrimitives) {
+        if (p.id==InvalidPrimitiveId||!p.mesh||!p.material||!primitives.insert(p.id).second) { error="Invalid/duplicate staged primitive."; return false; }
+        candidate.m_Primitives.push_back(p);
+    }
+    for (const auto& l:addedLights) {
+        if (l.id==InvalidLightId||!lights.insert(l.id).second) { error="Invalid/duplicate staged light."; return false; }
+        candidate.m_Lights.push_back(l);
+    }
+    result=std::move(candidate); error.clear(); return true;
+}
 bool RenderScene::CaptureBindings(const std::vector<PrimitiveId>& primitives, const std::vector<LightId>& lights,
                                   RetainedBindings& result, std::string& error) const
 {
     RetainedBindings captured;
+    for(const auto& primitive:m_Primitives) captured.primitiveOrder.push_back(primitive.id);
+    for(const auto& light:m_Lights) captured.lightOrder.push_back(light.id);
     for (std::size_t i=0;i<m_Primitives.size();++i)
         if (std::find(primitives.begin(),primitives.end(),m_Primitives[i].id)!=primitives.end())
             captured.primitives.emplace_back(i,m_Primitives[i]);
@@ -118,14 +145,27 @@ bool RenderScene::SetBindingsActive(const RetainedBindings& bindings, bool activ
 {
     auto primitives=m_Primitives;
     auto lights=m_Lights;
-    auto change=[&](auto& items,const auto& entries) {
+    auto change=[&](auto& items,const auto& entries,const auto& order) {
         for (const auto& entry:entries)
         {
             const auto found=std::find_if(items.begin(),items.end(),[&](const auto& value) { return value.id==entry.second.id; });
             if (active)
             {
                 if (found!=items.end()) return false;
-                items.insert(items.begin()+std::min(entry.first,items.size()),entry.second);
+                auto position=items.end();
+                for(std::size_t i=entry.first+1;i<order.size();++i) {
+                    position=std::find_if(items.begin(),items.end(),[&](const auto& value) { return value.id==order[i]; });
+                    if(position!=items.end()) break;
+                }
+                if(position==items.end()) {
+                    bool anchored=false;
+                    for(std::size_t i=std::min(entry.first,order.size());i>0;--i) {
+                        const auto before=std::find_if(items.begin(),items.end(),[&](const auto& value) { return value.id==order[i-1]; });
+                        if(before!=items.end()) { position=before+1; anchored=true; break; }
+                    }
+                    if(!anchored) position=items.begin()+std::min(entry.first,items.size());
+                }
+                items.insert(position,entry.second);
             }
             else
             {
@@ -135,7 +175,7 @@ bool RenderScene::SetBindingsActive(const RetainedBindings& bindings, bool activ
         }
         return true;
     };
-    if (!change(primitives,bindings.primitives) || !change(lights,bindings.lights))
+    if (!change(primitives,bindings.primitives,bindings.primitiveOrder) || !change(lights,bindings.lights,bindings.lightOrder))
     { error="Retained scene bindings conflict with the active scene."; return false; }
     m_Primitives.swap(primitives); m_Lights.swap(lights); error.clear(); return true;
 }
@@ -153,7 +193,8 @@ std::vector<LightId> RenderScene::LightIds() const
 }
 PrimitiveId RenderScene::AddPrimitive(PrimitiveSceneProxy proxy)
 {
-    proxy.id = m_NextPrimitiveId++;
+    proxy.id = ReservePrimitiveId();
+    if (proxy.id==InvalidPrimitiveId) return InvalidPrimitiveId;
     m_Primitives.push_back(proxy);
     return proxy.id;
 }
@@ -248,7 +289,8 @@ void RenderScene::UpdateMaterialBlendMode(
 
 LightId RenderScene::AddLight(LightSceneProxy light)
 {
-    light.id = m_NextLightId++;
+    light.id = ReserveLightId();
+    if (light.id==InvalidLightId) return InvalidLightId;
     m_Lights.push_back(light);
     return light.id;
 }

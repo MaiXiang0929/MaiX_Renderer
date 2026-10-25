@@ -25,6 +25,7 @@
 #include "Editor/Session/EditorHistory.h"
 #include "Editor/Session/EditorMaterialSelection.h"
 #include "Editor/Session/EditorTheme.h"
+#include "Editor/Session/WorldContentPanel.h"
 #include "Engine/Rendering/Renderer/Resources/RenderResourceHandle.h"
 
 struct GLFWwindow;
@@ -115,7 +116,7 @@ private:
     // IDs survive model-vector reallocation; resolved once when the viewport is valid.
     EditorSelection m_PendingFocusSelection;
     EditorMaterialSelection m_MaterialSelection;
-    enum class SceneFileAction { None, Open, Save, SaveAs, NewProject, OpenProject, InitializeProject };
+    enum class SceneFileAction { None, Open, Save, SaveAs, NewProject, OpenProject, InitializeProject,NewWorld,OpenWorld };
     SceneFileAction m_SceneFileAction = SceneFileAction::None;
     std::filesystem::path m_ScenePath, m_SceneProjectRoot;
     std::optional<std::filesystem::path> m_PendingOpenScene;
@@ -131,6 +132,8 @@ private:
     std::optional<std::filesystem::path> m_NewProjectParent,m_LegacyProjectRoot;
     bool m_RequestNewProjectDialog=false,m_RequestLegacyProjectDialog=false;
     char m_NewProjectName[129]="MyProject";
+    WorldContentPanel m_WorldPanel;
+    WorldContentAction m_WorldAction;
 
 private:
     /// @brief 初始化应用程序
@@ -174,6 +177,9 @@ private:
     bool OpenProjectFile(const std::filesystem::path& path);
     void ExecuteProjectAction(ProjectAction action);
     void DrawProjectCreationDialogs(void* owner);
+    bool OpenWorldFile(const std::filesystem::path& path);
+    void CreateWorldFile(void* owner);
+    void HandleWorldContentAction();
     
 	/// @brief 关闭应用程序
     void Shutdown();

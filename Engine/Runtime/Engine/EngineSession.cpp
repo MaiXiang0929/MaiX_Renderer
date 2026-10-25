@@ -57,6 +57,7 @@ void EngineSession::Shutdown()
     if (m_Renderer)
         DestroySceneResources(m_Scene, *m_Renderer);
     m_Scene = SceneState{};
+    m_Content.Reset();
     m_RegistrationFailed = false;
     m_Renderer.reset();
 }

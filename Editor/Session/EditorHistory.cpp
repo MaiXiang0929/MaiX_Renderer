@@ -15,6 +15,7 @@ bool EditorHistory::BoundTo(const World& world) const
 }
 void EditorHistory::Release(Action& action) noexcept
 {
+    if (action.pinned && m_Scene) { m_Scene->world.UnpinContentRegion(action.before.region); action.pinned=false; }
     if (action.subtree && m_Scene && m_Renderer && !m_RendererLifetime.expired())
         ReleaseSceneSubtree(*m_Scene,*m_Renderer,action.subtree);
     else action.subtree.reset();
@@ -37,13 +38,16 @@ bool EditorHistory::Delete(ActorId actor, std::string& error)
     Action action{EditorEditKind::Delete,Capture(*target),Capture(*target),"Delete "+target->name,{}};
     // Reserve before detaching: history publication must not allocate after scene publication.
     m_Actions.reserve(m_Actions.size()+1);
-    if (!DetachSceneSubtree(*m_Scene,*m_Renderer,actor,action.subtree,error)) return false;
+    if (!action.before.region.empty()) { m_Scene->world.PinContentRegion(action.before.region); action.pinned=true; }
+    try {
+        if (!DetachSceneSubtree(*m_Scene,*m_Renderer,actor,action.subtree,error)) { Release(action); return false; }
+    } catch (...) { Release(action); throw; }
     Record(std::move(action)); m_RestoredActor={}; return true;
 }
 
 EditorHistory::State EditorHistory::Capture(const Actor& actor)
 {
-    return {actor.id, actor.parent, actor.local, actor.name, actor.visible};
+    return {actor.id, actor.parent, actor.local, actor.name, actor.visible,actor.contentRegion};
 }
 bool EditorHistory::Equal(EditorEditKind kind, const State& a, const State& b)
 {
@@ -65,7 +69,9 @@ bool EditorHistory::Begin(World& world, ActorId id, EditorEditKind kind, const c
     const auto* actor = world.Find(id);
     if (!actor) return false;
     const auto state = Capture(*actor);
-    m_Pending = Action{kind,state,state,label};
+    Action action{kind,state,state,label};
+    if (BoundTo(world)&&!state.region.empty()) { world.PinContentRegion(state.region); action.pinned=true; }
+    m_Pending = std::move(action);
     return true;
 }
 void EditorHistory::Finish(World& world)
@@ -78,14 +84,32 @@ void EditorHistory::Finish(World& world)
         {
             Record(std::move(*m_Pending));
         }
+        else Release(*m_Pending);
     }
+    else Release(*m_Pending);
     m_Pending.reset();
 }
 void EditorHistory::Clear()
 {
+    if (m_Pending) Release(*m_Pending);
     m_Pending.reset();
     for (auto& action:m_Actions) Release(action);
     m_Actions.clear(); m_Cursor=0; m_RestoredActor={};
+}
+void EditorHistory::DiscardRegion(const std::string& region)
+{
+    if (m_Pending) {
+        if (m_Pending->before.region!=region) return;
+        Release(*m_Pending); m_Pending.reset();
+    }
+    std::vector<Action> kept; kept.reserve(m_Actions.size());
+    std::size_t cursor=0;
+    for (std::size_t i=0;i<m_Actions.size();++i) {
+        auto& action=m_Actions[i];
+        if (action.before.region==region) Release(action);
+        else { if (i<m_Cursor) ++cursor; kept.push_back(std::move(action)); }
+    }
+    m_Actions.swap(kept); m_Cursor=cursor; m_RestoredActor={};
 }
 bool EditorHistory::Replay(World& world, const Action& action, bool undo, std::string& error)
 {
@@ -129,7 +153,8 @@ bool EditorHistory::Redo(World& world, std::string& error)
         std::shared_ptr<SceneSubtreeArchive> refreshed;
         // Capture current untracked material edits, instead of restoring obsolete bindings later.
         if (!DetachSceneSubtree(*m_Scene,*m_Renderer,action.before.id,refreshed,error)) return false;
-        Release(action); action.subtree=std::move(refreshed);
+        // Refresh the resource archive without releasing this action's residency pin.
+        ReleaseSceneSubtree(*m_Scene,*m_Renderer,action.subtree); action.subtree=std::move(refreshed);
     }
     else if (!Replay(world,action,false,error)) return false;
     ++m_Cursor; return true;
@@ -138,14 +163,14 @@ bool EditorHistory::Rename(World& world, ActorId id, const std::string& name, st
 {
     Finish(world);
     if (!Begin(world,id,EditorEditKind::Name,"Rename") || !world.Rename(id,name))
-    { m_Pending.reset(); error="Name edit rejected."; return false; }
+    { if (m_Pending) Release(*m_Pending); m_Pending.reset(); error="Name edit rejected."; return false; }
     Finish(world); error.clear(); return true;
 }
 bool EditorHistory::SetVisible(World& world, ActorId id, bool visible, std::string& error)
 {
     Finish(world);
     if (!Begin(world,id,EditorEditKind::Visibility,"Visibility") || !world.SetVisible(id,visible))
-    { m_Pending.reset(); error="Visibility edit rejected."; return false; }
+    { if (m_Pending) Release(*m_Pending); m_Pending.reset(); error="Visibility edit rejected."; return false; }
     Finish(world); error.clear(); return true;
 }
 bool EditorHistory::Reparent(World& world, ActorId id, ActorId parent, std::string& error)
@@ -156,6 +181,6 @@ bool EditorHistory::Reparent(World& world, ActorId id, ActorId parent, std::stri
     if (current && current->parent == parent) { error.clear(); return true; }
     if (!Begin(world,id,EditorEditKind::ParentLocal,"Reparent"))
     { error="Object unavailable."; return false; }
-    if (!world.Reparent(id,parent,true,error)) { m_Pending.reset(); return false; }
+    if (!world.Reparent(id,parent,true,error)) { Release(*m_Pending); m_Pending.reset(); return false; }
     Finish(world); return true;
 }

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 #include "Engine/Core/Math/Transform.h"
+#include "Engine/Runtime/Scene/ContentIdentity.h"
+#include <map>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -36,6 +38,7 @@ struct Actor
     ActorKind kind = ActorKind::Empty;
     std::uint64_t componentId = 0;
     bool visible = true;
+    std::string contentGuid,contentRegion; // Empty in legacy standalone scenes; never runtime IDs.
 };
 
 // CPU scene identity and transform owner. Component payloads live in SceneState;
@@ -52,6 +55,7 @@ class World
     private:
         friend class World;
         std::uint64_t m_Owner = 0;
+        std::vector<ActorId> m_Order;
         ActorId m_Root;
         std::vector<Entry> m_Entries;
     };
@@ -61,7 +65,15 @@ class World
     World(World &&other) noexcept;
     World &operator=(World &&other) noexcept;
     ActorId Create(std::string name, const Transform &local = {}, ActorKind kind = ActorKind::Empty,
-                   std::uint64_t componentId = 0);
+                   std::uint64_t componentId = 0, std::string contentGuid = {});
+    bool SetContentRegion(const std::string& region, std::string& error);
+    const std::string& ContentRegion() const { return m_ContentRegion; }
+    bool PrepareAppend(const World& added, World& result, std::string& error) const;
+    bool PrepareRemove(const std::vector<ActorId>& removed, World& result, std::string& error) const;
+    bool PrepareContentIdentity(const std::string& region, World& result, std::string& error) const;
+    void PinContentRegion(const std::string& region);
+    void UnpinContentRegion(const std::string& region) noexcept;
+    std::size_t ContentRegionPins(const std::string& region) const;
     const Actor *Find(ActorId id) const;
     const std::vector<Actor> &Actors() const
     {
@@ -83,5 +95,7 @@ class World
   private:
     std::vector<Actor> m_Actors;
     std::uint64_t m_Identity = 0;
+    std::string m_ContentRegion;
+    std::map<std::string,std::size_t> m_ContentPins;
     bool Commit(std::vector<Actor> &candidate, std::string &error);
 };

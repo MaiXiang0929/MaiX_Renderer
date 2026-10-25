@@ -11,6 +11,8 @@ struct SceneSubtreeArchive
     World::SubtreeSnapshot world;
     std::vector<std::pair<std::size_t,SceneModel>> models;
     std::vector<std::pair<std::size_t,SceneLight>> lights;
+    std::vector<std::uint64_t> modelOrder;
+    std::vector<LightId> lightOrder;
     std::optional<SceneCamera> camera;
     std::vector<std::pair<std::size_t,MaterialHandle>> sceneMaterials;
     Renderer::SceneResourceSnapshot resources;
@@ -23,6 +25,23 @@ struct SceneSubtreeArchive
 };
 namespace
 {
+template<class T,class Id,class GetId> void InsertOrdered(std::vector<T>& values,T value,std::size_t index,const std::vector<Id>& order,GetId getId)
+{
+    auto position=values.end();
+    for(std::size_t i=index+1;i<order.size();++i) {
+        position=std::find_if(values.begin(),values.end(),[&](const auto& item) { return getId(item)==order[i]; });
+        if(position!=values.end()) break;
+    }
+    if(position==values.end()) {
+        bool anchored=false;
+        for(std::size_t i=std::min(index,order.size());i>0;--i) {
+            const auto before=std::find_if(values.begin(),values.end(),[&](const auto& item) { return getId(item)==order[i-1]; });
+            if(before!=values.end()) { position=before+1; anchored=true; break; }
+        }
+        if(!anchored) position=values.begin()+std::min(index,values.size());
+    }
+    values.insert(position,std::move(value));
+}
 template<class T> void Append(std::vector<T>& values,T handle)
 {
     if (std::none_of(values.begin(),values.end(),[&](T value){return value.id==handle.id;})) values.push_back(handle);
@@ -68,6 +87,9 @@ void ReleaseUnusedModelMaterial(SceneState& scene,Renderer& renderer,ModelId own
     // Active bookkeeping follows the successful binding change; GPU retention has a different lifetime.
     model->materials.erase(std::remove_if(model->materials.begin(),model->materials.end(),
         [&](auto value){return value.id==material.id;}),model->materials.end());
+    // Persistent material definitions can be referenced by unloaded region documents.
+    if (!scene.contentWorld.empty()&&std::any_of(scene.contentMaterials.begin(),scene.contentMaterials.end(),[&](const auto& m) {
+        return m.handle.id==material.id&&m.region==scene.contentWorld; })) return;
     if (!ModelsOwnMaterial(scene.models,renderer,material))
         scene.sceneMaterials.erase(std::remove_if(scene.sceneMaterials.begin(),scene.sceneMaterials.end(),
             [&](auto value){return value.id==material.id;}),scene.sceneMaterials.end());
@@ -81,6 +103,8 @@ bool DetachSceneSubtree(SceneState& scene,Renderer& renderer,ActorId root,
     {
         if (output) { error="Archive output must be empty."; return false; }
         archive=std::make_shared<SceneSubtreeArchive>();
+        for(const auto& model:scene.models) archive->modelOrder.push_back(model.id.value);
+        for(const auto& light:scene.lights) archive->lightOrder.push_back(light.proxy.id);
         if (!scene.world.CaptureSubtree(root,archive->world,error)) return false;
         auto contains=[&](ActorId id) {
             const auto& entries=archive->world.Entries();
@@ -136,8 +160,10 @@ bool DetachSceneSubtree(SceneState& scene,Renderer& renderer,ActorId root,
         for (std::size_t i=0;i<scene.sceneMaterials.size();++i)
         {
             const auto handle=scene.sceneMaterials[i];
+            const bool worldOwned=!scene.contentWorld.empty()&&std::any_of(scene.contentMaterials.begin(),scene.contentMaterials.end(),[&](const auto& m) {
+                return m.handle.id==handle.id&&m.region==scene.contentWorld; });
             const bool usedByDeleted=std::any_of(boundMaterials.begin(),boundMaterials.end(),[&](auto value){return DependsOn(renderer,value,handle);});
-            if (usedByDeleted && !ModelsOwnMaterial(models,renderer,handle)) archive->sceneMaterials.emplace_back(i,handle);
+            if (!worldOwned && usedByDeleted && !ModelsOwnMaterial(models,renderer,handle)) archive->sceneMaterials.emplace_back(i,handle);
         }
         sceneMaterials.erase(std::remove_if(sceneMaterials.begin(),sceneMaterials.end(),[&](auto handle){
             return std::any_of(archive->sceneMaterials.begin(),archive->sceneMaterials.end(),[&](const auto& entry){return entry.second.id==handle.id;});
@@ -177,14 +203,14 @@ bool RestoreSceneSubtree(SceneState& scene,Renderer& renderer,SceneSubtreeArchiv
             if (FindSceneModel(models,entry.second.id)) { error="Model identity conflicts."; return false; }
             auto model=entry.second; const auto* actor=world.Find(model.actor);
             model.name=actor->name; model.transform=actor->world; model.visible=world.IsVisible(actor->id);
-            models.insert(models.begin()+std::min(entry.first,models.size()),std::move(model));
+            InsertOrdered(models,std::move(model),entry.first,archive.modelOrder,[](const SceneModel& m) { return m.id.value; });
         }
         for (const auto& entry:archive.lights)
         {
             if (FindSceneLight(lights,entry.second.proxy.id)) { error="Light identity conflicts."; return false; }
             auto light=entry.second; const auto* actor=world.Find(light.actor);
             light.name=actor->name; light.transform=actor->world; light.proxy.visible=world.IsVisible(actor->id);
-            lights.insert(lights.begin()+std::min(entry.first,lights.size()),std::move(light));
+            InsertOrdered(lights,std::move(light),entry.first,archive.lightOrder,[](const SceneLight& l) { return l.proxy.id; });
         }
         if (archive.camera)
         {

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 #include "Engine/Runtime/Engine/SceneState.h"
+#include "Engine/Runtime/Engine/WorldContentSession.h"
 #include <memory>
 
 class Renderer;
@@ -25,8 +26,11 @@ public:
     Renderer* GetRenderer() const { return m_Renderer.get(); }
     SceneState& Scene() { return m_Scene; }
     const SceneState& Scene() const { return m_Scene; }
+    WorldContentSession& Content() { return m_Content; }
+    const WorldContentSession& Content() const { return m_Content; }
 private:
     SceneState m_Scene;
+    WorldContentSession m_Content;
     std::unique_ptr<Renderer> m_Renderer;
     bool m_RegistrationFailed = false;
 };

@@ -18,6 +18,10 @@ std::optional<std::filesystem::path> OpenSceneFile(NativeWindowHandle ownerWindo
     const std::filesystem::path& initialDirectory);
 std::optional<std::filesystem::path> SaveSceneFile(NativeWindowHandle ownerWindow,
     const std::filesystem::path& initialDirectory);
+std::optional<std::filesystem::path> OpenWorldFile(NativeWindowHandle ownerWindow,
+    const std::filesystem::path& initialDirectory);
+std::optional<std::filesystem::path> SaveWorldFile(NativeWindowHandle ownerWindow,
+    const std::filesystem::path& initialDirectory);
 std::optional<std::filesystem::path> OpenProjectFile(NativeWindowHandle ownerWindow,
     const std::filesystem::path& initialDirectory);
 std::optional<std::filesystem::path> OpenDirectory(

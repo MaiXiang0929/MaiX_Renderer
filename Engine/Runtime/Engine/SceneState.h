@@ -10,6 +10,11 @@
 
 // World owns identity/local transforms; typed component records below expose
 // derived world transforms to the existing render bridge. No UI/GPU ownership.
+struct SceneContentMaterial
+{
+    MaterialHandle handle;
+    std::string guid,region;
+};
 struct SceneState
 {
     PostProcessSettings postProcess;
@@ -21,6 +26,8 @@ struct SceneState
     std::vector<SceneLight> lights;
     // Scene-file material table includes unbound bases and parents of instances.
     std::vector<MaterialHandle> sceneMaterials;
+    std::string contentWorld;
+    std::vector<SceneContentMaterial> contentMaterials; // Identity/ownership ledger; no GPU ownership.
     SceneCamera camera;
     std::uint64_t nextModelId = 1;
     ModelId defaultModelId;

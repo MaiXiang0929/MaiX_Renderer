@@ -21,6 +21,7 @@ public:
     bool Begin(World& world, ActorId actor, EditorEditKind kind, const char* label);
     void Finish(World& world);
     void Clear();
+    void DiscardRegion(const std::string& region);
     bool IsEditing() const { return m_Pending.has_value(); }
     bool CanUndo() const { return !IsEditing() && m_Cursor != 0; }
     bool CanRedo() const { return !IsEditing() && m_Cursor < m_Actions.size(); }
@@ -32,8 +33,8 @@ public:
     bool SetVisible(World& world, ActorId actor, bool visible, std::string& error);
     bool Reparent(World& world, ActorId actor, ActorId parent, std::string& error);
 private:
-    struct State { ActorId id, parent; Transform local; std::string name; bool visible = true; };
-    struct Action { EditorEditKind kind; State before, after; std::string label; std::shared_ptr<SceneSubtreeArchive> subtree; };
+    struct State { ActorId id, parent; Transform local; std::string name; bool visible = true; std::string region; };
+    struct Action { EditorEditKind kind; State before, after; std::string label; std::shared_ptr<SceneSubtreeArchive> subtree; bool pinned=false; };
     static State Capture(const Actor& actor);
     static bool Equal(EditorEditKind kind, const State& a, const State& b);
     bool Replay(World& world, const Action& action, bool undo, std::string& error);

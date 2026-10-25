@@ -292,8 +292,13 @@ bool InspectorPanel::Draw(EditorSelection &selection, SceneState &scene, bool &c
     if (lightProperties) ImGui::EndTable();
     if (light->proxy.id == scene.mainLightId)
         ImGui::TextUnformatted("Main Light");
-    else if (ImGui::Button("Set as Main Light"))
-        scene.mainLightId = light->proxy.id;
+    else {
+        const auto* actor=scene.world.Find(light->actor);
+        const bool persistent=scene.contentWorld.empty()||(actor&&actor->contentRegion==scene.contentWorld);
+        ImGui::BeginDisabled(!persistent);
+        if (ImGui::Button("Set as Main Light")) scene.mainLightId=light->proxy.id;
+        ImGui::EndDisabled();
+    }
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("Main light has shadow priority and drives the default NPR key light.");
     const bool lightValues = EditorWidgets::BeginProperties("##LightValues");

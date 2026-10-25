@@ -17,10 +17,17 @@ public:
     {
         std::vector<std::pair<std::size_t, PrimitiveSceneProxy>> primitives;
         std::vector<std::pair<std::size_t, LightSceneProxy>> lights;
+        std::vector<PrimitiveId> primitiveOrder;
+        std::vector<LightId> lightOrder;
     };
     bool CaptureBindings(const std::vector<PrimitiveId>& primitives, const std::vector<LightId>& lights,
                          RetainedBindings& result, std::string& error) const;
     bool SetBindingsActive(const RetainedBindings& bindings, bool active, std::string& error);
+    PrimitiveId ReservePrimitiveId() { return m_NextPrimitiveId==InvalidPrimitiveId?InvalidPrimitiveId:m_NextPrimitiveId++; }
+    LightId ReserveLightId() { return m_NextLightId==InvalidLightId?InvalidLightId:m_NextLightId++; }
+    bool PrepareUpdate(const std::vector<PrimitiveSceneProxy>& addedPrimitives,
+        const std::vector<LightSceneProxy>& addedLights, const std::vector<PrimitiveId>& removedPrimitives,
+        const std::vector<LightId>& removedLights, RenderScene& result, std::string& error) const;
     PrimitiveId AddPrimitive(PrimitiveSceneProxy proxy);
     bool RemovePrimitive(PrimitiveId id);
     bool UpdatePrimitiveVisibility(PrimitiveId id, bool visible);

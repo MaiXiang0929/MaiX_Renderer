@@ -35,7 +35,7 @@ LightId CreateSceneLight(SceneState &scene, Renderer &renderer, LightType type,
         ApplySceneLightTransform(light, renderer);
         const auto id = light.proxy.id;
         scene.lights.push_back(std::move(light));
-        if (scene.mainLightId == InvalidLightId)
+        if (scene.mainLightId == InvalidLightId && (scene.contentWorld.empty()||scene.world.Find(scene.lights.back().actor)->contentRegion==scene.contentWorld))
             scene.mainLightId = id;
         error.clear();
         return id;
@@ -198,14 +198,6 @@ void DestroySceneModelResources(SceneModel &model, Renderer &renderer)
 
 void ApplySceneLightTransform(SceneLight &light, Renderer &renderer)
 {
-    light.proxy.position = light.transform.position;
-    if (light.proxy.type == LightType::Directional || light.proxy.type == LightType::Spot)
-    {
-        Transform rigid = light.transform;
-        rigid.position = cy::Vec3f(0.0f);
-        rigid.scale = cy::Vec3f(1);
-        const auto direction = rigid.ToMatrix() * cy::Vec4f(0, 0, -1, 0);
-        light.proxy.direction = cy::Vec3f(direction.x, direction.y, direction.z).GetNormalized();
-    }
+    UpdateSceneLightProxy(light);
     renderer.UpdateLight(light.proxy.id, light.proxy);
 }

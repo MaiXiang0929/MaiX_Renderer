@@ -49,7 +49,8 @@ std::optional<std::filesystem::path> OpenFile(
     const COMDLG_FILTERSPEC* filters,
     std::size_t filterCount,
     bool pickDirectory = false,
-    const std::filesystem::path& initialDirectory = {}, bool saveFile = false)
+    const std::filesystem::path& initialDirectory = {}, bool saveFile = false,
+    const wchar_t* extension=L"maixscene",const wchar_t* defaultName=L"Scene.maixscene")
 {
     ScopedComInitialization comInitialization;
     if (!comInitialization.IsAvailable())
@@ -72,7 +73,7 @@ std::optional<std::filesystem::path> OpenFile(
                FOS_PATHMUSTEXIST |
                FOS_NOCHANGEDIR;
     options |= pickDirectory ? FOS_PICKFOLDERS : saveFile ? FOS_OVERWRITEPROMPT : FOS_FILEMUSTEXIST;
-    if (saveFile) { dialog->SetDefaultExtension(L"maixscene"); dialog->SetFileName(L"Scene.maixscene"); }
+    if (saveFile) { dialog->SetDefaultExtension(extension); dialog->SetFileName(defaultName); }
 
     if (FAILED(dialog->SetOptions(options)) ||
         (filterCount != 0 && FAILED(dialog->SetFileTypes(static_cast<UINT>(filterCount), filters))) ||
@@ -111,6 +112,16 @@ std::optional<std::filesystem::path> OpenFile(
 
 namespace FileDialog
 {
+std::optional<std::filesystem::path> OpenWorldFile(NativeWindowHandle ownerWindow,const std::filesystem::path& initialDirectory)
+{
+    static constexpr COMDLG_FILTERSPEC filters[]={{L"MaiX World (*.maixworld)",L"*.maixworld"}};
+    return OpenFile(ownerWindow,L"Open World",filters,std::size(filters),false,initialDirectory);
+}
+std::optional<std::filesystem::path> SaveWorldFile(NativeWindowHandle ownerWindow,const std::filesystem::path& initialDirectory)
+{
+    static constexpr COMDLG_FILTERSPEC filters[]={{L"MaiX World (*.maixworld)",L"*.maixworld"}};
+    return OpenFile(ownerWindow,L"Create World From Current Scene",filters,std::size(filters),false,initialDirectory,true,L"maixworld",L"World.maixworld");
+}
 std::optional<std::filesystem::path> OpenProjectFile(NativeWindowHandle ownerWindow,
     const std::filesystem::path& initialDirectory)
 {

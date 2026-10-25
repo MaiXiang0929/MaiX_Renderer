@@ -131,6 +131,13 @@ public:
     LightId AddLight(LightSceneProxy light);
     bool UpdateLight(LightId id, const LightSceneProxy& light);
     bool RemoveLight(LightId id);
+    PrimitiveId StagePrimitive(MeshHandle,MaterialHandle,const cy::Matrix4f&,PrimitiveBounds,bool,
+        std::vector<PrimitiveSceneProxy>&);
+    LightId StageLight(LightSceneProxy,std::vector<LightSceneProxy>&);
+    bool PrepareSceneUpdate(const std::vector<PrimitiveSceneProxy>& addedPrimitives,
+        const std::vector<LightSceneProxy>& addedLights,const std::vector<PrimitiveId>& removedPrimitives,
+        const std::vector<LightId>& removedLights,RenderScene& result,std::string& error) const;
+    void CommitSceneUpdate(RenderScene&& scene) noexcept { m_RenderScene=std::move(scene); }
 
     void LoadCubemap(const std::string& directoryPath);
     bool LoadEnvironment(const std::filesystem::path& source, std::string& error);

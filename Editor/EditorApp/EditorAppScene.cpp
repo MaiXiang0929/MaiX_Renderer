@@ -28,11 +28,15 @@ void EditorApp::DrawSceneFileMenu()
     ImGui::Separator();
     const bool ready=m_Project->IsReady()&&idle;
     if (ImGui::MenuItem("Open Scene...",nullptr,false,ready)) m_SceneFileAction=SceneFileAction::Open;
-    if (ImGui::MenuItem("Save Scene",nullptr,false,ready)) m_SceneFileAction=SceneFileAction::Save;
-    if (ImGui::MenuItem("Save Scene As...",nullptr,false,ready)) m_SceneFileAction=SceneFileAction::SaveAs;
+    if (ImGui::MenuItem(m_Engine.Content().Ready()?"Save World and Loaded Regions":"Save Scene",nullptr,false,ready)) m_SceneFileAction=SceneFileAction::Save;
+    if (ImGui::MenuItem("Save Scene As...",nullptr,false,ready&&!m_Engine.Content().Ready())) m_SceneFileAction=SceneFileAction::SaveAs;
+    ImGui::Separator();
+    if (ImGui::MenuItem("Create World From Scene...",nullptr,false,ready&&!m_Engine.Content().Ready())) m_SceneFileAction=SceneFileAction::NewWorld;
+    if (ImGui::MenuItem("Open World...",nullptr,false,ready)) m_SceneFileAction=SceneFileAction::OpenWorld;
     ImGui::TextDisabled("Project: %s",m_Project->Name().c_str());
     ImGui::TextDisabled("Root: %s",m_Project->Root().u8string().c_str());
-    if (!m_ScenePath.empty()) ImGui::TextDisabled("Scene: %s",m_ScenePath.u8string().c_str());
+    if (m_Engine.Content().Ready()) ImGui::TextDisabled("World: %s",m_Engine.Content().File().u8string().c_str());
+    else if (!m_ScenePath.empty()) ImGui::TextDisabled("Scene: %s",m_ScenePath.u8string().c_str());
 }
 
 void EditorApp::ReportSceneFileError(std::string error)
@@ -45,6 +49,11 @@ void EditorApp::ReportSceneFileError(std::string error)
 bool EditorApp::SaveSceneFile(bool saveAs,void* owner)
 {
     m_History.Finish(m_Engine.Scene().world);
+    if (m_Engine.Content().Ready()) {
+        std::string error;
+        if (!m_Engine.Content().SaveAll(m_Engine.Scene(),*m_Renderer,Roots(*m_Project),error)) { ReportSceneFileError(error); return false; }
+        m_Workspace->AddLog("World and loaded regions saved."); return true;
+    }
     if (!m_Project->IsReady())
     {
         ReportSceneFileError("No project Assets directory is available. To switch projects, choose Discard and Continue, or Cancel and open a valid project.");
@@ -78,6 +87,7 @@ bool EditorApp::SaveSceneFile(bool saveAs,void* owner)
 
 bool EditorApp::OpenSceneFile(const std::filesystem::path& path)
 {
+    if (path.extension()==".maixworld") return OpenWorldFile(path);
     try
     {
         if (!m_Project->ContainsAssetPath(path))
@@ -87,6 +97,7 @@ bool EditorApp::OpenSceneFile(const std::filesystem::path& path)
             !ReplaceSceneFromDocument(m_Engine.Scene(),*m_Renderer,Roots(*m_Project),document,error))
         { ReportSceneFileError(error); return false; }
         ResetSceneEditorState();
+        m_Engine.Content().Reset(); m_WorldAction={};
         m_ScenePath=path; m_SceneProjectRoot=m_Project->Root();
         SceneDocument normalized;
         m_LastSavedSceneText.clear();
@@ -114,6 +125,10 @@ void EditorApp::ResetSceneEditorState()
 bool EditorApp::SceneHasUnsavedChanges()
 {
     m_History.Finish(m_Engine.Scene().world);
+    if (m_Engine.Content().Ready()) {
+        std::string error;
+        return m_Engine.Content().HasUnsavedChanges(m_Engine.Scene(),*m_Renderer,Roots(*m_Project),error);
+    }
     SceneDocument current; std::string text,error;
     return m_LastSavedSceneText.empty()||
         !CaptureSceneDocument(m_Engine.Scene(),*m_Renderer,Roots(*m_Project),current,error)||
@@ -124,11 +139,12 @@ void EditorApp::HandleSceneFileActions(void* owner)
 {
     const bool projectWasPending=m_PendingProjectAction.has_value();
     const auto action=m_SceneFileAction; m_SceneFileAction=SceneFileAction::None;
+    if (action==SceneFileAction::NewWorld) CreateWorldFile(owner);
     if (action==SceneFileAction::Save||action==SceneFileAction::SaveAs)
         SaveSceneFile(action==SceneFileAction::SaveAs,owner);
-    if (action==SceneFileAction::Open)
+    if (action==SceneFileAction::Open||action==SceneFileAction::OpenWorld)
     {
-        const auto path=FileDialog::OpenSceneFile(owner,m_Project->AssetsRoot()/"Scenes");
+        const auto path=action==SceneFileAction::OpenWorld?FileDialog::OpenWorldFile(owner,m_Project->AssetsRoot()):FileDialog::OpenSceneFile(owner,m_Project->AssetsRoot()/"Scenes");
         if (path)
         {
             if (!SceneHasUnsavedChanges()) OpenSceneFile(*path);

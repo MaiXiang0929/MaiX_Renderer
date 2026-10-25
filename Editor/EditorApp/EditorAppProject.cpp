@@ -20,6 +20,7 @@ bool EditorApp::OpenProjectFile(const std::filesystem::path& path)
         if (!OpenProjectSession(*m_Project,m_Engine.Scene(),*m_Renderer,roots,path,error))
         { ReportSceneFileError(error); return false; }
         ResetSceneEditorState();
+        m_Engine.Content().Reset(); m_WorldAction={};
         m_Workspace->SynchronizeProject();
         m_ScenePath=m_Project->DefaultScene(); m_SceneProjectRoot=m_Project->Root();
         m_LastSavedSceneText.clear(); SceneDocument normalized;

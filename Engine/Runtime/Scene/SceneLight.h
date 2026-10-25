@@ -21,6 +21,7 @@ struct SceneLight
 void ApplySceneLightTransform(
     SceneLight& light,
     class Renderer& renderer);
+void UpdateSceneLightProxy(SceneLight& light);
 
 SceneLight* FindSceneLight(
     std::vector<SceneLight>& lights,

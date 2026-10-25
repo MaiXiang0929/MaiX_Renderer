@@ -4,12 +4,14 @@
 #include "Editor/Session/EditorWidgets.h"
 #include "Editor/Session/EditorTheme.h"
 #include "Engine/Runtime/Engine/RenderSceneBridge.h"
+#include "Engine/Runtime/Engine/WorldContentSession.h"
 #include <algorithm>
 #include <functional>
 #include <imgui.h>
 
 ActorId SceneHierarchyPanel::Draw(EditorSelection &selection, SceneState &scene, Renderer &renderer,
-    EditorHistory* history, const std::function<void(const char*)>& invalidate)
+    EditorHistory* history, const std::function<void(const char*)>& invalidate,
+    WorldContentSession* content,const std::function<void()>& drawContent)
 {
     if (!ImGui::Begin("Scene"))
     {
@@ -17,6 +19,7 @@ ActorId SceneHierarchyPanel::Draw(EditorSelection &selection, SceneState &scene,
         return {};
     }
     ActorId removed, reparent, parent;
+    if (drawContent) drawContent();
     bool detach = false;
     const float scale = EditorTheme::GetScale();
     ImGui::AlignTextToFramePadding();
@@ -72,11 +75,13 @@ ActorId SceneHierarchyPanel::Draw(EditorSelection &selection, SceneState &scene,
         ImGui::EndPopup();
     }
     const auto selected = selection.ResolveActor(scene);
+    std::string contentRegion;
     std::function<void(ActorId)> draw = [&](ActorId parentId) {
         for (const auto &a : scene.world.Actors())
         {
             if (a.parent != parentId)
                 continue;
+            if (content&&content->Ready()&&a.contentRegion!=contentRegion) continue;
             const bool hasChildren = std::any_of(scene.world.Actors().begin(), scene.world.Actors().end(),
                                                  [&](const Actor &child) { return child.parent == a.id; });
             auto flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth |
@@ -132,7 +137,23 @@ ActorId SceneHierarchyPanel::Draw(EditorSelection &selection, SceneState &scene,
             ImGui::PopID();
         }
     };
-    draw({});
+    if (content&&content->Ready()) {
+        contentRegion=content->Id();
+        if (ImGui::TreeNodeEx("Persistent Content",ImGuiTreeNodeFlags_DefaultOpen)) { draw({}); ImGui::TreePop(); }
+        for (const auto& region:content->Regions()) {
+            ImGui::PushID(region.record.id.c_str()); contentRegion=region.record.id;
+            const auto label=region.record.name+(region.loaded?"":" (unloaded)");
+            if (ImGui::TreeNode(label.c_str())) {
+                if (region.loaded) draw({});
+                else for (const auto& descriptor:content->Catalog()) if (descriptor.region==region.record.id) {
+                    ImGui::TextDisabled("%s",descriptor.name.c_str());
+                    if(ImGui::IsItemHovered()) ImGui::SetTooltip("Load the region to edit this object.");
+                }
+                ImGui::TreePop();
+            }
+            ImGui::PopID();
+        }
+    } else draw({});
     if (reparent.IsValid())
     {
         if (history) history->Reparent(scene.world,reparent,detach ? ActorId{} : parent,m_Error);

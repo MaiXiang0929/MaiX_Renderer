@@ -5,6 +5,7 @@
 #include <functional>
 #include <limits>
 #include <utility>
+#include <unordered_set>
 
 namespace
 {
@@ -16,10 +17,12 @@ World::World() noexcept : m_Identity(nextWorldId.fetch_add(1))
     if (!m_Identity || m_Identity==std::numeric_limits<std::uint64_t>::max()) std::terminate();
 }
 World::World(World&& other) noexcept
-    : m_Actors(std::move(other.m_Actors)),m_Identity(std::exchange(other.m_Identity,0)) {}
+    : m_Actors(std::move(other.m_Actors)),m_Identity(std::exchange(other.m_Identity,0)),
+      m_ContentRegion(std::move(other.m_ContentRegion)),m_ContentPins(std::move(other.m_ContentPins)) {}
 World& World::operator=(World&& other) noexcept
 {
-    if (this!=&other) { m_Actors=std::move(other.m_Actors); m_Identity=std::exchange(other.m_Identity,0); }
+    if (this!=&other) { m_Actors=std::move(other.m_Actors); m_Identity=std::exchange(other.m_Identity,0);
+        m_ContentRegion=std::move(other.m_ContentRegion); m_ContentPins=std::move(other.m_ContentPins); }
     return *this;
 }
 const Actor *World::Find(ActorId id) const
@@ -28,7 +31,7 @@ const Actor *World::Find(ActorId id) const
         std::find_if(m_Actors.begin(), m_Actors.end(), [&](const Actor &a) { return a.id == id; });
     return it == m_Actors.end() ? nullptr : &*it;
 }
-ActorId World::Create(std::string name, const Transform &local, ActorKind kind, std::uint64_t componentId)
+ActorId World::Create(std::string name, const Transform &local, ActorKind kind, std::uint64_t componentId,std::string contentGuid)
 {
     Transform check;
     if (!TryDecomposeTransform(local.ToMatrix(), check))
@@ -43,6 +46,11 @@ ActorId World::Create(std::string name, const Transform &local, ActorKind kind, 
     actor.world = local;
     actor.kind = kind;
     actor.componentId = componentId;
+    if (!m_ContentRegion.empty()) {
+        if (contentGuid.empty()) contentGuid=NewContentGuid();
+        if (!IsContentGuid(contentGuid)||std::any_of(m_Actors.begin(),m_Actors.end(),[&](const Actor& a) { return a.contentGuid==contentGuid; })) return {};
+        actor.contentGuid=std::move(contentGuid); actor.contentRegion=m_ContentRegion;
+    } else if (!contentGuid.empty()) return {};
     m_Actors.push_back(std::move(actor));
     return ActorId{key};
 }
@@ -77,6 +85,15 @@ bool World::IsVisible(ActorId id) const
 }
 bool World::Commit(std::vector<Actor> &candidate, std::string &error)
 {
+    std::unordered_set<std::uint64_t> ids;
+    std::unordered_set<std::string> guids;
+    for (const auto& actor:candidate) {
+        if (!actor.id.IsValid()||!ids.insert(actor.id.value).second||
+            (!actor.contentGuid.empty()&&(!IsContentGuid(actor.contentGuid)||!IsContentGuid(actor.contentRegion)||!guids.insert(actor.contentGuid).second))||
+            (actor.contentGuid.empty()!=actor.contentRegion.empty())) {
+            error="Invalid or duplicate actor content identity."; return false;
+        }
+    }
     std::vector<unsigned char> state(candidate.size());
     std::function<bool(std::size_t)> update = [&](std::size_t i) {
         if (state[i] == 2)
@@ -91,6 +108,7 @@ bool World::Commit(std::vector<Actor> &candidate, std::string &error)
                                   [&](const Actor &a) { return a.id == candidate[i].parent; });
             if (p == candidate.end() || !update(static_cast<std::size_t>(p - candidate.begin())))
                 return false;
+            if (p->contentRegion!=candidate[i].contentRegion) return false;
             matrix = p->world.ToMatrix() * matrix;
         }
         if (!TryDecomposeTransform(matrix, candidate[i].world))
@@ -212,6 +230,7 @@ bool World::CaptureSubtree(ActorId id, SubtreeSnapshot& result, std::string& err
     if (ids.empty()) { error="Subtree is unavailable."; return false; }
     SubtreeSnapshot snapshot;
     snapshot.m_Owner=m_Identity; snapshot.m_Root=id;
+    for (const auto& actor:m_Actors) snapshot.m_Order.push_back(actor.id);
     for (std::size_t i=0;i<m_Actors.size();++i)
         if (std::find(ids.begin(),ids.end(),m_Actors[i].id)!=ids.end())
             snapshot.m_Entries.push_back({i,m_Actors[i]});
@@ -227,7 +246,20 @@ bool World::PrepareSubtree(const SubtreeSnapshot& snapshot, bool restore, World&
         for (const auto& entry:snapshot.m_Entries)
         {
             if (Find(entry.actor.id)) { error="Subtree identity is already active."; return false; }
-            candidate.insert(candidate.begin()+std::min(entry.position,candidate.size()),entry.actor);
+            auto position=candidate.end();
+            for (std::size_t i=entry.position+1;i<snapshot.m_Order.size();++i) {
+                position=std::find_if(candidate.begin(),candidate.end(),[&](const Actor& a) { return a.id==snapshot.m_Order[i]; });
+                if(position!=candidate.end()) break;
+            }
+            if(position==candidate.end()) {
+                bool anchored=false;
+                for(std::size_t i=std::min(entry.position,snapshot.m_Order.size());i>0;--i) {
+                    const auto before=std::find_if(candidate.begin(),candidate.end(),[&](const Actor& a) { return a.id==snapshot.m_Order[i-1]; });
+                    if(before!=candidate.end()) { position=before+1; anchored=true; break; }
+                }
+                if(!anchored) position=candidate.begin()+std::min(entry.position,candidate.size());
+            }
+            candidate.insert(position,entry.actor);
         }
     }
     else
@@ -246,6 +278,46 @@ bool World::PrepareSubtree(const SubtreeSnapshot& snapshot, bool restore, World&
     }
     World prepared;
     prepared.m_Identity=m_Identity;
+    prepared.m_ContentRegion=m_ContentRegion; prepared.m_ContentPins=m_ContentPins;
     if (!prepared.Commit(candidate,error)) return false;
     result=std::move(prepared); return true;
 }
+
+bool World::SetContentRegion(const std::string& region,std::string& error)
+{
+    if (!region.empty()&&!IsContentGuid(region)) { error="Invalid content region GUID."; return false; }
+    m_ContentRegion=region; error.clear(); return true;
+}
+bool World::PrepareAppend(const World& added,World& result,std::string& error) const
+{
+    if (&result==this||&result==&added) { error="World candidate aliases its input."; return false; }
+    auto actors=m_Actors; actors.insert(actors.end(),added.m_Actors.begin(),added.m_Actors.end());
+    World prepared; prepared.m_Identity=m_Identity; prepared.m_ContentRegion=m_ContentRegion; prepared.m_ContentPins=m_ContentPins;
+    if (!prepared.Commit(actors,error)) return false;
+    result=std::move(prepared); return true;
+}
+bool World::PrepareRemove(const std::vector<ActorId>& removed,World& result,std::string& error) const
+{
+    if (&result==this) { error="World candidate aliases its input."; return false; }
+    std::unordered_set<std::uint64_t> ids;
+    for (const auto id:removed) if (!Find(id)||!ids.insert(id.value).second) { error="Missing or duplicate removal actor."; return false; }
+    auto actors=m_Actors;
+    actors.erase(std::remove_if(actors.begin(),actors.end(),[&](const Actor& a) { return ids.count(a.id.value)!=0; }),actors.end());
+    World prepared; prepared.m_Identity=m_Identity; prepared.m_ContentRegion=m_ContentRegion; prepared.m_ContentPins=m_ContentPins;
+    if (!prepared.Commit(actors,error)) return false;
+    result=std::move(prepared); return true;
+}
+bool World::PrepareContentIdentity(const std::string& region,World& result,std::string& error) const
+{
+    if (&result==this||!IsContentGuid(region)) { error="Invalid world content candidate."; return false; }
+    auto actors=m_Actors;
+    for (auto& actor:actors) { actor.contentGuid=NewContentGuid(); actor.contentRegion=region; }
+    World prepared; prepared.m_Identity=m_Identity; prepared.m_ContentRegion=region;
+    if (!prepared.Commit(actors,error)) return false;
+    result=std::move(prepared); return true;
+}
+void World::PinContentRegion(const std::string& region) { if (!region.empty()) ++m_ContentPins[region]; }
+void World::UnpinContentRegion(const std::string& region) noexcept
+{ auto it=m_ContentPins.find(region); if (it!=m_ContentPins.end()&&it->second) --it->second; }
+std::size_t World::ContentRegionPins(const std::string& region) const
+{ const auto it=m_ContentPins.find(region); return it==m_ContentPins.end()?0:it->second; }

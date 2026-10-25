@@ -9,6 +9,7 @@
 bool EditorApp::HistoryInputReady() const
 {
     return !m_History.IsEditing() && !m_AssetImportPanel->IsBusy() &&
+        m_WorldAction.kind==WorldContentActionKind::None &&
         !m_PendingOpenScene && !m_PendingProjectAction && !m_ConfirmSceneReplacement &&
         !m_NewProjectParent && !m_LegacyProjectRoot;
 }
