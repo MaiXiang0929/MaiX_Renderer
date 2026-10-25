@@ -30,7 +30,7 @@ public:
         bool altDown,
         double x,
         double y);
-    void CancelPointerInput();
+    void CancelPointerInput(class EditorHistory* history = nullptr, World* world = nullptr);
     void ProcessPointerMove(
         double x,
         double y,
@@ -61,10 +61,12 @@ public:
         EditorSelection& selection,
         SceneState& scene,
         Renderer& renderer,
-        const EditorViewportRegion& viewport, SceneCamera* sceneCamera = nullptr, bool cameraView = false);
+        const EditorViewportRegion& viewport, SceneCamera* sceneCamera = nullptr, bool cameraView = false,
+        class EditorHistory* history = nullptr);
 
 private:
     std::string m_TransformError;
+    bool m_EditingGizmo = false;
     bool m_LeftDown = false;
     bool m_MiddleDown = false;
     bool m_RightDown = false;

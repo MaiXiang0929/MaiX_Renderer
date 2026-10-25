@@ -17,7 +17,7 @@ public:
         EditorSelection& selection,
         SceneState& scene, bool& cameraView,
         Renderer& renderer,
-        EditorMaterialSelection& materialSelection);
+        EditorMaterialSelection& materialSelection, class EditorHistory* history = nullptr);
 private:
     std::string m_Error;
 };

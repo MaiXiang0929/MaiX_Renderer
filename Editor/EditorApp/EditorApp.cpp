@@ -295,6 +295,7 @@ bool EditorApp::Init() {
     m_Renderer = m_Engine.GetRenderer();
     m_Workspace = std::make_unique<EditorWorkspace>(m_Renderer->Device(), *m_Project);
     m_Workspace->SetSceneFileMenu([this] { DrawSceneFileMenu(); });
+    m_Workspace->SetEditMenu([this] { DrawEditMenu(); });
     m_Workspace->AddLog("MaiX Renderer initialized.");
     if (!m_Project->Diagnostic().empty())
         m_Workspace->AddLog("[Project] " + m_Project->Diagnostic());
@@ -1238,6 +1239,7 @@ bool EditorApp::RemoveModel(ModelId id)
         return false;
     if (found->actor.IsValid()) {
         const bool removed=DestroySceneActor(m_Engine.Scene(),*m_Renderer,found->actor);
+        if (removed) InvalidateEditorHistory("Model deleted");
         if (!m_EditorSelection.ResolveActor(m_Engine.Scene()).IsValid()) m_EditorSelection.Clear();
         return removed;
     }
@@ -1247,6 +1249,7 @@ bool EditorApp::RemoveModel(ModelId id)
         m_Engine.Scene().defaultModelId = {};
     DestroyModelResources(*found);
     m_Engine.Scene().models.erase(found);
+    InvalidateEditorHistory("Model deleted");
     return true;
 }
 
@@ -1280,6 +1283,7 @@ void EditorApp::Update() {
     ModelId importedId;
     if (CommitImportedModel(completedImport->model, error, importedId))
     {
+        InvalidateEditorHistory("Model imported");
         m_EditorSelection.SelectModel(importedId);
         m_SceneCameraView = false;
         m_PendingFocusSelection = m_EditorSelection;
@@ -1307,8 +1311,15 @@ void EditorApp::Render() {
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
     ImGuizmo::BeginFrame();
+    if (!glfwGetWindowAttrib(m_Window,GLFW_FOCUSED))
+    {
+        m_History.Finish(m_Engine.Scene().world);
+        m_MainLightDrag=false;
+        m_ViewportController->CancelPointerInput(&m_History,&m_Engine.Scene().world);
+    }
     void* nativeWindowHandle = GetNativeWindowHandle(m_Window);
     m_Workspace->BeginFrame(*m_AssetImportPanel, nativeWindowHandle, m_Appearance);
+    HandleHistoryShortcuts();
     HandleSceneFileActions(nativeWindowHandle);
     const EditorViewportRegion viewport = m_Workspace->BeginViewport([&] {
         m_ViewportController->DrawToolbar(m_EditorSelection, m_Engine.Scene().lights, m_SceneCameraView);
@@ -1340,17 +1351,24 @@ void EditorApp::Render() {
 
     // GPU 最终纹理由 Renderer 持有；编辑器在同一帧将其显示到中央面板。
     m_Workspace->DrawViewportImage(GetOpenGLTexture(m_Renderer->Device(),m_Renderer->GetFinalColorTexture()));
-    if (viewport.visible)
-        m_ViewportController->Draw(
-            m_Camera, m_EditorSelection, m_Engine.Scene(), *m_Renderer, viewport, &m_Engine.Scene().camera, m_SceneCameraView);
+    if (!viewport.visible && m_MainLightDrag)
+    {
+        m_History.Finish(m_Engine.Scene().world);
+        m_MainLightDrag=false;
+    }
+    m_ViewportController->Draw(
+        m_Camera, m_EditorSelection, m_Engine.Scene(), *m_Renderer, viewport, &m_Engine.Scene().camera,
+        m_SceneCameraView, &m_History);
     m_Workspace->EndViewport();
 
     m_AssetImportPanel->Draw(nativeWindowHandle);
     if (m_Workspace->ShowStatistics())
         m_StatisticsPanel->Draw(*m_Renderer);
-    const auto removedActor=m_SceneHierarchyPanel->Draw(m_EditorSelection,m_Engine.Scene(),*m_Renderer);
+    const auto removedActor=m_SceneHierarchyPanel->Draw(m_EditorSelection,m_Engine.Scene(),*m_Renderer,
+        &m_History,[this](const char* reason) { InvalidateEditorHistory(reason); });
     if (removedActor.IsValid()) {
-        DestroySceneActor(m_Engine.Scene(),*m_Renderer,removedActor);
+        if (DestroySceneActor(m_Engine.Scene(),*m_Renderer,removedActor))
+            InvalidateEditorHistory("Subtree deleted");
         if (!m_EditorSelection.ResolveActor(m_Engine.Scene()).IsValid()) m_EditorSelection.Clear();
         if (!m_PendingFocusSelection.ResolveActor(m_Engine.Scene()).IsValid()) m_PendingFocusSelection.Clear();
         if (!m_Engine.Scene().camera.id.IsValid()) m_SceneCameraView=false;
@@ -1360,7 +1378,7 @@ void EditorApp::Render() {
         m_EditorSelection, m_Engine.Scene().models, m_Renderer->GetMaterialHandles());
     if (m_InspectorPanel->Draw(
             m_EditorSelection, m_Engine.Scene(), m_SceneCameraView, *m_Renderer,
-            m_MaterialSelection))
+            m_MaterialSelection,&m_History))
         m_Workspace->OpenMaterialEditor();
     if (m_Workspace->ShowMaterialEditor())
     {
@@ -1377,6 +1395,8 @@ void EditorApp::Render() {
     const std::string selectionLabel = selectedActor ? selectedActor->name + " selected" : "No selection";
     m_Workspace->DrawStatusBar(selectionLabel.c_str());
     EditorWidgets::DrawDockTabAccents();
+    if (!ImGui::IsAnyItemActive() && !ImGuizmo::IsUsing() && !m_MainLightDrag)
+        m_History.Finish(m_Engine.Scene().world);
     ImGui::Render();
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, static_cast<GLsizei>(m_Width), static_cast<GLsizei>(m_Height));
@@ -1487,6 +1507,11 @@ void EditorApp::MouseButtonCallback(
         glfwGetKey(window, GLFW_KEY_RIGHT_ALT) == GLFW_PRESS;
     app->m_ViewportController->SetButtonState(
         pointerButton, action != GLFW_RELEASE, altDown, x, y);
+    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE && app->m_MainLightDrag)
+    {
+        app->m_History.Finish(app->m_Engine.Scene().world);
+        app->m_MainLightDrag=false;
+    }
 }
 
 void EditorApp::CursorPositionCallback(
@@ -1522,11 +1547,19 @@ void EditorApp::CursorPositionCallback(
 
     if (!inViewport && !scenePointerActive)
         return;
+    if (app->m_MainLightDrag && (altDown || !ctrlDown || !app->m_ViewportController->IsLeftDown()))
+    {
+        app->m_History.Finish(app->m_Engine.Scene().world);
+        app->m_MainLightDrag=false;
+    }
     if (!altDown && ctrlDown && app->m_ViewportController->IsLeftDown())
     {
         SceneLight* mainLight = app->FindSceneLight(app->m_Engine.Scene().mainLightId);
         if (mainLight)
         {
+            app->m_History.Begin(app->m_Engine.Scene().world,mainLight->actor,
+                EditorEditKind::Transform,"Rotate Main Light");
+            app->m_MainLightDrag=true;
             auto transform=mainLight->transform;
             transform.rotationDegrees.x+=deltaY*0.5f;
             transform.rotationDegrees.y+=deltaX*0.5f;
@@ -1609,7 +1642,8 @@ void EditorApp::KeyCallback(GLFWwindow* window, int key, int scancode, int actio
     // 投影模式切换（P）
     if (key == GLFW_KEY_KP_0 && action == GLFW_PRESS) {
         app->m_SceneCameraView = !app->m_SceneCameraView;
-        app->m_ViewportController->CancelPointerInput();
+        app->m_ViewportController->CancelPointerInput(&app->m_History,&app->m_Engine.Scene().world);
+        app->m_MainLightDrag=false;
     }
     if (key == GLFW_KEY_P && action == GLFW_PRESS && !app->m_SceneCameraView) {
         app->m_Camera.ToggleProjectionMode();

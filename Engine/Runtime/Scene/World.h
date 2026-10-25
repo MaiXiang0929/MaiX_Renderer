@@ -61,6 +61,7 @@ class World
     bool SetLocal(ActorId id, const Transform &value, std::string &error);
     bool SetWorld(ActorId id, const cy::Matrix4f &value, std::string &error);
     bool Reparent(ActorId id, ActorId parent, bool keepWorld, std::string &error);
+    bool SetParentAndLocal(ActorId id, ActorId parent, const Transform& local, std::string& error);
     std::vector<ActorId> Subtree(ActorId id) const;
     bool Destroy(ActorId id);
 

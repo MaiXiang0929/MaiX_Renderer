@@ -107,19 +107,21 @@ add_library(MaiXEngine STATIC Engine/Runtime/Engine/EngineSession.cpp
 target_link_libraries(MaiXEngine PUBLIC MaiXRuntime MaiXRendering)
 
 add_library(MaiXEditorUI STATIC ThirdParty/imgui/imgui.cpp ThirdParty/imgui/imgui_draw.cpp
+    Editor/Session/EditorHistory.cpp
     ThirdParty/imgui/imgui_tables.cpp ThirdParty/imgui/imgui_widgets.cpp
     ThirdParty/imgui/backends/imgui_impl_glfw.cpp ThirdParty/imgui/backends/imgui_impl_opengl3.cpp
     ThirdParty/ImGuizmo/ImGuizmo.cpp)
 target_include_directories(MaiXEditorUI PUBLIC ${THIRD_PARTY_DIR}/imgui
     ${THIRD_PARTY_DIR}/ImGuizmo ${THIRD_PARTY_DIR}/glfw/include)
 target_link_directories(MaiXEditorUI PUBLIC ${THIRD_PARTY_DIR}/glfw/lib-vc2022)
-target_link_libraries(MaiXEditorUI PUBLIC MaiXGL glfw3.lib)
+target_link_libraries(MaiXEditorUI PUBLIC MaiXGL MaiXRuntime glfw3.lib)
 
 add_executable(MaiX_Renderer
     Editor/ContentBrowser/AssetImportPanel.cpp
     Editor/Diagnostics/RendererStatisticsPanel.cpp
     Editor/EditorApp/EditorApp.cpp
     Editor/EditorApp/EditorAppScene.cpp
+    Editor/EditorApp/EditorAppHistory.cpp
     Editor/EditorApp/EditorAppProject.cpp
     Editor/EditorApp/Main.cpp
     Editor/Inspector/InspectorPanel.cpp

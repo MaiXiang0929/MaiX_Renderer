@@ -51,6 +51,7 @@ public:
     void AddLog(std::string message);
     void SynchronizeProject();
     void SetSceneFileMenu(std::function<void()> draw) { m_SceneFileMenu = std::move(draw); }
+    void SetEditMenu(std::function<void()> draw) { m_EditMenu = std::move(draw); }
 
     bool ShowMaterialEditor() const { return m_ShowMaterialEditor; }
     void OpenMaterialEditor();
@@ -88,4 +89,5 @@ private:
     std::unordered_map<std::string, std::shared_ptr<Texture2D>> m_Previews;
     std::deque<std::string> m_Log;
     std::function<void()> m_SceneFileMenu;
+    std::function<void()> m_EditMenu;
 };

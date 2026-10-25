@@ -151,6 +151,11 @@ void EditorWorkspace::BeginFrame(AssetImportPanel& assetImport, void* nativeWind
             assetImport.DrawFileMenuItems(nativeWindowHandle);
             ImGui::EndMenu();
         }
+        if (ImGui::BeginMenu("Edit"))
+        {
+            if (m_EditMenu) m_EditMenu();
+            ImGui::EndMenu();
+        }
         if (ImGui::BeginMenu("View"))
         {
             if (ImGui::BeginMenu("Theme"))

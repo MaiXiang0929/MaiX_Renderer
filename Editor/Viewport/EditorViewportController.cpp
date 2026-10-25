@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "Editor/Viewport/EditorViewportController.h"
+#include "Editor/Session/EditorHistory.h"
 #include "Editor/Session/EditorWidgets.h"
 #include "Editor/Session/EditorTheme.h"
 
@@ -88,8 +89,12 @@ void EditorViewportController::SetButtonState(EditorPointerButton button, bool p
         m_RightDown = pressed;
 }
 
-void EditorViewportController::CancelPointerInput()
+void EditorViewportController::CancelPointerInput(EditorHistory* history, World* world)
 {
+    if (history && world) history->Finish(*world);
+    // A suppressed viewport/camera gizmo won't receive Manipulate to observe mouse release.
+    if (ImGui::GetCurrentContext()) { ImGuizmo::Enable(false); ImGuizmo::Enable(true); }
+    m_EditingGizmo = false;
     m_LeftDown = false;
     m_MiddleDown = false;
     m_RightDown = false;
@@ -172,7 +177,7 @@ void EditorViewportController::FocusSelection(Camera &camera, const EditorSelect
 
 void EditorViewportController::Draw(Camera &camera, EditorSelection &selection, SceneState &scene,
                                     Renderer &renderer, const EditorViewportRegion &viewport,
-                                    SceneCamera *sceneCamera, bool cameraView)
+                                    SceneCamera *sceneCamera, bool cameraView, EditorHistory* history)
 {
     auto &models = scene.models;
     auto &lights = scene.lights;
@@ -180,7 +185,10 @@ void EditorViewportController::Draw(Camera &camera, EditorSelection &selection, 
         sceneCamera = nullptr;
     cameraView = cameraView && sceneCamera;
     if (viewport.pixelWidth == 0 || viewport.pixelHeight == 0 || viewport.size.x <= 0 || viewport.size.y <= 0)
+    {
+        if (m_EditingGizmo) CancelPointerInput(history,&scene.world);
         return;
+    }
     if (cameraView)
         ImGui::GetWindowDrawList()->AddText(ImVec2(viewport.min.x + 12, viewport.min.y + 12),
                                             IM_COL32(255, 230, 160, 255),
@@ -208,15 +216,27 @@ void EditorViewportController::Draw(Camera &camera, EditorSelection &selection, 
 
     const auto actorId = selection.ResolveActor(scene);
     const auto *actor = scene.world.Find(actorId);
-    if (actor && scene.world.IsVisible(actorId) && !(selectedCamera && cameraView))
+    const bool canManipulate = actor && scene.world.IsVisible(actorId) && !(selectedCamera && cameraView);
+    if (!canManipulate && m_EditingGizmo) CancelPointerInput(history,&scene.world);
+    if (canManipulate)
     {
         auto matrix = actor->world.ToMatrix();
         if (ImGuizmo::Manipulate(view.cell, projection.cell,
                                  GetEffectiveOperation(selection.type, selectedLight), m_Mode, matrix.cell))
         {
+            if (history)
+            {
+                history->Begin(scene.world,actorId,EditorEditKind::Transform,"Gizmo Transform");
+                m_EditingGizmo = true;
+            }
             if (scene.world.SetWorld(actorId, matrix, m_TransformError))
                 SynchronizeSceneActors(scene, renderer);
         }
+    }
+    if (history && m_EditingGizmo && !ImGuizmo::IsUsing())
+    {
+        history->Finish(scene.world);
+        m_EditingGizmo = false;
     }
     if (!m_TransformError.empty())
         ImGui::GetWindowDrawList()->AddText(ImVec2(viewport.min.x + 12, viewport.min.y + 35),
@@ -271,6 +291,7 @@ void EditorViewportController::Draw(Camera &camera, EditorSelection &selection, 
             const EditorPickResult pick =
                 PickEditorObject(framebufferX, framebufferY, static_cast<float>(viewport.pixelWidth),
                                  static_cast<float>(viewport.pixelHeight), projection, view, models, lights);
+            if (history) history->Finish(scene.world);
             float cameraDepth;
             if (sceneCamera && sceneCamera->visible && !cameraView && renderer.AreEditorPrimitivesEnabled() &&
                 HitTestLightIcon(framebufferX, framebufferY, static_cast<float>(viewport.pixelWidth),

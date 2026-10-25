@@ -155,8 +155,10 @@ bool Section(const char* label, bool defaultOpen)
     return open;
 }
 
-bool DragVector3(const char* label, float* values, float speed, float minimum, float maximum, const char* format)
+bool DragVector3(const char* label, float* values, float speed, float minimum, float maximum, const char* format,
+    EditLifecycle* lifecycle)
 {
+    if (lifecycle) *lifecycle = {};
     bool changed = false;
     const float scale = EditorTheme::GetScale();
     const float width = ImGui::GetContentRegionAvail().x / scale;
@@ -201,6 +203,12 @@ bool DragVector3(const char* label, float* values, float speed, float minimum, f
             auto& fonts = ImGui::GetIO().Fonts->Fonts;
             if (fonts.Size > 1) ImGui::PushFont(fonts[1]);
             changed |= ImGui::DragFloat("##Value", values + index, speed, minimum, maximum, format);
+            if (lifecycle)
+            {
+                lifecycle->activated |= ImGui::IsItemActivated();
+                lifecycle->active |= ImGui::IsItemActive();
+                lifecycle->deactivated |= ImGui::IsItemDeactivated();
+            }
             if (fonts.Size > 1) ImGui::PopFont();
             const auto p = ImGui::GetItemRectMin();
             const auto q = ImGui::GetItemRectMax();

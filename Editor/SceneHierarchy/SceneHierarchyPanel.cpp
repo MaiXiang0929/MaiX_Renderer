@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "Editor/SceneHierarchy/SceneHierarchyPanel.h"
+#include "Editor/Session/EditorHistory.h"
 #include "Editor/Session/EditorWidgets.h"
 #include "Editor/Session/EditorTheme.h"
 #include "Engine/Runtime/Engine/RenderSceneBridge.h"
@@ -7,7 +8,8 @@
 #include <functional>
 #include <imgui.h>
 
-ActorId SceneHierarchyPanel::Draw(EditorSelection &selection, SceneState &scene, Renderer &renderer)
+ActorId SceneHierarchyPanel::Draw(EditorSelection &selection, SceneState &scene, Renderer &renderer,
+    EditorHistory* history, const std::function<void(const char*)>& invalidate)
 {
     if (!ImGui::Begin("Scene"))
     {
@@ -27,7 +29,16 @@ ActorId SceneHierarchyPanel::Draw(EditorSelection &selection, SceneState &scene,
     if (ImGui::BeginPopup("Scene Actions"))
     {
         if (ImGui::MenuItem("Create Empty"))
-            selection.SelectActor(scene.world.Create("Empty"), scene);
+        {
+            if (history) history->Finish(scene.world);
+            const auto id = scene.world.Create("Empty");
+            if (id.IsValid())
+            {
+                if (invalidate) invalidate("Object created");
+                else if (history) history->Clear();
+                selection.SelectActor(id,scene);
+            }
+        }
         if (ImGui::BeginMenu("Create Light"))
         {
             const LightType types[] = {LightType::Directional, LightType::Point, LightType::Spot};
@@ -39,7 +50,12 @@ ActorId SceneHierarchyPanel::Draw(EditorSelection &selection, SceneState &scene,
                     local.position = scene.objCenter + cy::Vec3f(0, 3, 0);
                     local.rotationDegrees = {-90, 0, 0};
                     const auto id = CreateSceneLight(scene, renderer, types[i], local, m_Error);
-                    if (id != InvalidLightId) selection.SelectLight(id);
+                    if (id != InvalidLightId)
+                    {
+                        if (invalidate) invalidate("Light created");
+                        else if (history) history->Clear();
+                        selection.SelectLight(id);
+                    }
                 }
             ImGui::EndMenu();
         }
@@ -89,7 +105,10 @@ ActorId SceneHierarchyPanel::Draw(EditorSelection &selection, SceneState &scene,
             list->PopClipRect();
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s",label.c_str());
             if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
+            {
+                if (history) history->Finish(scene.world);
                 selection.SelectActor(a.id, scene);
+            }
             if (ImGui::BeginDragDropSource())
             {
                 ImGui::SetDragDropPayload("MAIX_ACTOR", &a.id, sizeof(a.id));
@@ -115,7 +134,10 @@ ActorId SceneHierarchyPanel::Draw(EditorSelection &selection, SceneState &scene,
     };
     draw({});
     if (reparent.IsValid())
-        scene.world.Reparent(reparent, detach ? ActorId{} : parent, true, m_Error);
+    {
+        if (history) history->Reparent(scene.world,reparent,detach ? ActorId{} : parent,m_Error);
+        else scene.world.Reparent(reparent, detach ? ActorId{} : parent, true, m_Error);
+    }
     if (!m_Error.empty())
         ImGui::TextWrapped("%s", m_Error.c_str());
     ImGui::End();

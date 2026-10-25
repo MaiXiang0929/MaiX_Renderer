@@ -172,6 +172,15 @@ std::vector<ActorId> World::Subtree(ActorId id) const
                 result.push_back(a.id);
     return result;
 }
+bool World::SetParentAndLocal(ActorId id, ActorId parent, const Transform& local, std::string& error)
+{
+    if (!Find(id) || (parent.IsValid() && !Find(parent)))
+    { error="Object or parent is unavailable."; return false; }
+    auto candidate = m_Actors;
+    for (auto& actor : candidate)
+        if (actor.id == id) { actor.parent=parent; actor.local=local; }
+    return Commit(candidate,error);
+}
 bool World::Destroy(ActorId id)
 {
     const auto removed = Subtree(id);

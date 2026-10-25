@@ -44,6 +44,7 @@ void EditorApp::ReportSceneFileError(std::string error)
 
 bool EditorApp::SaveSceneFile(bool saveAs,void* owner)
 {
+    m_History.Finish(m_Engine.Scene().world);
     if (!m_Project->IsReady())
     {
         ReportSceneFileError("No project Assets directory is available. To switch projects, choose Discard and Continue, or Cancel and open a valid project.");
@@ -98,9 +99,11 @@ bool EditorApp::OpenSceneFile(const std::filesystem::path& path)
 
 void EditorApp::ResetSceneEditorState()
 {
+    m_History.Clear();
+    m_MainLightDrag=false;
     m_EditorSelection.Clear(); m_PendingFocusSelection.Clear();
     m_MaterialSelection=EditorMaterialSelection{}; m_SceneCameraView=false;
-    m_ViewportController->CancelPointerInput();
+    m_ViewportController->CancelPointerInput(&m_History,&m_Engine.Scene().world);
     if (m_Engine.Scene().defaultModelId.IsValid())
     {
         m_EditorSelection.SelectModel(m_Engine.Scene().defaultModelId);
@@ -110,6 +113,7 @@ void EditorApp::ResetSceneEditorState()
 
 bool EditorApp::SceneHasUnsavedChanges()
 {
+    m_History.Finish(m_Engine.Scene().world);
     SceneDocument current; std::string text,error;
     return m_LastSavedSceneText.empty()||
         !CaptureSceneDocument(m_Engine.Scene(),*m_Renderer,Roots(*m_Project),current,error)||

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "Editor/Inspector/InspectorPanel.h"
+#include "Editor/Session/EditorHistory.h"
 
 #include <algorithm>
 #include <cmath>
@@ -46,7 +47,7 @@ const char *LightTypeName(LightType type)
 } // namespace
 
 bool InspectorPanel::Draw(EditorSelection &selection, SceneState &scene, bool &cameraView, Renderer &renderer,
-                          EditorMaterialSelection &materialSelection)
+                          EditorMaterialSelection &materialSelection, EditorHistory* history)
 {
     auto &models = scene.models;
     auto &lights = scene.lights;
@@ -87,7 +88,10 @@ bool InspectorPanel::Draw(EditorSelection &selection, SceneState &scene, bool &c
     }
     bool visible = actor->visible;
     if (EditorWidgets::ObjectHeader(icon,actor->name.c_str(),type,&visible))
-        scene.world.SetVisible(actorId, visible);
+    {
+        if (history) history->SetVisible(scene.world,actorId,visible,m_Error);
+        else scene.world.SetVisible(actorId, visible);
+    }
     if (visible && !scene.world.IsVisible(actorId))
         ImGui::TextDisabled("Hidden by parent");
     std::array<char, 256> name{};
@@ -95,7 +99,10 @@ bool InspectorPanel::Draw(EditorSelection &selection, SceneState &scene, bool &c
     const bool properties = EditorWidgets::BeginProperties("##Identity");
     if (properties) EditorWidgets::PropertyLabel("Name");
     if (properties && ImGui::InputText("##Name", name.data(), name.size(), ImGuiInputTextFlags_EnterReturnsTrue))
-        scene.world.Rename(actorId, name.data());
+    {
+        if (history) history->Rename(scene.world,actorId,name.data(),m_Error);
+        else scene.world.Rename(actorId, name.data());
+    }
     actor = scene.world.Find(actorId);
     const auto parentId = actor->parent;
     const auto *parent = scene.world.Find(parentId);
@@ -127,17 +134,29 @@ bool InspectorPanel::Draw(EditorSelection &selection, SceneState &scene, bool &c
     }
     if (properties) ImGui::EndTable();
     if (reparent)
-        scene.world.Reparent(actorId, requestedParent, true, m_Error);
+    {
+        if (history) history->Reparent(scene.world,actorId,requestedParent,m_Error);
+        else scene.world.Reparent(actorId, requestedParent, true, m_Error);
+    }
     actor = scene.world.Find(actorId);
     if (EditorWidgets::Section("Local Transform"))
     {
-        auto local = actor->local;
-        bool changed = EditorWidgets::DragVector3("Position (m)", &local.position.x, 0.005f);
-        changed |= EditorWidgets::DragVector3("Rotation (deg)", &local.rotationDegrees.x, 0.5f);
-        if (actor->kind == ActorKind::Empty || actor->kind == ActorKind::Model)
-            changed |= EditorWidgets::DragVector3("Scale", &local.scale.x, 0.001f, 0.001f, 1000, "%.4f");
-        if (changed)
-            scene.world.SetLocal(actorId, local, m_Error);
+        const auto kind = actor->kind;
+        auto edit = [&](const char* label, int field, float speed, float minimum, float maximum, const char* format) {
+            auto local = scene.world.Find(actorId)->local;
+            auto* values = field == 0 ? &local.position.x : field == 1 ? &local.rotationDegrees.x : &local.scale.x;
+            EditorWidgets::EditLifecycle lifecycle;
+            const bool changed = EditorWidgets::DragVector3(label,values,speed,minimum,maximum,format,&lifecycle);
+            if (history && lifecycle.activated) history->Finish(scene.world);
+            if (history && (lifecycle.activated || changed))
+                history->Begin(scene.world,actorId,EditorEditKind::Transform,label);
+            if (changed) scene.world.SetLocal(actorId,local,m_Error);
+            if (history && lifecycle.deactivated && !lifecycle.active) history->Finish(scene.world);
+        };
+        edit("Position (m)",0,0.005f,0,0,"%.3f");
+        edit("Rotation (deg)",1,0.5f,0,0,"%.3f");
+        if (kind == ActorKind::Empty || kind == ActorKind::Model)
+            edit("Scale",2,0.001f,0.001f,1000,"%.4f");
     }
     if (!m_Error.empty())
         ImGui::TextWrapped("%s", m_Error.c_str());

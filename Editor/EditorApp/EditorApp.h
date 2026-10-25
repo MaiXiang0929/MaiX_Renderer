@@ -22,6 +22,7 @@
 #include "Engine/Runtime/Scene/SceneLight.h"
 #include "Engine/Runtime/Scene/SceneModel.h"
 #include "Editor/Session/EditorSelection.h"
+#include "Editor/Session/EditorHistory.h"
 #include "Editor/Session/EditorMaterialSelection.h"
 #include "Editor/Session/EditorTheme.h"
 #include "Engine/Rendering/Renderer/Resources/RenderResourceHandle.h"
@@ -109,6 +110,8 @@ private:
 
 
     EditorSelection m_EditorSelection;
+    EditorHistory m_History;
+    bool m_MainLightDrag = false;
     // IDs survive model-vector reallocation; resolved once when the viewport is valid.
     EditorSelection m_PendingFocusSelection;
     EditorMaterialSelection m_MaterialSelection;
@@ -157,6 +160,11 @@ private:
     void Render();
     void UpdateAppearance();
     void DrawSceneFileMenu();
+    void DrawEditMenu();
+    void HandleHistoryShortcuts();
+    bool HistoryInputReady() const;
+    void ReplayHistory(bool redo);
+    void InvalidateEditorHistory(const char* reason);
     void HandleSceneFileActions(void* nativeWindowHandle);
     bool SaveSceneFile(bool saveAs, void* nativeWindowHandle);
     bool OpenSceneFile(const std::filesystem::path& path);
