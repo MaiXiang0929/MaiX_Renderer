@@ -3,6 +3,36 @@
 #include "lodepng.h"
 #include <iostream>
 #include <limits>
+#include <stdexcept>
+
+void Texture2D::SetSource(std::filesystem::path path, std::uint64_t embeddedId)
+{
+    if (path.empty())
+    {
+        m_SourcePath.clear();
+        m_EmbeddedId = 0;
+        m_ReconstructionSource.reset();
+        return;
+    }
+    AssetImport::TextureSource source;
+    source.image = {std::move(path), embeddedId};
+    SetReconstructionSource(source);
+}
+
+void Texture2D::SetReconstructionSource(const AssetImport::TextureSource& source)
+{
+    std::string error;
+    if (!AssetImport::ValidateTextureSource(source, error))
+        throw std::invalid_argument("Invalid texture reconstruction source: " + error);
+    // Stage all allocating copies before replacing the current provenance.
+    AssetImport::TextureSource candidate = source;
+    std::filesystem::path directPath = source.kind == AssetImport::TextureSourceKind::Orm
+        ? std::filesystem::path{} : source.image.path;
+    const auto embeddedId = source.kind == AssetImport::TextureSourceKind::Orm ? 0 : source.image.embeddedId;
+    m_ReconstructionSource = std::move(candidate);
+    m_SourcePath = std::move(directPath);
+    m_EmbeddedId = embeddedId;
+}
 Texture2D::~Texture2D()
 {
     if (!m_DeviceLifetime.expired())

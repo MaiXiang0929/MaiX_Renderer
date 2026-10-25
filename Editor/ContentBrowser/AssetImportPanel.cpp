@@ -88,6 +88,12 @@ void AssetImportPanel::Draw(void* nativeWindowHandle)
     const bool busy = m_Status == Status::Parsing ||
         m_Status == Status::AwaitingCommit;
     ImGui::BeginDisabled(busy);
+    int normalConvention = m_FlipNormalGreen ? 1 : 0;
+    if (ImGui::Combo("Normal Y", &normalConvention,
+            "OpenGL (+Y)\0DirectX (-Y, flip green)\0"))
+        m_FlipNormalGreen = normalConvention != 0;
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Source tangent-space normal convention. DirectX flips green during import.");
     if (ImGui::Button("Import FBX..."))
         SelectModel(nativeWindowHandle);
     ImGui::EndDisabled();
@@ -213,9 +219,11 @@ void AssetImportPanel::BeginImport(const std::filesystem::path& path)
     m_Status = Status::Parsing;
     try
     {
+        AssetImport::FbxImportOptions options;
+        options.flipNormalGreen = m_FlipNormalGreen;
         m_ImportFuture = std::async(
             std::launch::async,
-            [path]() { return AssetImport::FbxModelImporter::Import(path); });
+            [path, options]() { return AssetImport::FbxModelImporter::Import(path, options); });
     }
     catch (const std::exception& exception)
     {

@@ -167,6 +167,7 @@ bool Renderer::GetMaterialSnapshot(MaterialHandle handle, MaterialSnapshot& snap
         snapshot.textureSources[i] = material.GetTextureSource(slot);
         snapshot.textureFiles[i] = texture ? texture->SourcePath() : std::filesystem::path{};
         snapshot.embeddedTextureIds[i] = texture ? texture->EmbeddedId() : 0;
+        snapshot.textureRecipes[i] = texture ? texture->ReconstructionSource() : std::nullopt;
         if (entry->instance) snapshot.textureModes[i] = entry->instance->textures[i].mode;
     }
     return true;

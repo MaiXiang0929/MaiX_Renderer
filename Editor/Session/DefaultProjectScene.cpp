@@ -25,12 +25,19 @@ bool BuildDefaultProjectScene(const std::filesystem::path& engineAssets,SceneDoc
             {
                 SceneMaterialRecord m; m.id=d.materials.size()+1; m.name=imported.name;
                 m.properties.baseColor=entry->baseColor; m.properties.roughness=entry->roughness;
-                if(imported.baseColorTexture!=AssetImport::InvalidImportedTextureIndex)
-                {
-                    const auto& image=result.model.textures.at(imported.baseColorTexture);
-                    auto& t=m.textures[0]; t.source=MakeSceneAssetPath(image.embedded?file:image.sourcePath,{{},engineAssets,{}});
-                    t.embeddedId=image.embedded?image.sourceId:0;
-                }
+                m.properties.metallic=imported.metallic; m.properties.ambientOcclusion=imported.ambientOcclusion;
+                m.properties.opacity=imported.opacity;
+                const auto texture=[&](std::uint32_t index,MaterialTextureSlot slot) {
+                    if(index==AssetImport::InvalidImportedTextureIndex) return;
+                    const auto& image=result.model.textures.at(index);
+                    AssetImport::TextureSource source;
+                    if(image.reconstruction) source=*image.reconstruction;
+                    else source.image={image.embedded?file:image.sourcePath,image.embedded?image.sourceId:0};
+                    m.textures[ToIndex(slot)]=MakeSceneTextureRecord(source,{{},engineAssets,{}});
+                };
+                texture(imported.baseColorTexture,MaterialTextureSlot::BaseColor);
+                texture(imported.normalTexture,MaterialTextureSlot::Normal);
+                texture(imported.ormTexture,MaterialTextureSlot::OcclusionRoughnessMetallic);
                 d.materials.push_back(std::move(m));
             }
             for(const auto& mesh:result.model.meshes)

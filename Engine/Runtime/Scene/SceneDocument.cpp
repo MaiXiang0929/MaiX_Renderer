@@ -68,6 +68,76 @@ void CheckAsset(const SceneAssetPath& p)
         for (const auto& part:path) Check(part!="..", "Asset path escapes its root.");
     }
 }
+void CheckTextureImage(const SceneAssetPath& source,std::uint64_t embeddedId)
+{
+    CheckAsset(source);
+    auto extension=std::filesystem::u8path(source.path).extension().u8string();
+    std::transform(extension.begin(),extension.end(),extension.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
+    Check(embeddedId==0 || extension==".fbx","Embedded texture source must be an FBX file.");
+}
+void CheckTexture(const SceneTextureRecord& t)
+{
+    if (t.source) CheckTextureImage(*t.source,t.embeddedId);
+    Check(t.embeddedId==0 || t.source.has_value(),"Embedded texture needs its source FBX.");
+    if (!t.recipe) return;
+    const auto& r=*t.recipe;
+    if (r.kind==SceneTextureRecipeKind::Normal)
+    {
+        Check(t.source.has_value(),"Normal reconstruction needs a source image.");
+        Check(r.width==0&&r.height==0,"Normal reconstruction cannot have output dimensions.");
+        for (const auto& input:r.ormInputs) Check(!input,"Normal reconstruction cannot have ORM inputs.");
+    }
+    else
+    {
+        Check(r.kind==SceneTextureRecipeKind::Orm,"Unknown texture reconstruction kind.");
+        Check(!t.source&&t.embeddedId==0&&!r.flipGreen,"ORM reconstruction cannot have a direct image or normal options.");
+        Check(r.width>0&&r.height>0&&r.width<=16384&&r.height<=16384&&
+            static_cast<std::uint64_t>(r.width)*r.height<=64ull*1024*1024,"Invalid ORM reconstruction dimensions.");
+        bool any=false;
+        for (const auto& input:r.ormInputs) if (input)
+        {
+            any=true; CheckTextureImage(input->source,input->embeddedId);
+            Check(input->channel<=3,"Invalid ORM source channel.");
+        }
+        Check(any,"ORM reconstruction has no inputs.");
+    }
+}
+bool HasTexture(const SceneTextureRecord& t) { return t.source.has_value()||t.recipe.has_value(); }
+J RecipeJson(const SceneTextureRecipe& r)
+{
+    if (r.kind==SceneTextureRecipeKind::Normal) return {{"kind","normal"},{"flipGreen",r.flipGreen}};
+    J inputs=J::array();
+    for (const auto& input:r.ormInputs)
+        inputs.push_back(input?J{{"source",Asset(input->source)},{"embeddedId",input->embeddedId},{"channel",input->channel}}:J(nullptr));
+    return {{"kind","orm"},{"inputs",inputs},{"width",r.width},{"height",r.height}};
+}
+SceneTextureRecipe ReadRecipe(const J& j)
+{
+    Check(j.is_object(),"Texture recipe must be an object.");
+    const auto kind=j.at("kind").get<std::string>();
+    SceneTextureRecipe r;
+    if (kind=="normal")
+    {
+        Fields(j,{"kind","flipGreen"});
+        r.kind=SceneTextureRecipeKind::Normal; r.flipGreen=j.at("flipGreen").get<bool>();
+    }
+    else
+    {
+        Check(kind=="orm","Unknown texture reconstruction kind.");
+        Fields(j,{"kind","inputs","width","height"}); r.kind=SceneTextureRecipeKind::Orm;
+        const auto width=Key(j.at("width")),height=Key(j.at("height"));
+        Check(width<=16384&&height<=16384,"Invalid ORM reconstruction dimensions.");
+        r.width=static_cast<unsigned>(width); r.height=static_cast<unsigned>(height);
+        const auto& inputs=j.at("inputs"); Check(inputs.is_array()&&inputs.size()==3,"ORM reconstruction requires three input slots.");
+        for (size_t i=0;i<3;++i) if (!inputs[i].is_null())
+        {
+            const auto& input=inputs[i]; Fields(input,{"source","embeddedId","channel"});
+            const auto channel=Key(input.at("channel")); Check(channel<=3,"Invalid ORM source channel.");
+            r.ormInputs[i]=SceneTextureChannelInput{ReadAsset(input.at("source")),Key(input.at("embeddedId")),static_cast<unsigned>(channel)};
+        }
+    }
+    return r;
+}
 #define SCENE_FLOATS(X) X(shininess) X(environmentReflectivity) X(metallic) X(roughness) \
     X(ambientOcclusion) X(normalScale) X(opacity) X(toonThreshold) X(toonShadowStrength) \
     X(rimLightStrength) X(faceShadowSoftness) X(outlineThickness)
@@ -184,13 +254,16 @@ bool ValidateSceneDocument(const SceneDocument& d, std::string& error)
 #define CHECK_VEC(field) Check(Finite(m.properties.field),"Non-finite material vector.");
             SCENE_VECTORS(CHECK_VEC)
 #undef CHECK_VEC
-            for (const auto& t:m.textures)
+            for (size_t slot=0;slot<m.textures.size();++slot)
             {
+                const auto& t=m.textures[slot];
                 Check(static_cast<int>(t.mode)>=0 && static_cast<int>(t.mode)<=2,"Invalid texture override mode.");
-                if (t.source) CheckAsset(*t.source);
-                Check(t.embeddedId==0 || t.source.has_value(),"Embedded texture needs its source FBX.");
-                Check(t.mode!=TextureOverrideMode::Replace || t.source.has_value(),"Replacement texture has no source.");
-                Check(!m.parent || t.mode==TextureOverrideMode::Replace || !t.source,"Inherited/disabled texture must not have its own source.");
+                CheckTexture(t);
+                if (t.recipe) Check((t.recipe->kind==SceneTextureRecipeKind::Normal&&slot==ToIndex(MaterialTextureSlot::Normal))||
+                    (t.recipe->kind==SceneTextureRecipeKind::Orm&&slot==ToIndex(MaterialTextureSlot::OcclusionRoughnessMetallic)),
+                    "Texture reconstruction kind does not match its material slot.");
+                Check(t.mode!=TextureOverrideMode::Replace || HasTexture(t),"Replacement texture has no source.");
+                Check(!m.parent || t.mode==TextureOverrideMode::Replace || !HasTexture(t),"Inherited/disabled texture must not have its own source.");
                 Check(m.parent || t.mode==TextureOverrideMode::Inherit,"Base material cannot contain texture overrides.");
             }
         }
@@ -261,7 +334,7 @@ bool EncodeSceneDocument(const SceneDocument& d,std::string& text,std::string& e
     if (!ValidateSceneDocument(d,error)) return false;
     try
     {
-        J j={{"format","MaiX Scene"},{"version",4},{"actors",J::array()},{"materials",J::array()},
+        J j={{"format","MaiX Scene"},{"version",5},{"actors",J::array()},{"materials",J::array()},
             {"defaultModel",d.defaultModel},{"mainLight",d.mainLight},{"reflectionGroundEnabled",d.reflectionGroundEnabled},
             {"groundY",d.groundY},{"modelDiameter",d.modelDiameter},{"sceneRadius",d.sceneRadius},
             {"defaultBoundsMin",Vec(d.defaultBoundsMin)},{"defaultBoundsMax",Vec(d.defaultBoundsMax)},{"objCenter",Vec(d.objCenter)}};
@@ -279,8 +352,12 @@ bool EncodeSceneDocument(const SceneDocument& d,std::string& text,std::string& e
             J value={{"id",m.id},{"parent",m.parent},{"name",m.name},{"properties",Properties(m.properties)},
                 {"overrides",m.overrides.to_string()},{"blend",static_cast<int>(m.blend)},{"textures",J::array()}};
             for (const auto& t:m.textures)
-                value["textures"].push_back({{"mode",static_cast<int>(t.mode)},
-                    {"source",t.source?Asset(*t.source):J(nullptr)},{"embeddedId",t.embeddedId}});
+            {
+                J texture={{"mode",static_cast<int>(t.mode)},
+                    {"source",t.source?Asset(*t.source):J(nullptr)},{"embeddedId",t.embeddedId}};
+                if (t.recipe) texture["recipe"]=RecipeJson(*t.recipe);
+                value["textures"].push_back(std::move(texture));
+            }
             j["materials"].push_back(std::move(value));
         }
         for (const auto& a:d.actors)
@@ -333,7 +410,7 @@ bool DecodeSceneDocument(const std::string& text,SceneDocument& output,std::stri
         Fields(j,{"format","version","actors","materials","defaultModel","mainLight","reflectionGroundEnabled","groundY",
             "modelDiameter","sceneRadius","defaultBoundsMin","defaultBoundsMax","objCenter","postProcess","environment","shadows"});
         const auto version=Key(j.at("version"));
-        Check(j.at("format")=="MaiX Scene"&&(version>=1&&version<=4),"Unsupported scene format/version.");
+        Check(j.at("format")=="MaiX Scene"&&(version>=1&&version<=5),"Unsupported scene format/version.");
         SceneDocument d;
         if (version>=3)
         {
@@ -389,11 +466,13 @@ bool DecodeSceneDocument(const std::string& text,SceneDocument& output,std::stri
             const auto& ts=v.at("textures"); Check(ts.is_array()&&ts.size()==MaterialTextureSlotCount,"Invalid texture slots.");
             for (size_t i=0;i<ts.size();++i)
             {
-                Fields(ts[i],{"mode","source","embeddedId"});
+                if (version>=5) Fields(ts[i],{"mode","source","embeddedId","recipe"});
+                else Fields(ts[i],{"mode","source","embeddedId"});
                 const auto mode=Key(ts[i].at("mode")); Check(mode<=2,"Invalid texture override mode.");
                 auto& t=m.textures[i]; t.mode=static_cast<TextureOverrideMode>(mode);
                 if (!ts[i].at("source").is_null()) t.source=ReadAsset(ts[i].at("source"));
                 t.embeddedId=Key(ts[i].at("embeddedId"));
+                if (ts[i].contains("recipe")) t.recipe=ReadRecipe(ts[i].at("recipe"));
             }
             d.materials.push_back(std::move(m));
         }
@@ -486,4 +565,52 @@ std::filesystem::path ResolveSceneAssetPath(const SceneAssetPath& ref,const Scen
     const auto root=std::filesystem::weakly_canonical(std::filesystem::absolute(rootPath));
     const auto result=std::filesystem::weakly_canonical(root/relative);
     Check(Under(result,root),"Asset path resolves outside its root."); return result;
+}
+
+SceneTextureRecord MakeSceneTextureRecord(const AssetImport::TextureSource& source,const SceneAssetRoots& roots)
+{
+    std::string error;
+    if (!AssetImport::ValidateTextureSource(source,error)) throw std::runtime_error(error);
+    SceneTextureRecord result;
+    if (source.kind!=AssetImport::TextureSourceKind::Orm)
+    {
+        result.source=MakeSceneAssetPath(source.image.path,roots); result.embeddedId=source.image.embeddedId;
+        if (source.kind==AssetImport::TextureSourceKind::Normal)
+        { result.recipe.emplace(); result.recipe->flipGreen=source.flipGreen; }
+    }
+    else
+    {
+        result.recipe.emplace(); auto& r=*result.recipe; r.kind=SceneTextureRecipeKind::Orm;
+        r.width=source.width; r.height=source.height;
+        for (size_t i=0;i<3;++i) if (source.ormInputs[i])
+        {
+            const auto& input=*source.ormInputs[i];
+            r.ormInputs[i]=SceneTextureChannelInput{MakeSceneAssetPath(input.image.path,roots),input.image.embeddedId,input.channel};
+        }
+    }
+    CheckTexture(result); return result;
+}
+AssetImport::TextureSource ResolveSceneTextureSource(const SceneTextureRecord& record,const SceneAssetRoots& roots)
+{
+    CheckTexture(record); Check(HasTexture(record),"Texture has no reconstruction source.");
+    AssetImport::TextureSource result;
+    if (!record.recipe || record.recipe->kind==SceneTextureRecipeKind::Normal)
+    {
+        result.image={ResolveSceneAssetPath(*record.source,roots),record.embeddedId};
+        if (record.recipe)
+        { result.kind=AssetImport::TextureSourceKind::Normal; result.flipGreen=record.recipe->flipGreen; }
+    }
+    else
+    {
+        const auto& r=*record.recipe; result.kind=AssetImport::TextureSourceKind::Orm;
+        result.width=r.width; result.height=r.height;
+        for (size_t i=0;i<3;++i) if (r.ormInputs[i])
+        {
+            const auto& input=*r.ormInputs[i];
+            result.ormInputs[i]=AssetImport::TextureChannelInput{{ResolveSceneAssetPath(input.source,roots),input.embeddedId},input.channel};
+        }
+    }
+    std::string error;
+    if (!AssetImport::ValidateTextureSource(result,error)) throw std::runtime_error(error);
+    return result;
 }

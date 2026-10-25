@@ -133,7 +133,7 @@ bool MaterialResourceStore::UpdateTexture(MaterialHandle h, MaterialTextureSlot 
     const auto* entry = Get(h);
     const auto index = ToIndex(slot);
     if (!entry || index >= MaterialTextureSlotCount || !texture || !texture->IsValid() ||
-        texture->GetColorSpace() != GetRequiredMaterialTextureColorSpace(slot)) return false;
+        !Material::IsTextureCompatible(slot, *texture)) return false;
     if (entry->instance)
     {
         auto candidate = *entry->instance;

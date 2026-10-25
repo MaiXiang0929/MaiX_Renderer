@@ -38,6 +38,7 @@ target_link_directories(MaiXPlatform PUBLIC ${THIRD_PARTY_DIR}/glfw/lib-vc2022)
 target_link_libraries(MaiXPlatform PUBLIC MaiXCore MaiXGL glfw3.lib PRIVATE ole32.lib shell32.lib)
 
 add_library(MaiXAsset STATIC Engine/Asset/Importer/ImageLoader.cpp
+    Engine/Asset/Importer/TextureSource.cpp
     Engine/Asset/Importer/FbxModelImporter.cpp ThirdParty/ufbx/ufbx.c)
 target_include_directories(MaiXAsset PRIVATE ${THIRD_PARTY_DIR}/stb ${THIRD_PARTY_DIR}/ufbx)
 target_compile_options(MaiXAsset PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
@@ -49,7 +50,7 @@ add_library(MaiXRuntime STATIC Engine/Runtime/Component/Camera.cpp
     Engine/Runtime/Scene/SceneModel.cpp Engine/Runtime/Scene/SceneLight.cpp Engine/Runtime/Scene/World.cpp
     Engine/Runtime/Engine/ApplicationOptions.cpp Engine/Runtime/Scene/SceneDocument.cpp
     Engine/Runtime/Scene/SceneDocumentFiles.cpp)
-target_link_libraries(MaiXRuntime PUBLIC MaiXCore)
+target_link_libraries(MaiXRuntime PUBLIC MaiXCore MaiXAsset)
 target_compile_options(MaiXRuntime PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
 
 # Shared diagnostics are below both command execution and renderer orchestration.

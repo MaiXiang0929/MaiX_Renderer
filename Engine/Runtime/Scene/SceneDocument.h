@@ -6,6 +6,7 @@
 #include "Engine/Rendering/Material/MaterialProperties.h"
 #include "Engine/Rendering/Renderer/Scene/LightSceneProxy.h"
 #include "Engine/Rendering/Renderer/Pipeline/RenderSettings.h"
+#include "Engine/Asset/Importer/TextureSource.h"
 #include <filesystem>
 #include <array>
 #include <optional>
@@ -20,11 +21,26 @@ struct SceneAssetRoots
 {
     std::filesystem::path projectAssets, engineAssets, engineSourceAssets;
 };
+struct SceneTextureChannelInput
+{
+    SceneAssetPath source;
+    std::uint64_t embeddedId = 0;
+    unsigned channel = 0;
+};
+enum class SceneTextureRecipeKind { Normal, Orm };
+struct SceneTextureRecipe
+{
+    SceneTextureRecipeKind kind = SceneTextureRecipeKind::Normal;
+    bool flipGreen = false;
+    std::array<std::optional<SceneTextureChannelInput>,3> ormInputs;
+    unsigned width = 0, height = 0;
+};
 struct SceneTextureRecord
 {
     TextureOverrideMode mode = TextureOverrideMode::Inherit;
     std::optional<SceneAssetPath> source;
     std::uint64_t embeddedId = 0; // Stable source identity; zero denotes a standalone image.
+    std::optional<SceneTextureRecipe> recipe;
 };
 struct SceneMaterialRecord
 {
@@ -84,3 +100,6 @@ bool ReadSceneDocument(const std::filesystem::path&, SceneDocument&, std::string
 bool WriteSceneDocument(const std::filesystem::path&, const SceneDocument&, std::string& error, bool overwrite = true);
 SceneAssetPath MakeSceneAssetPath(const std::filesystem::path&, const SceneAssetRoots&);
 std::filesystem::path ResolveSceneAssetPath(const SceneAssetPath&, const SceneAssetRoots&);
+// Convert every reconstruction dependency through the explicit project/engine/external roots.
+SceneTextureRecord MakeSceneTextureRecord(const AssetImport::TextureSource&, const SceneAssetRoots&);
+AssetImport::TextureSource ResolveSceneTextureSource(const SceneTextureRecord&, const SceneAssetRoots&);

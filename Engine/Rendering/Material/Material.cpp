@@ -170,6 +170,21 @@ void Material::Bind(Shader& shader, unsigned int firstTextureUnit) const
     BindDisplacement(shader, displacementUnit);
 }
 
+bool Material::IsTextureCompatible(MaterialTextureSlot slot, const Texture2D& texture)
+{
+    if (ToIndex(slot) >= MaterialTextureSlotCount ||
+        texture.GetColorSpace() != GetRequiredMaterialTextureColorSpace(slot))
+        return false;
+    if (texture.ReconstructionSource())
+    {
+        const auto kind = texture.ReconstructionSource()->kind;
+        if ((kind == AssetImport::TextureSourceKind::Normal && slot != MaterialTextureSlot::Normal) ||
+            (kind == AssetImport::TextureSourceKind::Orm && slot != MaterialTextureSlot::OcclusionRoughnessMetallic))
+            return false;
+    }
+    return true;
+}
+
 bool Material::SetTexture(
     MaterialTextureSlot slot,
     std::shared_ptr<Texture2D> texture,
@@ -178,12 +193,11 @@ bool Material::SetTexture(
     const std::size_t slotIndex = ToIndex(slot);
     if (slotIndex >= MaterialTextureSlotCount)
         return false;
-    if (texture && texture->GetColorSpace() !=
-        GetRequiredMaterialTextureColorSpace(slot))
+    if (texture && !IsTextureCompatible(slot, *texture))
     {
         std::cerr
             << "[Material] Rejected " << GetSlotName(slot)
-            << " texture with incompatible color space."
+            << " texture with incompatible role or color space."
             << std::endl;
         return false;
     }

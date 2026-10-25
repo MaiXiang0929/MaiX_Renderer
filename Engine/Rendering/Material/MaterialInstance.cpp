@@ -34,7 +34,7 @@ MaterialProperties SanitizeMaterialProperties(const MaterialProperties& properti
 {
     MaterialProperties clamped = properties;
     clamped.metallic = std::clamp(clamped.metallic, 0.0f, 1.0f);
-    clamped.roughness = std::clamp(clamped.roughness, 0.045f, 1.0f);
+    clamped.roughness = std::clamp(clamped.roughness, 0.0f, 1.0f);
     clamped.ambientOcclusion = std::clamp(clamped.ambientOcclusion, 0.0f, 1.0f);
     clamped.normalScale = std::clamp(clamped.normalScale, 0.0f, 4.0f);
     clamped.alphaCutoff = std::isfinite(clamped.alphaCutoff) ? std::clamp(clamped.alphaCutoff, 0.0f, 1.0f) : 0.5f;

@@ -43,6 +43,7 @@ public:
         std::array<std::string, MaterialTextureSlotCount> textureSources{};
         std::array<std::filesystem::path, MaterialTextureSlotCount> textureFiles{};
         std::array<std::uint64_t, MaterialTextureSlotCount> embeddedTextureIds{};
+        std::array<std::optional<AssetImport::TextureSource>, MaterialTextureSlotCount> textureRecipes{};
     };
 
     struct StatisticsSnapshot
