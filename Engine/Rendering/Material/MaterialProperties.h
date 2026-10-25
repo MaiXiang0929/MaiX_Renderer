@@ -6,10 +6,10 @@
 
 struct MaterialProperties
 {
-    cy::Vec3f baseColor{ 1.0f, 1.0f, 1.0f };
+    cy::Vec3f baseColor{ 1.0f, 1.0f, 1.0f }; // Linear reflectance; picker displays sRGB.
     cy::Vec3f specularColor{ 1.0f, 1.0f, 1.0f };
     float shininess = 64.0f;
-    float environmentReflectivity = 0.5f;
+    float environmentReflectivity = 1.0f; // Artistic IBL specular multiplier; not F0 or IOR.
 
     // Cook-Torrance metallic-roughness inputs consumed by the forward shader.
     float metallic = 0.0f;

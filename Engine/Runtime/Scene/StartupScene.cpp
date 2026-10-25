@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "Engine/Runtime/Scene/StartupScene.h"
+#include "Engine/Core/Math/ColorSpace.h"
 #include "StartupSceneEmbedded.h"
 #include "nlohmann/json.hpp"
 #include <cmath>
@@ -49,6 +50,7 @@ StartupModelDefinition Model(const Json& value)
         model.transform.scale.z < 0.001f || model.transform.scale.Max() > 1000 ||
         !ValidColor(model.baseColor) || model.roughness < 0.045f || model.roughness > 1)
         throw std::runtime_error("Invalid startup model parameters");
+    model.baseColor = LegacyBaseColorToLinear(model.baseColor);
     return model;
 }
 } // namespace

@@ -32,6 +32,7 @@ struct ImportedTextureData
 struct ImportedMaterialData
 {
     std::string name;
+    // Numeric FBX reflectance coefficient, treated as linear (not an image texel).
     cy::Vec3f baseColor{ 1.0f, 1.0f, 1.0f };
     float metallic = 0.0f;
     float roughness = 0.5f;

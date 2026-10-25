@@ -12,6 +12,8 @@ MaiX_Renderer 当前是一个基于 C++17 与 OpenGL 4.0 Core Profile 的实时�
 
 - 使用 Cook-Torrance metallic/roughness BRDF，支持 Base Color、Normal、ORM 和 Displacement 纹理。ORM 通道约定为 R=AO、G=Roughness、B=Metallic。
 - 对颜色纹理与数据纹理分别使用 sRGB/Linear 语义；标准网格、Instancing 和 Tessellation/Displacement 路径共用 PBR 光照。
+- Base Color 数值因子在 CPU 和场景 v6 中为线性反射率，Material Editor 的 `Base Color (sRGB)` 在编辑边界转换；Base Color 图片由 GPU sRGB 采样解码，Normal/ORM 保持 Linear。新导入 FBX 的数值因子按线性系数使用。v1–v5 场景加载时仅对 Base Color 因子执行一次原 gamma 2.2 转换，保持旧场景外观；内置旧示例颜色也在 CPU 转换。
+- `Dielectric F0 Multiplier` 沿用旧 Specular Color 的线性倍率语义，白色对应非金属 F0=0.04，金属使用 Base Color。`Environment Reflectivity` 仅是 IBL 镜面倍率，新材质默认 1；旧场景保留保存值。这些参数不采用 UE Specular 的数值映射。
 - 环境加载时由 GPU 生成漫反射辐照度、GGX 粗糙度预过滤 Cubemap 与 BRDF LUT；主视图、平面反射及透明 PBR 共用 IBL，浮点环境资源与反射结果由最终后处理统一曝光和色调映射。
 - 材质支持 Front、Back、Double 与 Legacy 面模式；新材质默认 Front，实例继承父材质。主视图、反射、透明和阴影统一处理剔除及负缩放绕序，Double 背面使用翻转后的完整法线贴图法线。
 - `--material-lab` 使用共享 Mesh 展示铜、塑料、陶瓷和粗糙金属四种材质。Material Editor 可在运行时修改材质参数与纹理。
@@ -149,6 +151,12 @@ Scene 显示实际对象层级。`Create Empty` 创建组合根节点；把模�
 
 选中灯光后，Inspector 的 Type 切换类型，保留对象身份、层级、变换及参数，Cast Shadow 保持原值。三种灯光均支持投影；Shadow bias / Normal bias 以接收位置的阴影纹素为单位。方向光提供 Cascades（1/2/4）、Shadow distance 和 Split lambda。Set as Main Light 指定默认 NPR Key Light 并给予阴影分配优先级，Scene 树以 (main light) 标识；其他灯也能独立投影。删除主灯后不自动指定已有灯，仍可显式指定或创建新灯。参数与主灯选择随场景保存并参与未保存检测。
 
+Inspector 的 `Intensity Model` 可选 `Legacy` / `Physical`。Legacy 保留原来的无单位强度与范围衰减；Physical 的 Point/Spot 强度以坎德拉（cd）表示，按米使用平方反比衰减和光滑 Range 截止，0.01 米内限制衰减以避免点光源奇点；Directional 以 lux 表示，不使用距离衰减。Physical 强度范围 0–1,000,000，Range 支持 0.01–100,000 米；这些是参数合法范围，不代表地图规模支持。切换模式或类型保留强度数字，需要重新布光。灯光颜色以线性值保存，`Color (sRGB)` 在拾色边界转换。
+
+Scene 菜单新建灯默认 Physical：局部灯 100 cd、方向光 1 lux。内置启动灯及 v1–v5 场景保留 Legacy，v6 显式保存模式。PBR 与 Toon 共用灯光模式，旧 Toon 的 Legacy 衰减不变。手动曝光继续由场景控制；HDR 环境图片未做绝对亮度标定，当前不承诺与其他引擎数值或画面一致。
+
+PBR 阶段一画面检查（待用户验收）：用 `MaiX_Renderer.exe --material-lab` 检查材质颜色与高光；创建 Point/Spot，切换 Physical 并移动灯光，确认随距离变暗、范围边缘平滑。对照 Legacy 和旧场景，检查实例、透明与镜面反射；保存重开应保持颜色和模式。旧版程序不支持新保存的 v6 场景。
+
 聚光灯操作：Create Light → Spot，确认 Cast Shadow 开启；在 Render Settings → Shadows 开启 Multiple shadow lights 后，非主灯也能投影。通过 Rotation 将局部 -Z 对准模型，调整 Range 和 Inner Cone / Outer Cone（半角）。点光源需手动开启 Cast Shadow；旋转点光源不改变六面全向投影。方向光选择 2/4 Cascades，再调整 Shadow distance 和 Split lambda。
 
 完整阴影验收建议：
@@ -175,7 +183,7 @@ Material Editor 默认跟随所选模型，显示所属模型名称和材质列�
 
 `Surface Side` 在基础材质中选择，实例通过 `Edit Parent` 修改并随父材质更新：Front 只绘制正面，Back 只绘制背面并翻转光照法线，Double 绘制两面且背面翻转完整法线，Legacy 保留旧版两面可见但不翻转法线的行为。负缩放和镜面反射会修正逻辑正反面；同一材质的正负缩放实例按绕序分批。阴影使用同一面规则，Double 薄片两面都能投影；Masked 的孔洞继续一致裁剪。Front/Legacy 支持已有 Inverted Hull 描边，Back/Double 暂停描边并在面板提示；位移仍沿原始顶点法线。
 
-材质面模式验收：导入一张带 UV/法线贴图的薄片，在 Material Editor 依次切换 Front、Back、Double，绕到背面检查显隐与受光；把模型 X 缩放设为负值，再检查一次。开启灯光 Cast Shadow，对照地面阴影和 Masked 孔洞；在镜面场景检查反射。创建实例后通过 Edit Parent 改面模式，确认两者同步，保存并重开核对模式。旧场景应显示 Legacy，切换后再保存为 v4。材质面模式与双面光照的视觉、交互已由用户验收。
+材质面模式验收：导入一张带 UV/法线贴图的薄片，在 Material Editor 依次切换 Front、Back、Double，绕到背面检查显隐与受光；把模型 X 缩放设为负值，再检查一次。开启灯光 Cast Shadow，对照地面阴影和 Masked 孔洞；在镜面场景检查反射。创建实例后通过 Edit Parent 改面模式，确认两者同步，保存并重开核对模式。旧场景应显示 Legacy，切换后保存为当前格式版本。材质面模式与双面光照的视觉、交互已由用户验收。
 
 
 `File → Asset Import` 打开导入面板，先选择 `Normal Y`：默认 `OpenGL (+Y)` 保留原图绿色通道，`DirectX (-Y, flip green)` 在 CPU 处理时翻转绿色，再点击 `Import FBX...`。File 菜单导入和 Content Browser 双击使用当前选项；已导入对象不随选项变化而重处理。FBX 用于图片寻址的 V 翻转保留作者的切线法线基方向；Normal 使用 Linear，Base Color 使用 sRGB；同一图片用于颜色与数据时创建对应 GPU 格式。Material Editor 的纹理区显示 `Sampling`、Normal 转换，以及 `Generated ORM` 的输入文件/内嵌身份、通道和输出尺寸。

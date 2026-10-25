@@ -88,6 +88,9 @@ LightUploadData BuildLightUploadData(
             light.castsShadow ? 1.0f : 0.0f,
             -1.0f
         };
+        gpuLight.attenuationParameters = {
+            static_cast<float>(light.falloff),
+            MinimumPhysicalLightDistance * MinimumPhysicalLightDistance, 0.0f, 0.0f};
 
         if (shadowFrame && light.castsShadow)
         {

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "Engine/Runtime/Scene/SceneDocument.h"
+#include "Engine/Core/Math/ColorSpace.h"
 #include "nlohmann/json.hpp"
 #include <cmath>
 #include <algorithm>
@@ -181,6 +182,7 @@ MaterialProperties ReadProperties(const J& j, std::uint64_t version)
 #define GET_VEC(field) p.field=Vector(j.at(#field));
     SCENE_VECTORS(GET_VEC)
 #undef GET_VEC
+    if (version < 6) p.baseColor = LegacyBaseColorToLinear(p.baseColor);
     if (j.contains("alphaCutoff")) p.alphaCutoff=Number(j.at("alphaCutoff"));
     const auto shading=Key(j.at("shadingModel")); Check(shading<=1,"Unknown shading model.");
     p.shadingModel=static_cast<ShadingModel>(shading);
@@ -301,8 +303,7 @@ bool ValidateSceneDocument(const SceneDocument& d, std::string& error)
                 const auto& l=*a.light;
                 Check(static_cast<int>(l.type)>=0&&static_cast<int>(l.type)<=2,"Invalid light type.");
                 Check(IsValidLightShadowSettings(l),"Invalid light shadow settings.");
-                Check(Finite(l.color)&&l.color.x>=0&&l.color.y>=0&&l.color.z>=0,"Invalid light color.");
-                Check(std::isfinite(l.intensity)&&l.intensity>=0&&std::isfinite(l.range)&&l.range>0,"Invalid light intensity/range.");
+                Check(IsValidLightPhotometry(l),"Invalid light falloff, intensity, color or range.");
                 Check(std::isfinite(l.innerConeAngle)&&std::isfinite(l.outerConeAngle)&&l.innerConeAngle>=0&&l.outerConeAngle>0&&l.innerConeAngle<=l.outerConeAngle&&l.outerConeAngle<1.5707964f,"Invalid spotlight cone.");
             }
             if (a.camera)
@@ -334,7 +335,7 @@ bool EncodeSceneDocument(const SceneDocument& d,std::string& text,std::string& e
     if (!ValidateSceneDocument(d,error)) return false;
     try
     {
-        J j={{"format","MaiX Scene"},{"version",5},{"actors",J::array()},{"materials",J::array()},
+        J j={{"format","MaiX Scene"},{"version",6},{"actors",J::array()},{"materials",J::array()},
             {"defaultModel",d.defaultModel},{"mainLight",d.mainLight},{"reflectionGroundEnabled",d.reflectionGroundEnabled},
             {"groundY",d.groundY},{"modelDiameter",d.modelDiameter},{"sceneRadius",d.sceneRadius},
             {"defaultBoundsMin",Vec(d.defaultBoundsMin)},{"defaultBoundsMax",Vec(d.defaultBoundsMax)},{"objCenter",Vec(d.objCenter)}};
@@ -379,6 +380,7 @@ bool EncodeSceneDocument(const SceneDocument& d,std::string& text,std::string& e
             {
                 const auto& l=*a.light;
                 value["light"]={{"type",static_cast<int>(l.type)},{"color",Vec(l.color)},{"intensity",l.intensity},{"range",l.range},
+                    {"falloff",static_cast<int>(l.falloff)},
                     {"innerConeAngle",l.innerConeAngle},{"outerConeAngle",l.outerConeAngle},{"castsShadow",l.castsShadow},
                     {"shadowBias",l.shadowBias},{"shadowNormalBias",l.shadowNormalBias},{"cascadeCount",l.cascadeCount},
                     {"shadowDistance",l.shadowDistance},{"splitLambda",l.splitLambda}};
@@ -410,7 +412,7 @@ bool DecodeSceneDocument(const std::string& text,SceneDocument& output,std::stri
         Fields(j,{"format","version","actors","materials","defaultModel","mainLight","reflectionGroundEnabled","groundY",
             "modelDiameter","sceneRadius","defaultBoundsMin","defaultBoundsMax","objCenter","postProcess","environment","shadows"});
         const auto version=Key(j.at("version"));
-        Check(j.at("format")=="MaiX Scene"&&(version>=1&&version<=5),"Unsupported scene format/version.");
+        Check(j.at("format")=="MaiX Scene"&&(version>=1&&version<=6),"Unsupported scene format/version.");
         SceneDocument d;
         if (version>=3)
         {
@@ -502,7 +504,10 @@ bool DecodeSceneDocument(const std::string& text,SceneDocument& output,std::stri
             if (v.contains("light"))
             {
                 a.light.emplace(); auto& l=*a.light; const auto& light=v.at("light");
-                if (version>=3)
+                if (version>=6)
+                    Fields(light,{"type","color","intensity","range","innerConeAngle","outerConeAngle","castsShadow",
+                        "shadowBias","shadowNormalBias","cascadeCount","shadowDistance","splitLambda","falloff"});
+                else if (version>=3)
                     Fields(light,{"type","color","intensity","range","innerConeAngle","outerConeAngle","castsShadow",
                         "shadowBias","shadowNormalBias","cascadeCount","shadowDistance","splitLambda"});
                 else Fields(light,{"type","color","intensity","range","innerConeAngle","outerConeAngle","castsShadow"});
@@ -510,6 +515,12 @@ bool DecodeSceneDocument(const std::string& text,SceneDocument& output,std::stri
                 l.color=Vector(light.at("color")); l.intensity=Number(light.at("intensity")); l.range=Number(light.at("range"));
                 l.innerConeAngle=Number(light.at("innerConeAngle")); l.outerConeAngle=Number(light.at("outerConeAngle"));
                 l.castsShadow=light.at("castsShadow").get<bool>();
+                if (version>=6)
+                {
+                    const auto falloff=Key(light.at("falloff")); Check(falloff<=1,"Invalid light falloff.");
+                    l.falloff=static_cast<LightFalloff>(falloff);
+                }
+                else l.falloff=LightFalloff::Legacy;
                 if (version>=3)
                 {
                     l.shadowBias=Number(light.at("shadowBias")); l.shadowNormalBias=Number(light.at("shadowNormalBias"));

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #include "Editor/MaterialEditor/MaterialEditorPanel.h"
 #include "Editor/Session/EditorTheme.h"
+#include "Engine/Core/Math/ColorSpace.h"
 
 #include <array>
 #include <cfloat>
@@ -257,10 +258,19 @@ void MaterialEditorPanel::Draw(
         ImGui::SetTooltip("Front/Back select the rendered side. Double renders both sides with corrected back-face normals.\nLegacy preserves old scene culling and normals. Instances inherit their parent's setting.");
     if (properties.surfaceSide == SurfaceSide::Legacy)
         ImGui::TextDisabled("Legacy: old scene culling and normals.");
-    editField(MaterialParameter::BaseColor, "Base Color", [&] { return ImGui::ColorEdit3("##Value", &properties.baseColor.x); });
-    editField(MaterialParameter::SpecularColor, "Legacy Specular Color", [&] { return ImGui::ColorEdit3("##Value", &properties.specularColor.x); });
+    editField(MaterialParameter::BaseColor, "Base Color (sRGB)", [&] {
+        auto display = LinearToSrgb(properties.baseColor);
+        if (!ImGui::ColorEdit3("##Value", &display.x)) return false;
+        properties.baseColor = SrgbToLinear(display);
+        return true;
+    });
+    editField(MaterialParameter::SpecularColor, "Dielectric F0 Multiplier", [&] { return ImGui::ColorEdit3("##Value", &properties.specularColor.x); });
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("Linear multiplier of the non-metal F0 (0.04 at white). Metallic F0 uses Base Color.\nRetains the old Legacy Specular Color values; this is not UE's Specular mapping or IOR.");
     editField(MaterialParameter::Shininess, "Legacy Shininess", [&] { return ImGui::SliderFloat("##Value", &properties.shininess, 1.000f, 256.000f); });
     editField(MaterialParameter::EnvironmentReflectivity, "Environment Reflectivity", [&] { return ImGui::SliderFloat("##Value", &properties.environmentReflectivity, 0.000f, 1.000f); });
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("Artistic multiplier of IBL specular only. 1 is unscaled; it does not change direct highlights or F0.");
     editField(MaterialParameter::Metallic, "Metallic", [&] { return ImGui::SliderFloat("##Value", &properties.metallic, 0.000f, 1.000f); });
     editField(MaterialParameter::Roughness, "Roughness", [&] { return ImGui::SliderFloat("##Value", &properties.roughness, 0.000f, 1.000f); });
     editField(MaterialParameter::AmbientOcclusion, "Ambient Occlusion", [&] { return ImGui::SliderFloat("##Value", &properties.ambientOcclusion, 0.000f, 1.000f); });

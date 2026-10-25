@@ -63,6 +63,7 @@ struct LightData
     vec4 directionAndRange;
     vec4 colorAndIntensity;
     vec4 spotAnglesAndShadow;
+    vec4 attenuationParameters;
 };
 
 layout(std140) uniform ForwardLights
@@ -289,12 +290,16 @@ vec3 FresnelSchlick(float cosTheta, vec3 f0)
     return f0 + (1.0 - f0) * pow(1.0 - clamp(cosTheta, 0.0, 1.0), 5.0);
 }
 
-float CalculateDistanceAttenuation(float distanceToLight, float range)
+float CalculateDistanceAttenuation(float distanceToLight, LightData light)
 {
+    float range = light.directionAndRange.w;
     float normalizedDistance = distanceToLight / max(range, 0.0001);
     float window = clamp(
         1.0 - pow(normalizedDistance, 4.0), 0.0, 1.0);
-    return window * window;
+    float attenuation = window * window;
+    if (light.attenuationParameters.x > 0.5)
+        attenuation /= max(distanceToLight * distanceToLight, light.attenuationParameters.y);
+    return attenuation;
 }
 
 float CalculateSpotAttenuation(
@@ -385,7 +390,8 @@ void main()
     vec4 albedoSample = vec4(1.0);
     if (material.hasAlbedoMap)
         albedoSample = texture(material.albedoMap, fragTexCoord);
-    vec3 albedo = pow(max(material.baseColor, vec3(0.0)), vec3(2.2)) *
+    // Constant factors are already linear; the sRGB texture is decoded by sampling.
+    vec3 albedo = max(material.baseColor, vec3(0.0)) *
         albedoSample.rgb;
 
     vec3 N = ResolveSurfaceNormal();
@@ -409,7 +415,7 @@ void main()
                 vec3 toLight = light.positionAndType.xyz - fragPos;
                 float distanceToLight = length(toLight);
                 L = distanceToLight > 0.0001 ? toLight / distanceToLight : vec3(0.0, 1.0, 0.0);
-                attenuation = CalculateDistanceAttenuation(distanceToLight, light.directionAndRange.w);
+                attenuation = CalculateDistanceAttenuation(distanceToLight, light);
                 if (lightType == LIGHT_TYPE_SPOT)
                     attenuation *= CalculateSpotAttenuation(L, light.directionAndRange.xyz,
                         light.spotAnglesAndShadow.x, light.spotAnglesAndShadow.y);
@@ -436,7 +442,8 @@ void main()
         float rim = pow(1.0 - max(dot(N, V), 0.0), 3.0) * material.rimLightStrength;
         indirectDiffuse = vec4(opaqueForSsao ? vec3(0.03) * albedo : vec3(0.0),
             clamp(material.opacity * albedoSample.a, 0.0, 1.0));
-        color = vec4(ApplyCascadeDebug(toonLighting + material.rimLightColor * rim, linearDepth),
+        // Physical local lights can exceed half-float storage near the source.
+        color = vec4(ApplyCascadeDebug(min(toonLighting + material.rimLightColor * rim, vec3(65504.0)), linearDepth),
             clamp(material.opacity * albedoSample.a, 0.0, 1.0));
         return;
     }
@@ -475,8 +482,7 @@ void main()
             L = distanceToLight > 0.0001
                 ? toLight / distanceToLight
                 : vec3(0.0, 1.0, 0.0);
-            attenuation = CalculateDistanceAttenuation(
-                distanceToLight, light.directionAndRange.w);
+            attenuation = CalculateDistanceAttenuation(distanceToLight, light);
             if (lightType == LIGHT_TYPE_SPOT)
             {
                 attenuation *= CalculateSpotAttenuation(

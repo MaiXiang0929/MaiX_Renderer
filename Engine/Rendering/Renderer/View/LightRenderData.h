@@ -18,14 +18,17 @@ struct alignas(16) GpuLightData
     std::array<float, 4> colorAndIntensity{};
     // inner/outer cone cosine, castsShadow, per-frame shadow record index (-1 absent).
     std::array<float, 4> spotAnglesAndShadow{};
+    // falloff mode, minimum squared distance (0.01 m)^2, reserved, reserved.
+    std::array<float, 4> attenuationParameters{};
 };
 
-static_assert(sizeof(GpuLightData) == 64,
-    "GpuLightData must match four std140 vec4 values.");
+static_assert(sizeof(GpuLightData) == 80,
+    "GpuLightData must match five std140 vec4 values.");
 static_assert(offsetof(GpuLightData, positionAndType) == 0);
 static_assert(offsetof(GpuLightData, directionAndRange) == 16);
 static_assert(offsetof(GpuLightData, colorAndIntensity) == 32);
 static_assert(offsetof(GpuLightData, spotAnglesAndShadow) == 48);
+static_assert(offsetof(GpuLightData, attenuationParameters) == 64);
 
 struct LightUploadData
 {

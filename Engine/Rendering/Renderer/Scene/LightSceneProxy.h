@@ -17,6 +17,11 @@ enum class LightType
     Spot
 };
 
+enum class LightFalloff { Legacy, InverseSquare };
+constexpr float MinimumPhysicalLightDistance = 0.01f; // Meters; regularizes the point source singularity.
+constexpr float MaximumPhysicalLightIntensity = 1000000.0f;
+constexpr float MaximumPhysicalLightRange = 100000.0f;
+
 inline bool SupportsShadowMap(LightType type)
 {
     return type == LightType::Directional || type == LightType::Spot || type == LightType::Point;
@@ -30,6 +35,9 @@ struct LightSceneProxy
     cy::Vec3f direction{ 0.0f, -1.0f, 0.0f };
     cy::Vec3f color{ 1.0f, 1.0f, 1.0f };
     float intensity = 1.0f;
+    // Legacy intensity is unitless. InverseSquare: local lights in candela,
+    // directional lights in lux. One world unit is one meter.
+    LightFalloff falloff = LightFalloff::Legacy;
     float range = 30.0f;
     float innerConeAngle = 20.0f * 3.14159265358979323846f / 180.0f;
     float outerConeAngle = 30.0f * 3.14159265358979323846f / 180.0f;
@@ -41,6 +49,18 @@ struct LightSceneProxy
     float shadowDistance = 50.0f;
     float splitLambda = 0.5f;
 };
+
+inline bool IsValidLightPhotometry(const LightSceneProxy& light)
+{
+    return (light.falloff == LightFalloff::Legacy || light.falloff == LightFalloff::InverseSquare) &&
+        std::isfinite(light.intensity) && light.intensity >= 0 &&
+        std::isfinite(light.range) && light.range > 0 &&
+        std::isfinite(light.color.x) && std::isfinite(light.color.y) && std::isfinite(light.color.z) &&
+        light.color.x >= 0 && light.color.y >= 0 && light.color.z >= 0 &&
+        (light.falloff == LightFalloff::Legacy ||
+            (light.intensity <= MaximumPhysicalLightIntensity && light.color.Max() <= 1 &&
+                light.range >= MinimumPhysicalLightDistance && light.range <= MaximumPhysicalLightRange));
+}
 
 inline bool IsValidLightShadowSettings(const LightSceneProxy& light)
 {

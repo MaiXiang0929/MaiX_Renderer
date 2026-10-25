@@ -11,7 +11,7 @@ struct StartupModelDefinition
     std::string name;
     std::filesystem::path path;
     Transform transform;
-    cy::Vec3f baseColor{1.0f};
+    cy::Vec3f baseColor{1.0f}; // Linear after parsing the legacy startup definition.
     float roughness = 0.9f;
 };
 struct BasicStartupSceneDefinition

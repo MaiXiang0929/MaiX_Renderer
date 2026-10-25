@@ -5,6 +5,7 @@
 #include "Engine/Rendering/Renderer/Core/Renderer.h"
 #include "Engine/Runtime/Engine/SceneFrameBuilder.h"
 #include <iostream>
+#include <algorithm>
 
 EngineSession::EngineSession() = default;
 EngineSession::~EngineSession()
@@ -35,7 +36,10 @@ RenderFrameData EngineSession::PrepareFrame(Camera &camera, unsigned width, unsi
     if (!m_Renderer)
         return {};
     if (!IsValidEnvironmentSettings(m_Scene.environment) || !IsValidPostProcessSettings(m_Scene.postProcess) ||
-        !IsValidShadowSettings(m_Scene.shadowSettings) || !RegisterSceneActors(m_Scene))
+        !IsValidShadowSettings(m_Scene.shadowSettings) ||
+        !std::all_of(m_Scene.lights.begin(), m_Scene.lights.end(),
+            [](const SceneLight& light) { return IsValidLightPhotometry(light.proxy); }) ||
+        !RegisterSceneActors(m_Scene))
     {
         if (!m_RegistrationFailed)
             std::cerr << "[Scene] Invalid scene settings or actor registration failed; frame rejected.\n";

@@ -348,6 +348,7 @@ std::size_t Renderer::GetMaterialResourceCount() const
 
 LightId Renderer::AddLight(LightSceneProxy light)
 {
+    if (!IsValidLightPhotometry(light)) return InvalidLightId;
     return m_RenderScene.AddLight(light);
 }
 
@@ -358,6 +359,7 @@ bool Renderer::UpdatePrimitiveVisibility(PrimitiveId id, bool visible)
 
 bool Renderer::UpdateLight(LightId id, const LightSceneProxy& light)
 {
+    if (!IsValidLightPhotometry(light)) return false;
     return m_RenderScene.UpdateLight(id, light);
 }
 

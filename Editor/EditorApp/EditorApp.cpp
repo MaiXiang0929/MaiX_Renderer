@@ -7,6 +7,7 @@
 
 #include"Editor/EditorApp/EditorApp.h"
 #include "Engine/Runtime/Engine/RenderSceneBridge.h"
+#include "Engine/Core/Math/ColorSpace.h"
 #include "Editor/Diagnostics/RendererStatisticsPanel.h"
 #include "Editor/Inspector/RenderSettingsPanel.h"
 #include "Editor/Inspector/EnvironmentPanel.h"
@@ -390,7 +391,7 @@ bool EditorApp::CreateStartupScene(const StartupSceneDefinition& scene)
         mainMaterial.SetAlbedoMap(nullptr);
         mainMaterial.SetSpecularMap(nullptr);
         mainMaterial.SetOcclusionRoughnessMetallicMap(nullptr);
-        mainMaterial.GetProperties().baseColor = cy::Vec3f(0.7f, 0.7f, 0.7f);
+        mainMaterial.GetProperties().baseColor = LegacyBaseColorToLinear(cy::Vec3f(0.7f, 0.7f, 0.7f));
         mainMaterial.GetProperties().roughness = 0.35f;
         const MaterialHandle parent = m_Renderer->CreateMaterial(std::move(mainMaterial));
         if (!parent.IsValid()) return false;
@@ -404,7 +405,7 @@ bool EditorApp::CreateStartupScene(const StartupSceneDefinition& scene)
         }
         Renderer::MaterialSnapshot inherited;
         m_Renderer->GetMaterialSnapshot(parent, inherited);
-        inherited.properties.baseColor = cy::Vec3f(0.85f, 0.12f, 0.08f);
+        inherited.properties.baseColor = LegacyBaseColorToLinear(cy::Vec3f(0.85f, 0.12f, 0.08f));
         m_Renderer->UpdateMaterialOverride(defaultModel.materials[1],
             MaterialParameter::BaseColor, inherited.properties);
         for (std::size_t i = 0; i < 3; ++i)
@@ -455,7 +456,7 @@ bool EditorApp::CreateStartupScene(const StartupSceneDefinition& scene)
             // 为测试材质提供可辨认名称，Inspector 与材质编辑器共享此名称。
             material.SetName(description.name);
             MaterialProperties& properties = material.GetProperties();
-            properties.baseColor = description.baseColor;
+            properties.baseColor = LegacyBaseColorToLinear(description.baseColor);
             properties.specularColor = cy::Vec3f(1.0f, 1.0f, 1.0f);
             properties.metallic = description.metallic;
             properties.roughness = description.roughness;
@@ -727,7 +728,7 @@ void EditorApp::CreateTranslucencyTestScene()
     {
         Material material;
         MaterialProperties& properties = material.GetProperties();
-        properties.baseColor = layer.color;
+        properties.baseColor = LegacyBaseColorToLinear(layer.color);
         properties.roughness = 0.65f;
         properties.environmentReflectivity = 0.05f;
         properties.opacity = layer.opacity;

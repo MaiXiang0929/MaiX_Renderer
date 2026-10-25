@@ -7,6 +7,7 @@
 #include <array>
 #include <cstdio>
 #include "Engine/Runtime/Engine/RenderSceneBridge.h"
+#include "Engine/Core/Math/ColorSpace.h"
 
 #include <imgui.h>
 #include "Editor/Session/EditorWidgets.h"
@@ -298,10 +299,27 @@ bool InspectorPanel::Draw(EditorSelection &selection, SceneState &scene, bool &c
     const bool lightValues = EditorWidgets::BeginProperties("##LightValues");
     if (lightValues)
     {
-        EditorWidgets::PropertyLabel("Color");
-        changed |= ImGui::ColorEdit3("##Color", &light->proxy.color.x);
-        EditorWidgets::PropertyLabel("Intensity");
-        changed |= ImGui::DragFloat("##Intensity", &light->proxy.intensity, 0.05f, 0.0f, 100.0f);
+        EditorWidgets::PropertyLabel("Color (sRGB)");
+        auto display = LinearToSrgb(light->proxy.color);
+        if (ImGui::ColorEdit3("##Color", &display.x))
+        {
+            light->proxy.color = SrgbToLinear(display);
+            changed = true;
+        }
+        EditorWidgets::PropertyLabel("Intensity Model");
+        int falloff = static_cast<int>(light->proxy.falloff);
+        if (ImGui::Combo("##Falloff", &falloff, "Legacy\0Physical\0"))
+        {
+            light->proxy.falloff = static_cast<LightFalloff>(falloff);
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Physical: local lights use inverse-square falloff in meters and candela; directional lights use lux.\nLegacy retains range-only attenuation and unitless intensity. Switching keeps the numeric intensity; retune it explicitly.");
+        const bool physical = light->proxy.falloff == LightFalloff::InverseSquare;
+        EditorWidgets::PropertyLabel(!physical ? "Intensity (unitless)" :
+            light->proxy.type == LightType::Directional ? "Intensity (lux)" : "Intensity (cd)");
+        changed |= ImGui::DragFloat("##Intensity", &light->proxy.intensity, physical ? 1.0f : 0.05f,
+            0.0f, physical ? MaximumPhysicalLightIntensity : 100.0f, "%.3f");
     }
     EditorValueConstraints::SanitizeColor(light->proxy.color);
 
@@ -311,6 +329,11 @@ bool InspectorPanel::Draw(EditorSelection &selection, SceneState &scene, bool &c
         changed |= ImGui::DragFloat("##Range", &light->proxy.range, 0.1f, 0.01f, 1000.0f);
     }
     EditorValueConstraints::SanitizeLightScalars(light->proxy.intensity, light->proxy.range);
+    if (light->proxy.falloff == LightFalloff::InverseSquare)
+    {
+        light->proxy.intensity = std::min(light->proxy.intensity, MaximumPhysicalLightIntensity);
+        light->proxy.range = std::min(light->proxy.range, MaximumPhysicalLightRange);
+    }
 
     if (lightValues && light->proxy.type == LightType::Spot)
     {
