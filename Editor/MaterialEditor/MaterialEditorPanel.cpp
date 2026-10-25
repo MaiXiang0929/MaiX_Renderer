@@ -84,7 +84,7 @@ void MaterialEditorPanel::Draw(
     Renderer& renderer, const EditorSelection& selection,
     const std::vector<SceneModel>& models,
     EditorMaterialSelection& materialSelection, MaterialEditRequest& request,
-    void* nativeWindowHandle)
+    void* nativeWindowHandle, const std::vector<MaterialHandle>* availableMaterials)
 {
     ImGui::SetNextWindowSize(ImVec2(520.0f, 620.0f), ImGuiCond_FirstUseEver);
     if (!ImGui::Begin("Material Editor"))
@@ -97,7 +97,7 @@ void MaterialEditorPanel::Draw(
     if (ImGui::Checkbox("All materials (debug)", &allMaterials))
         materialSelection.SetAllMaterials(allMaterials);
     const std::vector<MaterialHandle> materialHandles = materialSelection.Synchronize(
-        selection, models, renderer.GetMaterialHandles());
+        selection, models, availableMaterials ? *availableMaterials : renderer.GetMaterialHandles());
 
     // 全局调试列表同样显示所属模型，避免不同 FBX 的同名材质难以区分。
     const auto materialLabel = [&models, &materialSelection](

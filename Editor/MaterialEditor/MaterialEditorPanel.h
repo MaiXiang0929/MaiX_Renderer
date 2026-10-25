@@ -26,7 +26,8 @@ public:
               const std::vector<SceneModel>& models,
               EditorMaterialSelection& materialSelection,
               MaterialEditRequest& request,
-              void* nativeWindowHandle = nullptr);
+              void* nativeWindowHandle = nullptr,
+              const std::vector<MaterialHandle>* availableMaterials = nullptr);
 
 private:
     bool m_EditParent = false;

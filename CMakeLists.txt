@@ -76,6 +76,7 @@ add_library(MaiXRendering STATIC
     Engine/Rendering/Passes/ShadowPreviewPass.cpp
     Engine/Rendering/Passes/TranslucencyPass.cpp
     Engine/Rendering/Renderer/Core/Renderer.cpp
+    Engine/Rendering/Renderer/Core/RendererRetention.cpp
     Engine/Rendering/Renderer/Diagnostics/GpuDebugScope.cpp
     Engine/Rendering/Renderer/Diagnostics/GpuPassProfiler.cpp
     Engine/Rendering/Renderer/Pipeline/PassResourceContract.cpp
@@ -103,6 +104,7 @@ target_compile_options(MaiXRendering PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
 
 add_library(MaiXEngine STATIC Engine/Runtime/Engine/EngineSession.cpp
     Engine/Runtime/Engine/ScenePersistence.cpp
+    Engine/Runtime/Engine/SceneSubtree.cpp
     Engine/Runtime/Engine/RenderSceneBridge.cpp Engine/Runtime/Engine/SceneFrameBuilder.cpp)
 target_link_libraries(MaiXEngine PUBLIC MaiXRuntime MaiXRendering)
 
@@ -114,7 +116,7 @@ add_library(MaiXEditorUI STATIC ThirdParty/imgui/imgui.cpp ThirdParty/imgui/imgu
 target_include_directories(MaiXEditorUI PUBLIC ${THIRD_PARTY_DIR}/imgui
     ${THIRD_PARTY_DIR}/ImGuizmo ${THIRD_PARTY_DIR}/glfw/include)
 target_link_directories(MaiXEditorUI PUBLIC ${THIRD_PARTY_DIR}/glfw/lib-vc2022)
-target_link_libraries(MaiXEditorUI PUBLIC MaiXGL MaiXRuntime glfw3.lib)
+target_link_libraries(MaiXEditorUI PUBLIC MaiXGL MaiXEngine glfw3.lib)
 
 add_executable(MaiX_Renderer
     Editor/ContentBrowser/AssetImportPanel.cpp

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "Engine/Runtime/Engine/ScenePersistence.h"
+#include "Engine/Runtime/Engine/SceneSubtree.h"
 #include "Engine/Runtime/Engine/SceneState.h"
 #include "Engine/Runtime/Engine/RenderSceneBridge.h"
 #include "Engine/Rendering/Renderer/Core/Renderer.h"
@@ -47,7 +48,8 @@ bool CaptureSceneDocument(SceneState& scene,const Renderer& renderer,const Scene
     try
     {
         Require(RegisterSceneActors(scene),"Cannot register scene actors before saving.");
-        const auto resources=renderer.GetSceneResources();
+        auto resources=renderer.GetSceneResources();
+        resources.materials=GetSceneMaterialHandles(scene,renderer);
         SceneDocument d;
         d.postProcess=scene.postProcess;
         d.shadowSettings=scene.shadowSettings;

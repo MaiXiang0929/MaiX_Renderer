@@ -19,7 +19,15 @@ void EditorApp::ReplayHistory(bool redo)
     if (!(redo ? m_History.Redo(m_Engine.Scene().world,error) : m_History.Undo(m_Engine.Scene().world,error)))
         m_Workspace->AddLog("[History] "+error);
     else
+    {
         SynchronizeSceneActors(m_Engine.Scene(),*m_Renderer);
+        if (m_History.RestoredActor().IsValid()) m_EditorSelection.SelectActor(m_History.RestoredActor(),m_Engine.Scene());
+        if (!m_EditorSelection.ResolveActor(m_Engine.Scene()).IsValid()) m_EditorSelection.Clear();
+        if (!m_PendingFocusSelection.ResolveActor(m_Engine.Scene()).IsValid()) m_PendingFocusSelection.Clear();
+        if (!m_Engine.Scene().camera.id.IsValid()) m_SceneCameraView=false;
+        m_MaterialSelection.Synchronize(m_EditorSelection,m_Engine.Scene().models,
+            GetSceneMaterialHandles(m_Engine.Scene(),*m_Renderer));
+    }
 }
 void EditorApp::DrawEditMenu()
 {
@@ -29,7 +37,7 @@ void EditorApp::DrawEditMenu()
     if (ImGui::MenuItem(undo.c_str(),"Ctrl+Z",false,ready && m_History.CanUndo())) ReplayHistory(false);
     if (ImGui::MenuItem(redo.c_str(),"Ctrl+Y / Ctrl+Shift+Z",false,ready && m_History.CanRedo())) ReplayHistory(true);
     ImGui::Separator();
-    ImGui::TextDisabled("Object transforms, names, visibility and parenting");
+    ImGui::TextDisabled("Objects: transforms, names, visibility, parenting, deletion");
 }
 void EditorApp::HandleHistoryShortcuts()
 {

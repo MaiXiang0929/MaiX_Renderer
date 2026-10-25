@@ -293,6 +293,7 @@ bool EditorApp::Init() {
         return false;
     }
     m_Renderer = m_Engine.GetRenderer();
+    m_History.Bind(m_Engine.Scene(),*m_Renderer);
     m_Workspace = std::make_unique<EditorWorkspace>(m_Renderer->Device(), *m_Project);
     m_Workspace->SetSceneFileMenu([this] { DrawSceneFileMenu(); });
     m_Workspace->SetEditMenu([this] { DrawEditMenu(); });
@@ -1220,9 +1221,8 @@ void EditorApp::ApplyMaterialEditRequest(const MaterialEditRequest& request)
             if (section.material.id == request.material.id) section.material = replacement;
         if (created.IsValid()) model->materials.push_back(created);
         m_MaterialSelection.Select(model->id, replacement);
-        if (snapshot.isInstance && m_Renderer->DestroyMaterial(request.material))
-            model->materials.erase(std::remove_if(model->materials.begin(), model->materials.end(),
-                [&](MaterialHandle h) { return h.id == request.material.id; }), model->materials.end());
+        if (snapshot.isInstance)
+            ReleaseUnusedModelMaterial(m_Engine.Scene(),*m_Renderer,model->id,request.material);
     }
     catch (const std::exception& error)
     {
@@ -1238,18 +1238,20 @@ bool EditorApp::RemoveModel(ModelId id)
     if (found == m_Engine.Scene().models.end())
         return false;
     if (found->actor.IsValid()) {
-        const bool removed=DestroySceneActor(m_Engine.Scene(),*m_Renderer,found->actor);
-        if (removed) InvalidateEditorHistory("Model deleted");
+        std::string error;
+        const bool removed=m_Initialized ? m_History.Delete(found->actor,error) :
+            DestroySceneActor(m_Engine.Scene(),*m_Renderer,found->actor);
+        if (!removed && m_Workspace) m_Workspace->AddLog("[Delete] "+error);
         if (!m_EditorSelection.ResolveActor(m_Engine.Scene()).IsValid()) m_EditorSelection.Clear();
         return removed;
     }
+    if (m_Initialized) return false; // Runtime deletion requires a registered, restorable Actor.
     if (m_EditorSelection.IsModelSelected(id))
         m_EditorSelection.Clear();
     if (m_Engine.Scene().defaultModelId == id)
         m_Engine.Scene().defaultModelId = {};
     DestroyModelResources(*found);
     m_Engine.Scene().models.erase(found);
-    InvalidateEditorHistory("Model deleted");
     return true;
 }
 
@@ -1367,15 +1369,17 @@ void EditorApp::Render() {
     const auto removedActor=m_SceneHierarchyPanel->Draw(m_EditorSelection,m_Engine.Scene(),*m_Renderer,
         &m_History,[this](const char* reason) { InvalidateEditorHistory(reason); });
     if (removedActor.IsValid()) {
-        if (DestroySceneActor(m_Engine.Scene(),*m_Renderer,removedActor))
-            InvalidateEditorHistory("Subtree deleted");
+        std::string error;
+        if (!m_History.Delete(removedActor,error)) m_Workspace->AddLog("[Delete] "+error);
+        else m_ViewportController->CancelPointerInput();
         if (!m_EditorSelection.ResolveActor(m_Engine.Scene()).IsValid()) m_EditorSelection.Clear();
         if (!m_PendingFocusSelection.ResolveActor(m_Engine.Scene()).IsValid()) m_PendingFocusSelection.Clear();
         if (!m_Engine.Scene().camera.id.IsValid()) m_SceneCameraView=false;
     }
     // 先应用场景选择/删除，再同步材质身份；即使材质面板关闭也清理失效选择。
+    const auto availableMaterials=GetSceneMaterialHandles(m_Engine.Scene(),*m_Renderer);
     m_MaterialSelection.Synchronize(
-        m_EditorSelection, m_Engine.Scene().models, m_Renderer->GetMaterialHandles());
+        m_EditorSelection, m_Engine.Scene().models, availableMaterials);
     if (m_InspectorPanel->Draw(
             m_EditorSelection, m_Engine.Scene(), m_SceneCameraView, *m_Renderer,
             m_MaterialSelection,&m_History))
@@ -1387,7 +1391,7 @@ void EditorApp::Render() {
         MaterialEditRequest request;
         m_MaterialEditorPanel->Draw(
             *m_Renderer, m_EditorSelection, m_Engine.Scene().models, m_MaterialSelection, request,
-            nativeWindowHandle);
+            nativeWindowHandle,&availableMaterials);
         ApplyMaterialEditRequest(request);
     }
     m_Workspace->DrawBottomPanels(*m_AssetImportPanel);
@@ -1432,6 +1436,7 @@ void EditorApp::Shutdown() {
 
     if (!m_Initialized) return;
 
+    m_History.Clear(); // Release history-owned retention while scene, Renderer and GL context are alive.
     m_StatisticsPanel.reset();
     m_Workspace.reset();
     m_MaterialEditorPanel.reset();

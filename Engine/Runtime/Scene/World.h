@@ -43,11 +43,23 @@ struct Actor
 class World
 {
   public:
-    World() = default;
+    class SubtreeSnapshot
+    {
+    public:
+        struct Entry { std::size_t position; Actor actor; };
+        const std::vector<Entry>& Entries() const { return m_Entries; }
+        ActorId Root() const { return m_Root; }
+    private:
+        friend class World;
+        std::uint64_t m_Owner = 0;
+        ActorId m_Root;
+        std::vector<Entry> m_Entries;
+    };
+    World() noexcept;
     World(const World &) = delete;
     World &operator=(const World &) = delete;
-    World(World &&) = default;
-    World &operator=(World &&) = default;
+    World(World &&other) noexcept;
+    World &operator=(World &&other) noexcept;
     ActorId Create(std::string name, const Transform &local = {}, ActorKind kind = ActorKind::Empty,
                    std::uint64_t componentId = 0);
     const Actor *Find(ActorId id) const;
@@ -64,8 +76,12 @@ class World
     bool SetParentAndLocal(ActorId id, ActorId parent, const Transform& local, std::string& error);
     std::vector<ActorId> Subtree(ActorId id) const;
     bool Destroy(ActorId id);
+    bool CaptureSubtree(ActorId id, SubtreeSnapshot& result, std::string& error) const;
+    // Prepare without changing this World; committing the move preserves its identity domain.
+    bool PrepareSubtree(const SubtreeSnapshot& snapshot, bool restore, World& result, std::string& error) const;
 
   private:
     std::vector<Actor> m_Actors;
+    std::uint64_t m_Identity = 0;
     bool Commit(std::vector<Actor> &candidate, std::string &error);
 };

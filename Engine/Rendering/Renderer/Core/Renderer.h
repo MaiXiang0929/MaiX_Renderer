@@ -74,7 +74,7 @@ public:
     MeshHandle CreateMesh(
         const std::vector<Vertex>& vertices,
         const std::vector<std::uint32_t>& indices);
-    /// @brief 若任一 Primitive 仍引用资源，则拒绝销毁并返回 false。
+    /// @brief Primitive 或删除历史仍引用资源时拒绝销毁。
     bool DestroyMesh(MeshHandle handle);
     MaterialHandle CreateMaterial(Material material);
     /// 单层实例共享父资源；实例参数只通过逐项覆盖接口修改。
@@ -85,10 +85,11 @@ public:
     bool ResetMaterialTexture(MaterialHandle handle, MaterialTextureSlot slot);
     bool ReplacePrimitiveMaterials(const std::vector<PrimitiveId>& primitives,
                                    MaterialHandle expected, MaterialHandle replacement);
-    /// @brief Primitive 或子实例仍引用资源时拒绝销毁，包含不可见对象。
+    /// @brief Primitive、子实例或删除历史仍引用资源时拒绝销毁，包含不可见对象。
     bool DestroyMaterial(MaterialHandle handle);
     /// 无分配查询用于依赖顺序清理，避免析构过程中构造编辑器快照。
     bool IsMaterialInstance(MaterialHandle handle) const;
+    MaterialHandle GetMaterialParent(MaterialHandle handle) const;
     bool GetMaterialSnapshot(
         MaterialHandle handle,
         MaterialSnapshot& snapshot) const;
@@ -164,6 +165,13 @@ public:
         std::vector<LightId> lights;
     };
     SceneResourceSnapshot GetSceneResources() const;
+    using RetentionId = std::uint64_t;
+    RetentionId RetainSceneResources(const SceneResourceSnapshot& resources, std::string& error);
+    bool SetRetainedSceneActive(RetentionId id, bool active, std::string& error);
+    void ReleaseRetainedScene(RetentionId id);
+    bool IsMeshRetained(MeshHandle handle) const;
+    bool IsMaterialRetained(MaterialHandle handle) const;
+    std::weak_ptr<const int> Lifetime() const { return m_Lifetime; }
     bool GetPrimitiveBinding(PrimitiveId, MeshHandle&, MaterialHandle&, bool& castsShadow) const;
 
     void SetShadowsEnabled(bool enabled) { m_ShadowsEnabled = enabled; }
@@ -215,6 +223,7 @@ private:
     void LogMainViewStatsIfChanged(const RenderView& view);
 
     std::unique_ptr<RHIDevice> m_Device; // Declared first: destroyed after all GPU resources.
+    std::shared_ptr<const int> m_Lifetime = std::make_shared<const int>(0);
     Mesh m_PresentMesh;
     Mesh m_SkyboxMesh;
     Mesh m_GroundMesh;
@@ -223,6 +232,13 @@ private:
     std::vector<std::unique_ptr<Mesh>> m_MeshResources;
     MaterialResourceStore m_MaterialResources;
     RenderScene m_RenderScene;
+    struct RetainedScene
+    {
+        SceneResourceSnapshot resources;
+        RenderScene::RetainedBindings bindings;
+        bool active = true;
+    };
+    std::vector<std::unique_ptr<RetainedScene>> m_RetainedScenes;
     CubemapTexture m_Cubemap;
     RenderPipeline m_RenderPipeline;
     TessellationSettings m_Tessellation;

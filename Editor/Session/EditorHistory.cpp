@@ -1,5 +1,45 @@
 // SPDX-License-Identifier: MIT
 #include "Editor/Session/EditorHistory.h"
+#include "Engine/Runtime/Engine/SceneState.h"
+#include "Engine/Rendering/Renderer/Core/Renderer.h"
+
+EditorHistory::~EditorHistory() { Clear(); }
+void EditorHistory::Bind(SceneState& scene, Renderer& renderer)
+{
+    if (m_Scene==&scene && m_Renderer==&renderer && !m_RendererLifetime.expired()) return;
+    Clear(); m_Scene=&scene; m_Renderer=&renderer; m_RendererLifetime=renderer.Lifetime();
+}
+bool EditorHistory::BoundTo(const World& world) const
+{
+    return m_Scene && m_Renderer && !m_RendererLifetime.expired() && &m_Scene->world==&world;
+}
+void EditorHistory::Release(Action& action) noexcept
+{
+    if (action.subtree && m_Scene && m_Renderer && !m_RendererLifetime.expired())
+        ReleaseSceneSubtree(*m_Scene,*m_Renderer,action.subtree);
+    else action.subtree.reset();
+}
+void EditorHistory::Record(Action action)
+{
+    m_Actions.reserve(m_Actions.size()+1);
+    for (std::size_t i=m_Cursor;i<m_Actions.size();++i) Release(m_Actions[i]);
+    m_Actions.erase(m_Actions.begin()+m_Cursor,m_Actions.end());
+    m_Actions.push_back(std::move(action));
+    if (m_Actions.size()>256) { Release(m_Actions.front()); m_Actions.erase(m_Actions.begin()); }
+    m_Cursor=m_Actions.size();
+}
+bool EditorHistory::Delete(ActorId actor, std::string& error)
+{
+    if (!m_Scene || !BoundTo(m_Scene->world)) { error="Delete history has no active scene."; return false; }
+    Finish(m_Scene->world);
+    const auto* target=m_Scene->world.Find(actor);
+    if (!target) { error="Object is unavailable."; return false; }
+    Action action{EditorEditKind::Delete,Capture(*target),Capture(*target),"Delete "+target->name,{}};
+    // Reserve before detaching: history publication must not allocate after scene publication.
+    m_Actions.reserve(m_Actions.size()+1);
+    if (!DetachSceneSubtree(*m_Scene,*m_Renderer,actor,action.subtree,error)) return false;
+    Record(std::move(action)); m_RestoredActor={}; return true;
+}
 
 EditorHistory::State EditorHistory::Capture(const Actor& actor)
 {
@@ -36,17 +76,17 @@ void EditorHistory::Finish(World& world)
         m_Pending->after = Capture(*actor);
         if (!Equal(m_Pending->kind,m_Pending->before,m_Pending->after))
         {
-            // Allocate before discarding redo so an allocation failure keeps the existing history.
-            m_Actions.reserve(m_Actions.size()+1);
-            m_Actions.erase(m_Actions.begin()+m_Cursor,m_Actions.end());
-            m_Actions.push_back(std::move(*m_Pending));
-            if (m_Actions.size() > 256) m_Actions.erase(m_Actions.begin());
-            m_Cursor = m_Actions.size();
+            Record(std::move(*m_Pending));
         }
     }
     m_Pending.reset();
 }
-void EditorHistory::Clear() { m_Pending.reset(); m_Actions.clear(); m_Cursor=0; }
+void EditorHistory::Clear()
+{
+    m_Pending.reset();
+    for (auto& action:m_Actions) Release(action);
+    m_Actions.clear(); m_Cursor=0; m_RestoredActor={};
+}
 bool EditorHistory::Replay(World& world, const Action& action, bool undo, std::string& error)
 {
     const auto& expected = undo ? action.after : action.before;
@@ -60,19 +100,38 @@ bool EditorHistory::Replay(World& world, const Action& action, bool undo, std::s
     case EditorEditKind::ParentLocal: return world.SetParentAndLocal(value.id,value.parent,value.local,error);
     case EditorEditKind::Name: if (!world.Rename(value.id,value.name)) return false; break;
     case EditorEditKind::Visibility: if (!world.SetVisible(value.id,value.visible)) return false; break;
+    case EditorEditKind::Delete: error="Delete requires a bound scene."; return false;
     }
     error.clear(); return true;
 }
 bool EditorHistory::Undo(World& world, std::string& error)
 {
+    m_RestoredActor={};
     if (!CanUndo()) { error="Nothing to undo."; return false; }
-    if (!Replay(world,m_Actions[m_Cursor-1],true,error)) return false;
+    auto& action=m_Actions[m_Cursor-1];
+    if (action.kind==EditorEditKind::Delete)
+    {
+        if (!BoundTo(world) || !action.subtree) { error="Delete history scene is unavailable."; return false; }
+        if (!RestoreSceneSubtree(*m_Scene,*m_Renderer,*action.subtree,error)) return false;
+        m_RestoredActor=action.before.id;
+    }
+    else if (!Replay(world,action,true,error)) return false;
     --m_Cursor; return true;
 }
 bool EditorHistory::Redo(World& world, std::string& error)
 {
+    m_RestoredActor={};
     if (!CanRedo()) { error="Nothing to redo."; return false; }
-    if (!Replay(world,m_Actions[m_Cursor],false,error)) return false;
+    auto& action=m_Actions[m_Cursor];
+    if (action.kind==EditorEditKind::Delete)
+    {
+        if (!BoundTo(world)) { error="Delete history scene is unavailable."; return false; }
+        std::shared_ptr<SceneSubtreeArchive> refreshed;
+        // Capture current untracked material edits, instead of restoring obsolete bindings later.
+        if (!DetachSceneSubtree(*m_Scene,*m_Renderer,action.before.id,refreshed,error)) return false;
+        Release(action); action.subtree=std::move(refreshed);
+    }
+    else if (!Replay(world,action,false,error)) return false;
     ++m_Cursor; return true;
 }
 bool EditorHistory::Rename(World& world, ActorId id, const std::string& name, std::string& error)

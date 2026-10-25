@@ -106,6 +106,7 @@ MeshHandle Renderer::CreateMesh(
 
 bool Renderer::DestroyMesh(MeshHandle handle)
 {
+    if (IsMeshRetained(handle)) return false;
     if (!handle.IsValid() || handle.id >= m_MeshResources.size() ||
         !m_MeshResources[handle.id])
         return false;
@@ -131,6 +132,7 @@ MaterialHandle Renderer::CreateMaterialInstance(MaterialHandle parent, std::stri
 }
 bool Renderer::DestroyMaterial(MaterialHandle handle)
 {
+    if (IsMaterialRetained(handle)) return false;
     if (m_RenderScene.HasMaterialReference(handle.id)) return false;
     return m_MaterialResources.Destroy(handle);
 }
@@ -138,6 +140,11 @@ bool Renderer::IsMaterialInstance(MaterialHandle handle) const
 {
     const auto* entry = m_MaterialResources.Get(handle);
     return entry && entry->instance.has_value();
+}
+MaterialHandle Renderer::GetMaterialParent(MaterialHandle handle) const
+{
+    const auto* entry=m_MaterialResources.Get(handle);
+    return entry && entry->instance ? entry->instance->parent : MaterialHandle{};
 }
 bool Renderer::GetMaterialSnapshot(MaterialHandle handle, MaterialSnapshot& snapshot) const
 {

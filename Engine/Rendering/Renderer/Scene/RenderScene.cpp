@@ -100,6 +100,45 @@ const PrimitiveSceneProxy* RenderScene::FindPrimitive(PrimitiveId id) const
     const auto found=std::find_if(m_Primitives.begin(),m_Primitives.end(),[&](const auto& p){return p.id==id;});
     return found==m_Primitives.end()?nullptr:&*found;
 }
+bool RenderScene::CaptureBindings(const std::vector<PrimitiveId>& primitives, const std::vector<LightId>& lights,
+                                  RetainedBindings& result, std::string& error) const
+{
+    RetainedBindings captured;
+    for (std::size_t i=0;i<m_Primitives.size();++i)
+        if (std::find(primitives.begin(),primitives.end(),m_Primitives[i].id)!=primitives.end())
+            captured.primitives.emplace_back(i,m_Primitives[i]);
+    for (std::size_t i=0;i<m_Lights.size();++i)
+        if (std::find(lights.begin(),lights.end(),m_Lights[i].id)!=lights.end())
+            captured.lights.emplace_back(i,m_Lights[i]);
+    if (captured.primitives.size()!=primitives.size() || captured.lights.size()!=lights.size())
+    { error="Scene bindings are missing or duplicated."; return false; }
+    result=std::move(captured); error.clear(); return true;
+}
+bool RenderScene::SetBindingsActive(const RetainedBindings& bindings, bool active, std::string& error)
+{
+    auto primitives=m_Primitives;
+    auto lights=m_Lights;
+    auto change=[&](auto& items,const auto& entries) {
+        for (const auto& entry:entries)
+        {
+            const auto found=std::find_if(items.begin(),items.end(),[&](const auto& value) { return value.id==entry.second.id; });
+            if (active)
+            {
+                if (found!=items.end()) return false;
+                items.insert(items.begin()+std::min(entry.first,items.size()),entry.second);
+            }
+            else
+            {
+                if (found==items.end()) return false;
+                items.erase(found);
+            }
+        }
+        return true;
+    };
+    if (!change(primitives,bindings.primitives) || !change(lights,bindings.lights))
+    { error="Retained scene bindings conflict with the active scene."; return false; }
+    m_Primitives.swap(primitives); m_Lights.swap(lights); error.clear(); return true;
+}
 std::vector<PrimitiveId> RenderScene::PrimitiveIds() const
 {
     std::vector<PrimitiveId> ids; ids.reserve(m_Primitives.size());

@@ -2,6 +2,8 @@
 #pragma once
 
 #include <vector>
+#include <string>
+#include <utility>
 
 #include "Engine/Rendering/Renderer/Scene/LightSceneProxy.h"
 #include "Engine/Rendering/Renderer/Scene/PrimitiveSceneProxy.h"
@@ -11,6 +13,14 @@ struct RenderView;
 class RenderScene
 {
 public:
+    struct RetainedBindings
+    {
+        std::vector<std::pair<std::size_t, PrimitiveSceneProxy>> primitives;
+        std::vector<std::pair<std::size_t, LightSceneProxy>> lights;
+    };
+    bool CaptureBindings(const std::vector<PrimitiveId>& primitives, const std::vector<LightId>& lights,
+                         RetainedBindings& result, std::string& error) const;
+    bool SetBindingsActive(const RetainedBindings& bindings, bool active, std::string& error);
     PrimitiveId AddPrimitive(PrimitiveSceneProxy proxy);
     bool RemovePrimitive(PrimitiveId id);
     bool UpdatePrimitiveVisibility(PrimitiveId id, bool visible);

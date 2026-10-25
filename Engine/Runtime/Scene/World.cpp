@@ -4,10 +4,23 @@
 #include <atomic>
 #include <functional>
 #include <limits>
+#include <utility>
 
 namespace
 {
 std::atomic<std::uint64_t> nextActorId{1};
+std::atomic<std::uint64_t> nextWorldId{1};
+}
+World::World() noexcept : m_Identity(nextWorldId.fetch_add(1))
+{
+    if (!m_Identity || m_Identity==std::numeric_limits<std::uint64_t>::max()) std::terminate();
+}
+World::World(World&& other) noexcept
+    : m_Actors(std::move(other.m_Actors)),m_Identity(std::exchange(other.m_Identity,0)) {}
+World& World::operator=(World&& other) noexcept
+{
+    if (this!=&other) { m_Actors=std::move(other.m_Actors); m_Identity=std::exchange(other.m_Identity,0); }
+    return *this;
 }
 const Actor *World::Find(ActorId id) const
 {
@@ -192,4 +205,47 @@ bool World::Destroy(ActorId id)
                                   }),
                    m_Actors.end());
     return true;
+}
+bool World::CaptureSubtree(ActorId id, SubtreeSnapshot& result, std::string& error) const
+{
+    const auto ids=Subtree(id);
+    if (ids.empty()) { error="Subtree is unavailable."; return false; }
+    SubtreeSnapshot snapshot;
+    snapshot.m_Owner=m_Identity; snapshot.m_Root=id;
+    for (std::size_t i=0;i<m_Actors.size();++i)
+        if (std::find(ids.begin(),ids.end(),m_Actors[i].id)!=ids.end())
+            snapshot.m_Entries.push_back({i,m_Actors[i]});
+    result=std::move(snapshot); error.clear(); return true;
+}
+bool World::PrepareSubtree(const SubtreeSnapshot& snapshot, bool restore, World& result, std::string& error) const
+{
+    if (&result==this || !m_Identity || snapshot.m_Owner!=m_Identity || snapshot.m_Entries.empty())
+    { error="Subtree belongs to a different world or is unavailable."; return false; }
+    auto candidate=m_Actors;
+    if (restore)
+    {
+        for (const auto& entry:snapshot.m_Entries)
+        {
+            if (Find(entry.actor.id)) { error="Subtree identity is already active."; return false; }
+            candidate.insert(candidate.begin()+std::min(entry.position,candidate.size()),entry.actor);
+        }
+    }
+    else
+    {
+        const auto ids=Subtree(snapshot.m_Root);
+        if (ids.size()!=snapshot.m_Entries.size()) { error="Subtree membership changed."; return false; }
+        for (const auto& entry:snapshot.m_Entries)
+        {
+            const auto* actor=Find(entry.actor.id);
+            if (!actor || std::find(ids.begin(),ids.end(),actor->id)==ids.end())
+            { error="Subtree identity changed."; return false; }
+        }
+        candidate.erase(std::remove_if(candidate.begin(),candidate.end(),[&](const Actor& actor) {
+            return std::find(ids.begin(),ids.end(),actor.id)!=ids.end();
+        }),candidate.end());
+    }
+    World prepared;
+    prepared.m_Identity=m_Identity;
+    if (!prepared.Commit(candidate,error)) return false;
+    result=std::move(prepared); return true;
 }
