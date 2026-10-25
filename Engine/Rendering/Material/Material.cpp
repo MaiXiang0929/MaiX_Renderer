@@ -38,6 +38,7 @@ const char* GetSlotName(MaterialTextureSlot slot)
     case MaterialTextureSlot::Displacement: return "Displacement";
     case MaterialTextureSlot::LegacySpecular: return "LegacySpecular";
     case MaterialTextureSlot::FaceShadow: return "FaceShadow";
+    case MaterialTextureSlot::Emissive: return "Emissive";
     case MaterialTextureSlot::Count: break;
     }
     return "Invalid";
@@ -76,7 +77,10 @@ void Material::Bind(Shader& shader, unsigned int firstTextureUnit) const
     shader.SetInt("surfaceSide", static_cast<int>(m_Properties.surfaceSide));
     shader.SetFloat("material.opacity", m_Properties.opacity);
     shader.SetInt("material.shadingModel",
-        m_Properties.shadingModel == ShadingModel::Toon ? 1 : 0);
+        static_cast<int>(m_Properties.shadingModel));
+    shader.SetVec3("material.emissiveColor", m_Properties.emissiveColor.x,
+        m_Properties.emissiveColor.y, m_Properties.emissiveColor.z);
+    shader.SetFloat("material.emissiveIntensity", m_Properties.emissiveIntensity);
     shader.SetFloat("material.toonThreshold", m_Properties.toonThreshold);
     shader.SetFloat("material.toonShadowStrength", m_Properties.toonShadowStrength);
     shader.SetVec3("material.toonShadowColor", m_Properties.toonShadowColor.x,
@@ -167,6 +171,11 @@ void Material::Bind(Shader& shader, unsigned int firstTextureUnit) const
             static_cast<int>(faceShadowUnit));
     }
 
+    const auto& emissiveMap = m_Textures[ToIndex(MaterialTextureSlot::Emissive)];
+    const auto emissiveUnit = firstTextureUnit + GetMaterialTextureUnitOffset(MaterialTextureSlot::Emissive);
+    shader.SetInt("material.hasEmissiveMap", emissiveMap ? 1 : 0);
+    shader.SetInt("material.emissiveMap", static_cast<int>(emissiveUnit));
+    if (emissiveMap) emissiveMap->Bind(shader.Device(), emissiveUnit);
     BindDisplacement(shader, displacementUnit);
 }
 

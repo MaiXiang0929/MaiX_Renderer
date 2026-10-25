@@ -236,12 +236,12 @@ void MaterialEditorPanel::Draw(
         ImGui::EndDisabled();
         ImGui::PopID();
     };
-    int shadingModel = properties.shadingModel == ShadingModel::Toon ? 1 : 0;
+    int shadingModel = static_cast<int>(properties.shadingModel);
     ImGui::BeginDisabled(snapshot.isInstance);
     MaterialFieldLabel(snapshot.isInstance ? "Shading Model (parent)" : "Shading Model");
-    if (ImGui::Combo("##ShadingModel", &shadingModel, "PBR\0Toon\0"))
+    if (ImGui::Combo("##ShadingModel", &shadingModel, "PBR\0Toon\0Unlit\0"))
     {
-        properties.shadingModel = shadingModel == 1 ? ShadingModel::Toon : ShadingModel::PBR;
+        properties.shadingModel = static_cast<ShadingModel>(shadingModel);
         changed = true;
     }
     ImGui::EndDisabled();
@@ -276,6 +276,19 @@ void MaterialEditorPanel::Draw(
     editField(MaterialParameter::AmbientOcclusion, "Ambient Occlusion", [&] { return ImGui::SliderFloat("##Value", &properties.ambientOcclusion, 0.000f, 1.000f); });
     editField(MaterialParameter::NormalScale, "Normal Scale", [&] { return ImGui::SliderFloat("##Value", &properties.normalScale, 0.000f, 4.000f); });
     editField(MaterialParameter::Opacity, "Opacity", [&] { return ImGui::SliderFloat("##Value", &properties.opacity, 0.000f, 1.000f); });
+    editField(MaterialParameter::EmissiveColor, "Emissive Color (sRGB)", [&] {
+        auto display = LinearToSrgb(properties.emissiveColor);
+        if (!ImGui::ColorEdit3("##Value", &display.x)) return false;
+        properties.emissiveColor = SrgbToLinear(display);
+        return true;
+    });
+    editField(MaterialParameter::EmissiveIntensity, "Emissive Intensity", [&] {
+        return ImGui::DragFloat("##Value", &properties.emissiveIntensity, 0.1f, 0.0f, MaximumEmissiveIntensity, "%.3f");
+    });
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("HDR multiplier of Emissive Color and its optional sRGB texture. 0 disables emission.\nEmission participates in exposure and Bloom; it does not illuminate nearby objects.");
+    if (properties.shadingModel == ShadingModel::Unlit)
+        ImGui::TextWrapped("Unlit outputs emission only. Base Color alpha and Opacity still control coverage; object shadow casting is independent.");
 
     if (snapshot.blendMode == BlendMode::Masked)
         editField(MaterialParameter::AlphaCutoff, "Alpha Cutoff", [&] { return ImGui::SliderFloat("##Value", &properties.alphaCutoff, 0.0f, 1.0f); });
@@ -324,7 +337,8 @@ void MaterialEditorPanel::Draw(
         "ORM",
         "Displacement",
         "Legacy Specular",
-        "Face Shadow"};
+        "Face Shadow",
+        "Emissive"};
     // 每个槽位纵向排列预览、来源和操作，不要求窗口容纳四列固定宽度。
     for (std::size_t index = 0; index < names.size(); ++index)
     {

@@ -155,6 +155,7 @@ J Properties(const MaterialProperties& p)
 #undef PUT_VEC
     j["alphaCutoff"]=p.alphaCutoff;
     j["surfaceSide"]=static_cast<int>(p.surfaceSide);
+    j["emissiveColor"]=Vec(p.emissiveColor); j["emissiveIntensity"]=p.emissiveIntensity;
     j["shadingModel"]=static_cast<int>(p.shadingModel); j["faceShadowEnabled"]=p.faceShadowEnabled;
     j["faceShadowMirrorX"]=p.faceShadowMirrorX; j["outlineEnabled"]=p.outlineEnabled; return j;
 }
@@ -163,8 +164,13 @@ MaterialProperties ReadProperties(const J& j, std::uint64_t version)
     Fields(j,{"baseColor","specularColor","shininess","environmentReflectivity","metallic","roughness",
         "ambientOcclusion","normalScale","opacity","alphaCutoff","shadingModel","toonThreshold","toonShadowStrength","toonShadowColor",
         "rimLightStrength","rimLightColor","faceShadowEnabled","faceForwardLocal","faceRightLocal","faceShadowSoftness",
-        "faceShadowMirrorX","outlineEnabled","outlineThickness","outlineColor","surfaceSide"});
+        "faceShadowMirrorX","outlineEnabled","outlineThickness","outlineColor","surfaceSide","emissiveColor","emissiveIntensity"});
     MaterialProperties p;
+    if (version>=7)
+    {
+        p.emissiveColor=Vector(j.at("emissiveColor")); p.emissiveIntensity=Number(j.at("emissiveIntensity"));
+    }
+    else Check(!j.contains("emissiveColor")&&!j.contains("emissiveIntensity"),"Old scene versions cannot contain emission.");
     if (version>=4)
     {
         const auto side=Key(j.at("surfaceSide"));
@@ -184,7 +190,7 @@ MaterialProperties ReadProperties(const J& j, std::uint64_t version)
 #undef GET_VEC
     if (version < 6) p.baseColor = LegacyBaseColorToLinear(p.baseColor);
     if (j.contains("alphaCutoff")) p.alphaCutoff=Number(j.at("alphaCutoff"));
-    const auto shading=Key(j.at("shadingModel")); Check(shading<=1,"Unknown shading model.");
+    const auto shading=Key(j.at("shadingModel")); Check(shading<=(version>=7?2u:1u),"Unknown shading model.");
     p.shadingModel=static_cast<ShadingModel>(shading);
     p.faceShadowEnabled=j.at("faceShadowEnabled").get<bool>();
     p.faceShadowMirrorX=j.at("faceShadowMirrorX").get<bool>();
@@ -249,7 +255,11 @@ bool ValidateSceneDocument(const SceneDocument& d, std::string& error)
             Check(static_cast<int>(m.blend)>=0 && static_cast<int>(m.blend)<=2,"Invalid blend mode.");
             Check(IsValidSurfaceSide(m.properties.surfaceSide),"Invalid surface side.");
             Check(std::isfinite(m.properties.alphaCutoff)&&m.properties.alphaCutoff>=0&&m.properties.alphaCutoff<=1,"Invalid alpha cutoff.");
-            Check(static_cast<int>(m.properties.shadingModel)>=0 && static_cast<int>(m.properties.shadingModel)<=1,"Invalid shading model.");
+            Check(IsValidShadingModel(m.properties.shadingModel),"Invalid shading model.");
+            const auto& emission=m.properties;
+            Check(Finite(emission.emissiveColor)&&emission.emissiveColor.Min()>=0&&emission.emissiveColor.Max()<=1&&
+                std::isfinite(emission.emissiveIntensity)&&emission.emissiveIntensity>=0&&
+                emission.emissiveIntensity<=MaximumEmissiveIntensity,"Invalid emission color or intensity.");
 #define CHECK_FLOAT(field) Check(std::isfinite(m.properties.field),"Non-finite material parameter.");
             SCENE_FLOATS(CHECK_FLOAT)
 #undef CHECK_FLOAT
@@ -335,7 +345,7 @@ bool EncodeSceneDocument(const SceneDocument& d,std::string& text,std::string& e
     if (!ValidateSceneDocument(d,error)) return false;
     try
     {
-        J j={{"format","MaiX Scene"},{"version",6},{"actors",J::array()},{"materials",J::array()},
+        J j={{"format","MaiX Scene"},{"version",7},{"actors",J::array()},{"materials",J::array()},
             {"defaultModel",d.defaultModel},{"mainLight",d.mainLight},{"reflectionGroundEnabled",d.reflectionGroundEnabled},
             {"groundY",d.groundY},{"modelDiameter",d.modelDiameter},{"sceneRadius",d.sceneRadius},
             {"defaultBoundsMin",Vec(d.defaultBoundsMin)},{"defaultBoundsMax",Vec(d.defaultBoundsMax)},{"objCenter",Vec(d.objCenter)}};
@@ -412,7 +422,7 @@ bool DecodeSceneDocument(const std::string& text,SceneDocument& output,std::stri
         Fields(j,{"format","version","actors","materials","defaultModel","mainLight","reflectionGroundEnabled","groundY",
             "modelDiameter","sceneRadius","defaultBoundsMin","defaultBoundsMax","objCenter","postProcess","environment","shadows"});
         const auto version=Key(j.at("version"));
-        Check(j.at("format")=="MaiX Scene"&&(version>=1&&version<=6),"Unsupported scene format/version.");
+        Check(j.at("format")=="MaiX Scene"&&(version>=1&&version<=7),"Unsupported scene format/version.");
         SceneDocument d;
         if (version>=3)
         {
@@ -462,10 +472,16 @@ bool DecodeSceneDocument(const std::string& text,SceneDocument& output,std::stri
             Fields(v,{"id","parent","name","properties","overrides","blend","textures"});
             SceneMaterialRecord m; m.id=Key(v.at("id")); m.parent=Key(v.at("parent")); m.name=v.at("name").get<std::string>();
             m.properties=ReadProperties(v.at("properties"),version);
-            const auto mask=v.at("overrides").get<std::string>(); Check((mask.size()==MaterialParameterCount||mask.size()==MaterialParameterCount-1)&&mask.find_first_not_of("01")==std::string::npos,"Invalid material override mask.");
+            const auto mask=v.at("overrides").get<std::string>();
+            const bool validMaskSize=version>=7 ? mask.size()==MaterialParameterCount :
+                (mask.size()==static_cast<size_t>(MaterialParameter::EmissiveColor)||
+                    mask.size()==static_cast<size_t>(MaterialParameter::AlphaCutoff));
+            Check(validMaskSize&&mask.find_first_not_of("01")==std::string::npos,"Invalid material override mask.");
             m.overrides=MaterialOverrideMask(mask);
             const auto blend=Key(v.at("blend")); Check(blend<=2,"Invalid blend mode."); m.blend=static_cast<BlendMode>(blend);
-            const auto& ts=v.at("textures"); Check(ts.is_array()&&ts.size()==MaterialTextureSlotCount,"Invalid texture slots.");
+            const auto& ts=v.at("textures");
+            const auto slotCount=version>=7 ? MaterialTextureSlotCount : ToIndex(MaterialTextureSlot::Emissive);
+            Check(ts.is_array()&&ts.size()==slotCount,"Invalid texture slots.");
             for (size_t i=0;i<ts.size();++i)
             {
                 if (version>=5) Fields(ts[i],{"mode","source","embeddedId","recipe"});

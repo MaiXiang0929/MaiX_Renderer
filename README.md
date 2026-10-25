@@ -17,8 +17,15 @@ MaiX_Renderer 当前是一个基于 C++17 与 OpenGL 4.0 Core Profile 的实时�
 - 环境加载时由 GPU 生成漫反射辐照度、GGX 粗糙度预过滤 Cubemap 与 BRDF LUT；主视图、平面反射及透明 PBR 共用 IBL，浮点环境资源与反射结果由最终后处理统一曝光和色调映射。
 - 材质支持 Front、Back、Double 与 Legacy 面模式；新材质默认 Front，实例继承父材质。主视图、反射、透明和阴影统一处理剔除及负缩放绕序，Double 背面使用翻转后的完整法线贴图法线。
 - `--material-lab` 使用共享 Mesh 展示铜、塑料、陶瓷和粗糙金属四种材质。Material Editor 可在运行时修改材质参数与纹理。
+- PBR/Toon 支持线性 Emissive Color × Intensity × 可选 sRGB 贴图，自发光在光照后加入 HDR，参与曝光、Tone Mapping 和 Bloom。Unlit 只输出自发光，仍遵守面模式、Masked、透明与对象投影开关。默认 Intensity 为 0，自发光不向周围对象传播照明。
 
 IBL 可使用内置六面 sRGB PNG 天空或 Radiance `.hdr` 全景；不包含 EXR、动态天空或动态反射探针。HDR 在加载时转换为浮点 Cubemap 并生成 IBL，F6 重载会重新生成当前环境的 IBL；Roughness 控制环境反射模糊程度，Metallic 控制漫反射与镜面分配，Environment Reflectivity 保留为环境镜面强度，AO 作用于间接光。可用 `--material-lab` 对照粗糙度与金属度，并旋转视角检查反射方向；既有 HDR/IBL 效果已由用户验收。
+
+Material Editor 中可选 `Shading Model → Unlit`，用 `Emissive Color (sRGB)` 和 `Emissive Intensity`（0–1,000,000）设置发光，再在 `Texture Slots → Emissive` 手动选择颜色贴图。默认白色乘零强度；提升强度到 HDR 范围后，可在 Render Settings 中调节 Bloom 与曝光。Base Color 的 Alpha × Opacity 继续控制透明/Masked，发光贴图 Alpha 不参与覆盖；Unlit 不使用 Base Color 的 RGB。实例可分别覆盖发光颜色与强度，贴图可继承、替换、禁用或重置到父级。禁用贴图保留颜色常量发光。
+
+当前场景保存为 v7，记录发光参数、贴图来源与实例覆盖；v1–v6 迁移为零发光并保留原编号和颜色语义。缺失发光来源会拒绝候选加载并保留活动场景；FBX 自动发光识别未接入。发光不受灯光、阴影、材质 AO 或 SSAO 衰减；HDR 接近 65504 时优先保留直接光/镜面/发光，可遮蔽间接光只占剩余空间，防止 SSAO 错减发光。
+
+发光与 Unlit 画面检查（待用户验收）：启动 `MaiX_Renderer.exe --material-lab`，选一个材质，将 Emissive Intensity 设为 2–8 并选颜色；关闭灯光后检查发光保持，开关 SSAO、Bloom 和曝光，再切换 Unlit 检查光照不再影响表面。检查镜面反射与 Alpha Blend/Masked，创建实例分别修改发光颜色、强度和贴图，保存重开应保持一致。新保存的 v7 场景需要当前版本程序打开。
 
 ### NPR 与透明渲染
 

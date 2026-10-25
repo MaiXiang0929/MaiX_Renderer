@@ -60,6 +60,11 @@ MaterialProperties SanitizeMaterialProperties(const MaterialProperties& properti
     clamped.outlineColor.x = std::clamp(clamped.outlineColor.x, 0.0f, 1.0f);
     clamped.outlineColor.y = std::clamp(clamped.outlineColor.y, 0.0f, 1.0f);
     clamped.outlineColor.z = std::clamp(clamped.outlineColor.z, 0.0f, 1.0f);
+    clamped.emissiveIntensity = std::isfinite(clamped.emissiveIntensity) ?
+        std::clamp(clamped.emissiveIntensity, 0.0f, MaximumEmissiveIntensity) : 0.0f;
+    for (int i = 0; i < 3; ++i)
+        clamped.emissiveColor[i] = std::isfinite(clamped.emissiveColor[i]) ?
+            std::clamp(clamped.emissiveColor[i], 0.0f, 1.0f) : 0.0f;
 
     return clamped;
 }
@@ -93,6 +98,8 @@ Material MaterialInstance::Resolve(const Material& base, const std::string& name
     if (overridden(MaterialParameter::OutlineThickness)) resolved.outlineThickness = values.outlineThickness;
     if (overridden(MaterialParameter::OutlineColor)) resolved.outlineColor = values.outlineColor;
     if (overridden(MaterialParameter::AlphaCutoff)) resolved.alphaCutoff = values.alphaCutoff;
+    if (overridden(MaterialParameter::EmissiveColor)) resolved.emissiveColor = values.emissiveColor;
+    if (overridden(MaterialParameter::EmissiveIntensity)) resolved.emissiveIntensity = values.emissiveIntensity;
     resolved = SanitizeMaterialProperties(resolved);
     // Shading Model、Blend Mode 与 Surface Side 始终由基础材质决定，实例不能覆盖队列与光栅策略。
     for (std::size_t i = 0; i < textures.size(); ++i)

@@ -17,8 +17,14 @@ enum class BlendMode
 enum class ShadingModel
 {
     PBR,
-    Toon
+    Toon,
+    Unlit
 };
+constexpr bool IsValidShadingModel(ShadingModel model)
+{
+    return model == ShadingModel::PBR || model == ShadingModel::Toon || model == ShadingModel::Unlit;
+}
+constexpr float MaximumEmissiveIntensity = 1000000.0f;
 
 // Legacy preserves the pre-v4 no-culling/original-normal rendering path.
 enum class SurfaceSide { Front, Back, Double, Legacy };
@@ -48,6 +54,7 @@ enum class MaterialTextureSlot : std::uint8_t
     Displacement,
     LegacySpecular,
     FaceShadow,
+    Emissive,
     Count
 };
 
@@ -70,6 +77,7 @@ constexpr unsigned int GetMaterialTextureUnitOffset(
     case MaterialTextureSlot::Normal: return 2;
     case MaterialTextureSlot::Displacement: return 3;
     case MaterialTextureSlot::FaceShadow: return 6;
+    case MaterialTextureSlot::Emissive: return 10; // Units 4/5/7/8/9 belong to IBL/shadows.
     case MaterialTextureSlot::Count: break;
     }
     return 0;
@@ -81,7 +89,7 @@ constexpr float MaximumFaceShadowSoftness = 0.25f;
 constexpr TextureColorSpace GetRequiredMaterialTextureColorSpace(
     MaterialTextureSlot slot)
 {
-    return slot == MaterialTextureSlot::BaseColor
+    return slot == MaterialTextureSlot::BaseColor || slot == MaterialTextureSlot::Emissive
         ? TextureColorSpace::SRGB
         : TextureColorSpace::Linear;
 }

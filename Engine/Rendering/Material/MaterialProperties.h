@@ -34,6 +34,8 @@ struct MaterialProperties
     bool outlineEnabled = false;
     float outlineThickness = 0.025f;
     cy::Vec3f outlineColor{ 0.02f, 0.02f, 0.02f };
+    cy::Vec3f emissiveColor{ 1.0f, 1.0f, 1.0f }; // Linear color, multiplied by intensity and optional sRGB image.
+    float emissiveIntensity = 0.0f; // HDR scene-linear multiplier; no indirect illumination.
 };
 
 enum class MaterialParameter : std::uint8_t
@@ -60,6 +62,8 @@ enum class MaterialParameter : std::uint8_t
     OutlineThickness,
     OutlineColor,
     AlphaCutoff,
+    EmissiveColor,
+    EmissiveIntensity,
     Count
 };
 constexpr std::size_t MaterialParameterCount = static_cast<std::size_t>(MaterialParameter::Count);

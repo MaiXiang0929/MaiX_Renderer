@@ -26,6 +26,8 @@ struct MaterialData
     float normalScale;
     float opacity;
     int shadingModel;
+    vec3 emissiveColor;
+    float emissiveIntensity;
     int surfaceSide; // Front=0, Back=1, Double=2, Legacy=3.
     float toonThreshold;
     float toonShadowStrength;
@@ -42,12 +44,14 @@ struct MaterialData
     sampler2D normalMap;
     sampler2D displacementMap;
     sampler2D faceShadowMap;
+    sampler2D emissiveMap;
     bool hasAlbedoMap;
     bool hasOrmMap;
     bool hasSpecularMap;
     bool hasNormalMap;
     bool hasDisplacementMap;
     bool hasFaceShadowMap;
+    bool hasEmissiveMap;
 };
 
 uniform MaterialData material;
@@ -376,6 +380,16 @@ uniform float coverageCutoff;
 uniform bool coverageHasMap;
 uniform sampler2D coverageMap;
 
+vec3 StoreHdrLighting(vec3 protectedLighting, vec3 occludableLighting, float opacity)
+{
+    // Keep the MRT decomposition consistent with half-float saturation. AO may
+    // remove only indirect light that actually fitted beside emission/direct/specular.
+    vec3 protectedColor = clamp(protectedLighting, vec3(0.0), vec3(65504.0));
+    vec3 storedIndirect = min(max(occludableLighting, vec3(0.0)), vec3(65504.0) - protectedColor);
+    indirectDiffuse = vec4(opaqueForSsao ? storedIndirect : vec3(0.0), opacity);
+    return protectedColor + storedIndirect;
+}
+
 void main()
 {
     if (coverageMasked && coverageOpacity * (coverageHasMap ? texture(coverageMap, fragTexCoord).a : 1.0) < coverageCutoff)
@@ -393,6 +407,16 @@ void main()
     // Constant factors are already linear; the sRGB texture is decoded by sampling.
     vec3 albedo = max(material.baseColor, vec3(0.0)) *
         albedoSample.rgb;
+
+    vec3 emission = material.emissiveColor * material.emissiveIntensity;
+    if (material.hasEmissiveMap && material.emissiveIntensity > 0.0)
+        emission *= texture(material.emissiveMap, fragTexCoord).rgb;
+    float opacity = clamp(material.opacity * albedoSample.a, 0.0, 1.0);
+    if (material.shadingModel == 2) // Unlit: coverage/depth/facing still follow the material policy.
+    {
+        color = vec4(StoreHdrLighting(emission, vec3(0.0), opacity), opacity);
+        return;
+    }
 
     vec3 N = ResolveSurfaceNormal();
     vec3 V = normalize(-fragPos);
@@ -440,11 +464,9 @@ void main()
             toonLighting += albedo * bandColor * radiance * visibility;
         }
         float rim = pow(1.0 - max(dot(N, V), 0.0), 3.0) * material.rimLightStrength;
-        indirectDiffuse = vec4(opaqueForSsao ? vec3(0.03) * albedo : vec3(0.0),
-            clamp(material.opacity * albedoSample.a, 0.0, 1.0));
-        // Physical local lights can exceed half-float storage near the source.
-        color = vec4(ApplyCascadeDebug(min(toonLighting + material.rimLightColor * rim, vec3(65504.0)), linearDepth),
-            clamp(material.opacity * albedoSample.a, 0.0, 1.0));
+        vec3 hdr = StoreHdrLighting(toonLighting - vec3(0.03) * albedo + material.rimLightColor * rim + emission,
+            vec3(0.03) * albedo, opacity);
+        color = vec4(ApplyCascadeDebug(hdr, linearDepth), opacity);
         return;
     }
 
@@ -523,11 +545,7 @@ void main()
     vec2 integratedBrdf = texture(brdfLut,vec2(nDotV,roughness)).rg;
     vec3 environmentSpecular = envReflection * (f0*integratedBrdf.x+integratedBrdf.y) *
         material.environmentReflectivity * environmentTransform.z;
-    vec3 ambient = (environmentDiffuse + environmentSpecular) * ao;
-
-    indirectDiffuse = vec4(opaqueForSsao ? min(environmentDiffuse * ao, vec3(65504.0)) : vec3(0.0),
-        clamp(material.opacity * albedoSample.a, 0.0, 1.0));
-    color = vec4(
-        ApplyCascadeDebug(min(ambient + directLighting, vec3(65504.0)), linearDepth),
-        clamp(material.opacity * albedoSample.a, 0.0, 1.0));
+    vec3 hdr = StoreHdrLighting(directLighting + environmentSpecular * ao + emission,
+        environmentDiffuse * ao, opacity);
+    color = vec4(ApplyCascadeDebug(hdr, linearDepth), opacity);
 }
