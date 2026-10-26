@@ -5,6 +5,14 @@
 #include <memory>
 #include <unordered_map>
 class Renderer;
+class Texture2D;
+struct SceneContentRetirement
+{
+    std::vector<MeshHandle> meshes;
+    std::vector<MaterialHandle> materials;
+    std::vector<std::shared_ptr<Texture2D>> textures;
+    bool Empty() const { return meshes.empty()&&materials.empty()&&textures.empty(); }
+};
 struct SceneContentBindings
 {
     std::unordered_map<std::uint64_t,ActorId> actors;
@@ -31,6 +39,7 @@ public:
     SceneContentBindings bindings;
     std::vector<PrimitiveSceneProxy> primitives;
     std::vector<LightSceneProxy> lights;
+    std::vector<MeshHandle> ownedMeshes;
 private:
     Renderer* m_Renderer;
 };

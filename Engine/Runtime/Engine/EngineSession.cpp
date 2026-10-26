@@ -54,6 +54,7 @@ RenderFrameData EngineSession::PrepareFrame(Camera &camera, unsigned width, unsi
 
 void EngineSession::Shutdown()
 {
+    if (m_Renderer) m_Streaming.Shutdown(*m_Renderer);
     if (m_Renderer)
         DestroySceneResources(m_Scene, *m_Renderer);
     m_Scene = SceneState{};

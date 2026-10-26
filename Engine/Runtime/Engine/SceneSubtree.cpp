@@ -62,6 +62,9 @@ bool ModelsOwnMaterial(const std::vector<SceneModel>& models,const Renderer& ren
 }
 bool OwnsMaterial(const SceneState& scene,const Renderer& renderer,MaterialHandle handle)
 {
+    // Persistent definitions remain active even when only unloaded regions reference them.
+    for(const auto& value:scene.contentMaterials)
+        if(value.region==scene.contentWorld&&DependsOn(renderer,value.handle,handle)) return true;
     for (auto value:scene.sceneMaterials) if (DependsOn(renderer,value,handle)) return true;
     return ModelsOwnMaterial(scene.models,renderer,handle);
 }
@@ -75,7 +78,9 @@ std::vector<MaterialHandle> GetSceneMaterialHandles(const SceneState& scene,cons
 {
     auto materials=renderer.GetMaterialHandles();
     materials.erase(std::remove_if(materials.begin(),materials.end(),[&](MaterialHandle handle) {
-        return renderer.IsMaterialRetained(handle) && !OwnsMaterial(scene,renderer,handle);
+        // In world mode Renderer also owns private upload and retirement resources.
+        // Editor selection/capture may enumerate only active scene ownership.
+        return (renderer.IsMaterialRetained(handle)||!scene.contentWorld.empty())&&!OwnsMaterial(scene,renderer,handle);
     }),materials.end());
     return materials;
 }

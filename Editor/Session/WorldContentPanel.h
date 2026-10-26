@@ -2,7 +2,8 @@
 #pragma once
 #include "Engine/Runtime/Engine/WorldContentSession.h"
 #include "Editor/Session/EditorSelection.h"
-enum class WorldContentActionKind { None,CreateRegion,Load,Unload,Save,Edit,DiscardHistory,BindShared };
+enum class WorldContentActionKind { None,CreateRegion,Load,Unload,Save,Edit,DiscardHistory,BindShared,CancelLoad,ReleaseHold };
+class WorldStreaming;
 struct WorldContentAction
 {
     WorldContentActionKind kind=WorldContentActionKind::None;
@@ -15,7 +16,7 @@ struct WorldContentAction
 class WorldContentPanel
 {
 public:
-    WorldContentAction Draw(WorldContentSession&,SceneState&,const Renderer&,const SceneAssetRoots&,const EditorSelection&);
+    WorldContentAction Draw(WorldContentSession&,SceneState&,const Renderer&,const SceneAssetRoots&,const EditorSelection&,WorldStreaming* streaming=nullptr);
 private:
     char m_Name[129]="Region";
     cy::Vec3f m_Minimum{0.0f},m_Maximum{100.0f};

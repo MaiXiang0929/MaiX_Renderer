@@ -39,6 +39,7 @@ public:
 
     void Bind(RHIDevice& consumer, unsigned int textureUnit) const;
     bool IsValid() const { return !m_DeviceLifetime.expired() && m_TextureID != 0; }
+    std::size_t EstimatedBytes() const { return m_EstimatedBytes; }
     RHITextureHandle GetID() const { return IsValid() ? m_TextureID : RHITextureHandle{}; }
     TextureColorSpace GetColorSpace() const { return m_ColorSpace; }
     void SetSource(std::filesystem::path path, std::uint64_t embeddedId = 0);
@@ -58,6 +59,7 @@ private:
     }
 
     RHITextureHandle m_TextureID = 0;
+    std::size_t m_EstimatedBytes = 0;
     TextureColorSpace m_ColorSpace = TextureColorSpace::Linear;
     std::filesystem::path m_SourcePath;
     std::uint64_t m_EmbeddedId = 0;

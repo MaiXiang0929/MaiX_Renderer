@@ -51,7 +51,8 @@ add_library(MaiXRuntime STATIC Engine/Runtime/Component/Camera.cpp
     Engine/Runtime/Engine/ApplicationOptions.cpp Engine/Runtime/Scene/SceneDocument.cpp
     Engine/Runtime/Scene/SceneDocumentFiles.cpp)
 target_sources(MaiXRuntime PRIVATE Engine/Runtime/Scene/ContentIdentity.cpp
-    Engine/Runtime/Scene/WorldContentDocument.cpp)
+    Engine/Runtime/Scene/WorldContentDocument.cpp
+    Engine/Runtime/Scene/ContentComparison.cpp)
 target_link_libraries(MaiXRuntime PUBLIC MaiXCore MaiXAsset)
 target_compile_options(MaiXRuntime PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
 
@@ -106,7 +107,9 @@ target_compile_options(MaiXRendering PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/EHsc>")
 
 add_library(MaiXEngine STATIC Engine/Runtime/Engine/EngineSession.cpp
     Engine/Runtime/Engine/SceneContent.cpp
+    Engine/Runtime/Engine/SceneContentPreparation.cpp
     Engine/Runtime/Engine/WorldContentSession.cpp
+    Engine/Runtime/Engine/WorldStreaming.cpp
     Engine/Runtime/Engine/ScenePersistence.cpp
     Engine/Runtime/Engine/SceneSubtree.cpp
     Engine/Runtime/Engine/RenderSceneBridge.cpp Engine/Runtime/Engine/SceneFrameBuilder.cpp)

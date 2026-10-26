@@ -1358,6 +1358,16 @@ void EditorApp::Render() {
             DrawEnvironmentControls(m_Engine.Scene(),*m_Renderer,nativeWindowHandle);
         });
 
+    if(m_Project->IsReady()) {
+        const auto& scene=m_Engine.Scene();
+        const auto* cameraActor=scene.world.Find(scene.camera.actor);
+        const auto source=m_SceneCameraView&&cameraActor?cameraActor->world.position:m_Camera.GetPosition();
+        const SceneAssetRoots roots{m_Project->AssetsRoot(),PlatformPaths::ExecutableDirectory()/"assets",std::filesystem::path(MAIX_ENGINE_SOURCE_DIR)/"assets"};
+        m_Engine.Streaming().Update(m_Engine.Content(),m_Engine.Scene(),*m_Renderer,roots,source);
+        if(!m_EditorSelection.ResolveActor(m_Engine.Scene()).IsValid()) m_EditorSelection.Clear();
+        if(!m_PendingFocusSelection.ResolveActor(m_Engine.Scene()).IsValid()) m_PendingFocusSelection.Clear();
+        m_MaterialSelection.Synchronize(m_EditorSelection,m_Engine.Scene().models,GetSceneMaterialHandles(m_Engine.Scene(),*m_Renderer));
+    }
     const SceneFrameSettings frameSettings{m_Renderer->IsTessellationEnabled(),
         m_Renderer->GetDisplacementScale(), m_Renderer->AreEditorPrimitivesEnabled()};
     RenderFrameData frame = m_Engine.PrepareFrame(m_Camera,
@@ -1383,7 +1393,7 @@ void EditorApp::Render() {
     const auto removedActor=m_SceneHierarchyPanel->Draw(m_EditorSelection,m_Engine.Scene(),*m_Renderer,
         &m_History,[this](const char* reason) { InvalidateEditorHistory(reason); },&m_Engine.Content(),[this] {
             const SceneAssetRoots roots{m_Project->AssetsRoot(),PlatformPaths::ExecutableDirectory()/"assets",std::filesystem::path(MAIX_ENGINE_SOURCE_DIR)/"assets"};
-            auto action=m_WorldPanel.Draw(m_Engine.Content(),m_Engine.Scene(),*m_Renderer,roots,m_EditorSelection);
+            auto action=m_WorldPanel.Draw(m_Engine.Content(),m_Engine.Scene(),*m_Renderer,roots,m_EditorSelection,&m_Engine.Streaming());
             if(action.kind!=WorldContentActionKind::None) m_WorldAction=std::move(action);
         });
     if (removedActor.IsValid()) {

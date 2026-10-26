@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <unordered_set>
 #include <map>
+#include <atomic>
+#include "Engine/Runtime/Scene/ContentComparison.h"
 #include <stdexcept>
 
 namespace
@@ -44,11 +46,6 @@ std::string WorldText(WorldContentDocument value)
 {
     value.persistent=Canonical(std::move(value.persistent)); std::string text,error;
     Check(EncodeWorldContentDocument(value,text,error),error); return text;
-}
-std::string RegionText(RegionContentDocument value)
-{
-    value.content=Canonical(std::move(value.content)); std::string text,error;
-    Check(EncodeRegionContentDocument(value,text,error),error); return text;
 }
 void AddDescriptors(const ContentDocument& content,const std::string& region,std::vector<ContentActorDescriptor>& result)
 {
@@ -106,8 +103,10 @@ void ValidateMaterialKeys(const ContentDocument& content,const std::string& worl
 }
 }
 
+namespace { std::atomic<std::uint64_t> ContentGeneration{1}; }
+WorldContentSession::WorldContentSession():m_Generation(ContentGeneration.fetch_add(1)) {}
 void WorldContentSession::Reset() noexcept
-{ m_Document={}; m_File.clear(); m_Regions.clear(); m_Catalog.clear(); m_SavedWorld.clear(); }
+{ m_Generation=ContentGeneration.fetch_add(1); m_Document={}; m_File.clear(); m_Regions.clear(); m_Catalog.clear(); m_SavedWorld.clear(); }
 
 bool WorldContentSession::Create(const std::filesystem::path& file,SceneState& scene,Renderer& renderer,const SceneAssetRoots& roots,std::string& error)
 {
@@ -293,9 +292,9 @@ bool WorldContentSession::SaveRegion(const std::string& id,SceneState& scene,Ren
         auto found=std::find_if(m_Regions.begin(),m_Regions.end(),[&](const auto& r) { return r.record.id==id; });
         Check(found!=m_Regions.end()&&found->loaded,"Load the region before saving it.");
         RegionContentDocument document{Id(),id,{}}; Check(Capture(id,scene,renderer,roots,document.content,error),error);
-        auto text=RegionText(document); const auto file=ResolveSceneAssetPath(found->record.source,roots);
+        auto baseline=Canonical(document.content); const auto file=ResolveSceneAssetPath(found->record.source,roots);
         Check(SavePersistent(scene,renderer,roots,error),error);
-        Check(WriteRegionContentDocument(file,document,error),error); found->savedText=std::move(text);
+        Check(WriteRegionContentDocument(file,document,error),error); found->baseline=std::move(baseline);
     });
 }
 bool WorldContentSession::SaveAll(SceneState& scene,Renderer& renderer,const SceneAssetRoots& roots,std::string& error)
@@ -313,7 +312,8 @@ bool WorldContentSession::IsDirty(const std::string& id,SceneState& scene,const 
         const auto found=std::find_if(m_Regions.begin(),m_Regions.end(),[&](const auto& r) { return r.record.id==id; });
         Check(found!=m_Regions.end(),"Unknown region."); if(!found->loaded) { error.clear(); return false; }
         if(!Capture(id,scene,renderer,roots,content,error)) return true;
-        const auto text=RegionText({Id(),id,std::move(content)}); error.clear(); return text!=found->savedText;
+        Check(found->baseline.has_value(),"Loaded region baseline missing.");
+        error.clear(); return !RegionalContentEqual(Canonical(std::move(content)),*found->baseline);
     } catch(const std::exception& e) { error=e.what(); return true; }
 }
 bool WorldContentSession::HasUnsavedChanges(SceneState& scene,const Renderer& renderer,const SceneAssetRoots& roots,std::string& error)
@@ -333,7 +333,7 @@ bool WorldContentSession::CreateRegion(const std::string& name,const cy::Vec3f& 
         const auto file=m_File.parent_path()/"Regions"/(record.id+".maixregion"); record.source=MakeSceneAssetPath(file,roots);
         document.regions.push_back(record); Check(Capture(Id(),scene,renderer,roots,document.persistent,error),error);
         auto worldText=WorldText(document); RegionContentDocument region{Id(),record.id,{}};
-        regions.push_back({record,true,RegionText(region),{}}); id=record.id;
+        regions.push_back({record,true,{},ContentDocument{}}); id=record.id;
         std::filesystem::create_directories(file.parent_path());
         Check(WriteRegionContentDocument(file,region,error,false),error);
         if(!WriteWorldContentDocument(m_File,document,error)) {
@@ -343,41 +343,96 @@ bool WorldContentSession::CreateRegion(const std::string& name,const cy::Vec3f& 
     });
 }
 
-bool WorldContentSession::LoadRegion(const std::string& id,SceneState& scene,Renderer& renderer,const SceneAssetRoots& roots,std::string& error)
+bool WorldContentSession::DescribeRegionLoad(const std::string& id,const SceneAssetRoots& roots,RegionLoadDescription& output,std::string& error) const
 {
     return Guard(error,[&] {
-        Check(Ready()&&scene.contentWorld==Id(),"No active world.");
-        auto found=std::find_if(m_Regions.begin(),m_Regions.end(),[&](const auto& r) { return r.record.id==id; });
-        Check(found!=m_Regions.end()&&!found->loaded,"Region is unknown or already loaded.");
-        RegionContentDocument document; Check(ReadRegionContentDocument(ResolveSceneAssetPath(found->record.source,roots),document,error),error);
-        Check(document.world==Id()&&document.id==id,"Region belongs to another world or manifest entry.");
+        Check(Ready(),"No active world.");
+        const auto found=std::find_if(m_Regions.begin(),m_Regions.end(),[&](const auto& r) { return r.record.id==id; });
+        Check(found!=m_Regions.end()&&!found->loaded,"Region unknown or already loaded.");
+        RegionLoadDescription description; description.world=Id(); description.id=id;
+        description.file=ResolveSceneAssetPath(found->record.source,roots);
+        for(const auto& key:m_Document.persistent.materials) description.materialOwners.emplace(key.guid,Id());
+        for(const auto& region:m_Regions) if(!region.loaded&&region.record.id!=id)
+            description.otherFiles.emplace_back(region.record.id,ResolveSceneAssetPath(region.record.source,roots));
+        output=std::move(description);
+    });
+}
+bool ReadRegionLoadDocument(const RegionLoadDescription& description,RegionLoadDocument& output,std::string& error)
+{
+    return Guard(error,[&] {
+        RegionLoadDocument loaded; loaded.materialOwners=description.materialOwners;
+        for(const auto& source:description.otherFiles) {
+            RegionContentDocument other; Check(ReadRegionContentDocument(source.second,other,error),error);
+            Check(other.world==description.world&&other.id==source.first,"Other region identity changed.");
+            for(const auto& key:other.content.materials) if(!key.shared)
+                Check(loaded.materialOwners.emplace(key.guid,source.first).second,"Duplicate material GUID in region files.");
+        }
+        Check(ReadRegionContentDocument(description.file,loaded.region,error),error);
+        Check(loaded.region.world==description.world&&loaded.region.id==description.id,"Region belongs to another world or manifest entry.");
+        // Shared materials may have been added since the last world save. Resolve those against live values on the context thread.
+        auto owners=loaded.materialOwners;
+        for(const auto& key:loaded.region.content.materials) if(!key.shared)
+            Check(owners.emplace(key.guid,description.id).second,"Duplicate regional material GUID.");
+        loaded.baseline=Canonical(loaded.region.content);
+        output=std::move(loaded);
+    });
+}
+bool WorldContentSession::RegionOptions(const RegionLoadDocument& loaded,const SceneState& scene,SceneContentOptions& options,std::string& error) const
+{
+    return Guard(error,[&] {
+        const auto& document=loaded.region;
+        Check(Ready()&&document.world==Id()&&scene.contentWorld==Id(),"Region belongs to an inactive world.");
+        auto found=std::find_if(m_Regions.begin(),m_Regions.end(),[&](const auto& r) { return r.record.id==document.id; });
+        Check(found!=m_Regions.end()&&!found->loaded,"Region unknown or already active.");
+        auto owners=loaded.materialOwners;
+        for(const auto& material:scene.contentMaterials) {
+            auto old=owners.find(material.guid);
+            Check(old==owners.end()||old->second==material.region,"Live material ownership changed."); owners[material.guid]=material.region;
+        }
+        ValidateMaterialKeys(document.content,Id(),owners,document.id);
+        FillOptions(document.content,document.id,scene,options);
+    });
+}
+bool WorldContentSession::CommitRegion(const RegionLoadDocument& loaded,PreparedSceneContent& prepared,SceneState& scene,Renderer& renderer,std::string& error)
+{
+    return Guard(error,[&] {
+        const auto& document=loaded.region; const auto& id=document.id;
+        SceneContentOptions current; Check(RegionOptions(loaded,scene,current,error),error);
+        for(const auto& entry:current.borrowedMaterials) {
+            Renderer::MaterialSnapshot snapshot;
+            Check(prepared.bindings.materials.at(entry.first).id==entry.second.id&&renderer.GetMaterialSnapshot(entry.second,snapshot),"Shared material changed while loading; retry region.");
+        }
+        Check(RefreshCatalog(scene,error),error);
         auto catalog=m_Catalog; catalog.erase(std::remove_if(catalog.begin(),catalog.end(),[&](const auto& d) { return d.region==id; }),catalog.end());
         AddDescriptors(document.content,id,catalog);
-        std::map<std::string,std::string> owners;
-        for(const auto& material:scene.contentMaterials) owners.emplace(material.guid,material.region);
-        // Unloaded-region local keys still reserve their identities.
-        for(const auto& region:m_Regions) if(!region.loaded&&region.record.id!=id) {
-            RegionContentDocument other; Check(ReadRegionContentDocument(ResolveSceneAssetPath(region.record.source,roots),other,error),error);
-            for(const auto& key:other.content.materials) if(!key.shared) Check(owners.emplace(key.guid,region.record.id).second,"Duplicate unloaded material GUID.");
-        }
-        ValidateMaterialKeys(document.content,Id(),owners,id);
-        auto saved=RegionText(document); SceneContentOptions options; FillOptions(document.content,id,scene,options);
-        std::unique_ptr<PreparedSceneContent> prepared;
-        Check(PrepareSceneContent(document.content.scene,renderer,roots,options,prepared,error),error);
-        World world; Check(scene.world.PrepareAppend(prepared->scene.world,world,error),error);
+        auto found=std::find_if(m_Regions.begin(),m_Regions.end(),[&](const auto& r) { return r.record.id==id; });
+        auto baseline=loaded.baseline;
+        World world; Check(scene.world.PrepareAppend(prepared.scene.world,world,error),error);
         auto models=scene.models; auto lights=scene.lights; auto materials=scene.sceneMaterials; auto identities=scene.contentMaterials;
-        models.insert(models.end(),prepared->scene.models.begin(),prepared->scene.models.end());
-        lights.insert(lights.end(),prepared->scene.lights.begin(),prepared->scene.lights.end());
-        for(auto handle:prepared->scene.sceneMaterials) Add(materials,handle);
-        TrackPrepared(document.content,id,*prepared,identities);
-        RenderScene renderScene; Check(renderer.PrepareSceneUpdate(prepared->primitives,prepared->lights,{},{},renderScene,error),error);
+        models.insert(models.end(),prepared.scene.models.begin(),prepared.scene.models.end());
+        lights.insert(lights.end(),prepared.scene.lights.begin(),prepared.scene.lights.end());
+        for(auto handle:prepared.scene.sceneMaterials) Add(materials,handle);
+        TrackPrepared(document.content,id,prepared,identities);
+        RenderScene renderScene; Check(renderer.PrepareSceneUpdate(prepared.primitives,prepared.lights,{},{},renderScene,error),error);
         renderer.CommitSceneUpdate(std::move(renderScene)); scene.world=std::move(world); scene.models.swap(models); scene.lights.swap(lights);
-        scene.sceneMaterials.swap(materials); scene.contentMaterials.swap(identities); scene.nextModelId=prepared->scene.nextModelId;
-        prepared->Release(); found->loaded=true; found->savedText=std::move(saved); found->lastError.clear(); m_Catalog.swap(catalog);
+        scene.sceneMaterials.swap(materials); scene.contentMaterials.swap(identities); scene.nextModelId=std::max(scene.nextModelId,prepared.scene.nextModelId);
+        prepared.Release(); found->loaded=true; found->baseline=std::move(baseline); found->lastError.clear(); m_Catalog.swap(catalog);
     });
+}
+bool WorldContentSession::LoadRegion(const std::string& id,SceneState& scene,Renderer& renderer,const SceneAssetRoots& roots,std::string& error)
+{
+    RegionLoadDescription description; RegionLoadDocument loaded; SceneContentOptions options;
+    if(!DescribeRegionLoad(id,roots,description,error)||!ReadRegionLoadDocument(description,loaded,error)||!RegionOptions(loaded,scene,options,error)) return false;
+    std::unique_ptr<PreparedSceneContent> prepared;
+    if(!PrepareSceneContent(loaded.region.content.scene,renderer,roots,options,prepared,error)) return false;
+    return CommitRegion(loaded,*prepared,scene,renderer,error);
 }
 
 bool WorldContentSession::UnloadRegion(const std::string& id,SceneState& scene,Renderer& renderer,const SceneAssetRoots& roots,std::string& error)
+{ return RemoveRegion(id,scene,renderer,roots,nullptr,error); }
+bool WorldContentSession::DetachRegion(const std::string& id,SceneState& scene,Renderer& renderer,const SceneAssetRoots& roots,SceneContentRetirement& output,std::string& error)
+{ return RemoveRegion(id,scene,renderer,roots,&output,error); }
+bool WorldContentSession::RemoveRegion(const std::string& id,SceneState& scene,Renderer& renderer,const SceneAssetRoots& roots,SceneContentRetirement* output,std::string& error)
 {
     return Guard(error,[&] {
         Check(Ready()&&scene.contentWorld==Id()&&id!=Id(),"Persistent content cannot be unloaded as a region.");
@@ -416,7 +471,10 @@ bool WorldContentSession::UnloadRegion(const std::string& id,SceneState& scene,R
         for(auto material:resources.materials) Check(!renderScene.HasMaterialReference(material.id),"A primitive outside this region still references its material (including hidden objects).");
         renderer.CommitSceneUpdate(std::move(renderScene)); scene.world=std::move(world); scene.models.swap(models); scene.lights.swap(lights);
         scene.sceneMaterials.swap(materials); scene.contentMaterials.swap(identities); found->loaded=false;
-        std::string{}.swap(found->savedText); // Unloaded content retains descriptors, not a full document baseline.
-        Release(resources,renderer);
+        found->baseline.reset(); // Unloaded content retains descriptors only.
+        if(output) {
+            output->meshes=std::move(resources.meshes); output->materials=std::move(resources.materials);
+            std::stable_sort(output->materials.begin(),output->materials.end(),[&](auto a,auto b) { return renderer.IsMaterialInstance(a)>renderer.IsMaterialInstance(b); });
+        } else Release(resources,renderer);
     });
 }

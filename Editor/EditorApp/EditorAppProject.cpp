@@ -17,6 +17,7 @@ bool EditorApp::OpenProjectFile(const std::filesystem::path& path)
         const SceneAssetRoots roots{{},PlatformPaths::ExecutableDirectory()/"assets",
             std::filesystem::path(MAIX_ENGINE_SOURCE_DIR)/"assets"};
         std::string error;
+        m_Engine.Streaming().Stop(*m_Renderer);
         if (!OpenProjectSession(*m_Project,m_Engine.Scene(),*m_Renderer,roots,path,error))
         { ReportSceneFileError(error); return false; }
         ResetSceneEditorState();

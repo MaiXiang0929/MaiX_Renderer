@@ -93,8 +93,9 @@ bool EditorApp::OpenSceneFile(const std::filesystem::path& path)
         if (!m_Project->ContainsAssetPath(path))
         { ReportSceneFileError("Open a scene inside: "+m_Project->AssetsRoot().u8string()); return false; }
         SceneDocument document; std::string error;
-        if (!ReadSceneDocument(path,document,error)||
-            !ReplaceSceneFromDocument(m_Engine.Scene(),*m_Renderer,Roots(*m_Project),document,error))
+        if(!ReadSceneDocument(path,document,error)) { ReportSceneFileError(error); return false; }
+        m_Engine.Streaming().Stop(*m_Renderer);
+        if (!ReplaceSceneFromDocument(m_Engine.Scene(),*m_Renderer,Roots(*m_Project),document,error))
         { ReportSceneFileError(error); return false; }
         ResetSceneEditorState();
         m_Engine.Content().Reset(); m_WorldAction={};

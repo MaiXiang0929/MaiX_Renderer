@@ -164,6 +164,10 @@ public:
 
     std::size_t GetMeshResourceCount() const;
     std::size_t GetMaterialResourceCount() const;
+    // Scene geometry/textures only; includes retained history and unpublished materials.
+    // Excludes render targets, environment/IBL and driver allocation overhead.
+    std::size_t EstimatedSceneResourceBytes() const;
+    bool HasMesh(MeshHandle handle) const;
     struct SceneResourceSnapshot
     {
         std::vector<MeshHandle> meshes;

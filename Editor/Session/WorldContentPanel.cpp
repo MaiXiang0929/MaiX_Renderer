@@ -2,9 +2,10 @@
 #include "Editor/Session/WorldContentPanel.h"
 #include "Engine/Rendering/Renderer/Core/Renderer.h"
 #include <imgui.h>
+#include "Engine/Runtime/Engine/WorldStreaming.h"
 
 WorldContentAction WorldContentPanel::Draw(WorldContentSession& content,SceneState& scene,const Renderer& renderer,
-    const SceneAssetRoots& roots,const EditorSelection& selection)
+    const SceneAssetRoots& roots,const EditorSelection& selection,WorldStreaming* streaming)
 {
     WorldContentAction action;
     if (!content.Ready()) return action;
@@ -12,6 +13,37 @@ WorldContentAction WorldContentPanel::Draw(WorldContentSession& content,SceneSta
     if (!content.RefreshCatalog(scene,error)) ImGui::TextWrapped("%s",error.c_str());
     if (ImGui::CollapsingHeader("World Regions",ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::TextWrapped("%s",content.File().filename().u8string().c_str());
+        if(streaming&&ImGui::TreeNode("Streaming")) {
+            auto settings=streaming->Settings(); bool changed=ImGui::Checkbox("Automatic streaming",&settings.automatic);
+            ImGui::SetNextItemWidth(110); changed|=ImGui::DragFloat("Load distance (m)",&settings.loadDistance,1,0,100000);
+            ImGui::SetNextItemWidth(110); changed|=ImGui::DragFloat("Unload distance (m)",&settings.unloadDistance,1,0,100000);
+            if(ImGui::TreeNode("Budgets")) {
+                float time=static_cast<float>(settings.uploadMilliseconds);
+                ImGui::SetNextItemWidth(110); if(ImGui::DragFloat("Upload/release (ms)",&time,0.1f,0.1f,100)) { settings.uploadMilliseconds=time; changed=true; }
+                auto number=[&](const char* label,std::size_t& value,int divisor,int maximum) {
+                    int displayed=static_cast<int>(value/divisor); ImGui::SetNextItemWidth(110);
+                    if(ImGui::DragInt(label,&displayed,1,1,maximum)) { value=static_cast<std::size_t>(displayed)*divisor; changed=true; }
+                };
+                number("Operations/frame",settings.operationsPerFrame,1,1000);
+                number("Upload MiB/frame",settings.uploadBytesPerFrame,1024*1024,1024);
+                number("Queued requests",settings.maxRequests,1,1024);
+                number("CPU candidates MiB",settings.cpuCandidateBytes,1024*1024,16384);
+                number("Scene GPU MiB",settings.gpuSceneBytes,1024*1024,16384);
+                number("CPU/region MiB",settings.preparation.cpuBytes,1024*1024,16384);
+                number("Mesh/texture MiB",settings.preparation.resourceBytes,1024*1024,4096);
+                number("Source file MiB",settings.preparation.sourceBytes,1024*1024,4096);
+                ImGui::TextWrapped("Development limits. Time is a soft budget; a single GL operation or atomic activation may exceed it.");
+                ImGui::TreePop();
+            }
+            if(changed&&!streaming->Configure(settings,error)) ImGui::TextWrapped("%s",error.c_str());
+            const auto& stats=streaming->Statistics();
+            ImGui::Text("Requests: %zu (peak %zu)",stats.queueDepth,stats.peakQueueDepth);
+            ImGui::Text("CPU candidates/reserved: %.1f MiB",double(stats.cpuBytes)/(1024*1024));
+            ImGui::Text("Scene GPU upper estimate: %.1f MiB",double(stats.gpuUpperEstimate)/(1024*1024));
+            ImGui::Text("Scheduling: %.2f ms (peak %.2f)",stats.tickMilliseconds,stats.peakTickMilliseconds);
+            if(ImGui::IsItemHovered()) ImGui::SetTooltip("Scene GPU estimate includes history and candidates; excludes targets, environment and driver overhead. CPU excludes parser/decode temporary allocations.");
+            ImGui::TreePop();
+        }
         if (ImGui::Selectable("Edit Persistent Content",scene.world.ContentRegion()==content.Id()))
             action={WorldContentActionKind::Edit,content.Id()};
         for (const auto& region:content.Regions()) {
@@ -23,7 +55,22 @@ WorldContentAction WorldContentPanel::Draw(WorldContentSession& content,SceneSta
             if(ImGui::IsItemHovered()) ImGui::SetTooltip("Bounds (m): %.1f %.1f %.1f -> %.1f %.1f %.1f\n%s",
                 region.record.minimum.x,region.record.minimum.y,region.record.minimum.z,
                 region.record.maximum.x,region.record.maximum.y,region.record.maximum.z,region.record.source.path.c_str());
-            if(ImGui::SmallButton(region.loaded?"Unload":"Load"))
+            const auto* status=streaming?streaming->Status(region.record.id):nullptr;
+            const bool busy=status&&(status->phase==WorldStreamPhase::Queued||status->phase==WorldStreamPhase::Preparing||status->phase==WorldStreamPhase::WaitingBudget||status->phase==WorldStreamPhase::Uploading||status->phase==WorldStreamPhase::Activating||status->phase==WorldStreamPhase::Cancelling);
+            if(status) {
+                if(busy) {
+                    ImGui::TextUnformatted(WorldStreamPhaseName(status->phase));
+                    if(status->total) ImGui::ProgressBar(float(status->completed)/float(status->total));
+                }
+                if(!status->message.empty()) ImGui::TextWrapped("%s",status->message.c_str());
+                if(region.loaded) {
+                    bool held=status->manuallyHeld;
+                    if(ImGui::Checkbox("Keep loaded",&held)) action={held?WorldContentActionKind::Load:WorldContentActionKind::ReleaseHold,region.record.id};
+                }
+            }
+            if(busy) {
+                if(ImGui::SmallButton("Cancel loading")) action={WorldContentActionKind::CancelLoad,region.record.id};
+            } else if(ImGui::SmallButton(region.loaded?"Unload":status&&status->phase==WorldStreamPhase::Failed?"Retry Load":"Load"))
                 action={region.loaded?WorldContentActionKind::Unload:WorldContentActionKind::Load,region.record.id};
             if(region.loaded) {
                 ImGui::SameLine();

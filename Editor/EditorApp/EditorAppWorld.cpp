@@ -30,6 +30,7 @@ void EditorApp::CreateWorldFile(void* owner)
 bool EditorApp::OpenWorldFile(const std::filesystem::path& file)
 {
     std::string error;
+    m_Engine.Streaming().Stop(*m_Renderer);
     if (!m_Engine.Content().Open(file,m_Engine.Scene(),*m_Renderer,ContentRoots(*m_Project),error))
     { ReportSceneFileError(error); return false; }
     ResetSceneEditorState(); m_WorldPanel={}; m_WorldAction={};
@@ -52,8 +53,10 @@ void EditorApp::HandleWorldContentAction()
             if(success) success=content.SetEditingRegion(id,scene,error);
             break;
         }
-        case WorldContentActionKind::Load: success=content.LoadRegion(action.region,scene,*m_Renderer,roots,error); break;
-        case WorldContentActionKind::Unload: success=content.UnloadRegion(action.region,scene,*m_Renderer,roots,error); break;
+        case WorldContentActionKind::Load: success=m_Engine.Streaming().RequestLoad(action.region,content,*m_Renderer,error); break;
+        case WorldContentActionKind::Unload: success=m_Engine.Streaming().RequestUnload(action.region,content,*m_Renderer,error); break;
+        case WorldContentActionKind::CancelLoad: m_Engine.Streaming().Cancel(action.region); success=true; break;
+        case WorldContentActionKind::ReleaseHold: m_Engine.Streaming().ReleaseHold(action.region); success=true; break;
         case WorldContentActionKind::Save: success=content.SaveRegion(action.region,scene,*m_Renderer,roots,error); break;
         case WorldContentActionKind::Edit: success=content.SetEditingRegion(action.region,scene,error); break;
         case WorldContentActionKind::DiscardHistory: m_History.DiscardRegion(action.region); success=true; break;
@@ -77,5 +80,5 @@ void EditorApp::HandleWorldContentAction()
     if(!m_EditorSelection.ResolveActor(scene).IsValid()) m_EditorSelection.Clear();
     if(!m_PendingFocusSelection.ResolveActor(scene).IsValid()) m_PendingFocusSelection.Clear();
     m_MaterialSelection.Synchronize(m_EditorSelection,scene.models,GetSceneMaterialHandles(scene,*m_Renderer));
-    m_Workspace->AddLog("World operation completed.");
+    m_Workspace->AddLog(action.kind==WorldContentActionKind::Load||action.kind==WorldContentActionKind::Unload||action.kind==WorldContentActionKind::CancelLoad?"World streaming request updated.":"World operation completed.");
 }

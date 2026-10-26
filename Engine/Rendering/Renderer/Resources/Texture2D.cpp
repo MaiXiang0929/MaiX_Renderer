@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #include "Engine/Rendering/Renderer/Resources/Texture2D.h"
 #include "lodepng.h"
+#include <algorithm>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
@@ -70,7 +71,12 @@ std::shared_ptr<Texture2D> Texture2D::CreateRGBA8(RHIDevice &device, unsigned wi
     const auto texture = device.CreateTexture(desc, {pixels.data()});
     if (texture == 0)
         return {};
-    return std::shared_ptr<Texture2D>(new Texture2D(device, texture, space));
+    auto result=std::shared_ptr<Texture2D>(new Texture2D(device, texture, space));
+    for(unsigned w=width,h=height;;w=std::max(1u,w/2),h=std::max(1u,h/2)) {
+        result->m_EstimatedBytes+=static_cast<std::size_t>(w)*h*4;
+        if(w==1&&h==1) break;
+    }
+    return result;
 }
 void Texture2D::Bind(RHIDevice& consumer, unsigned unit) const
 {

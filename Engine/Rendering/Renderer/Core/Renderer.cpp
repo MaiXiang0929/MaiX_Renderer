@@ -13,6 +13,7 @@
 #include <cmath>
 #include <iostream>
 #include <utility>
+#include <unordered_set>
 
 #include "Engine/Rendering/Renderer/View/RenderView.h"
 
@@ -374,6 +375,24 @@ std::size_t Renderer::GetMeshResourceCount() const
 std::size_t Renderer::GetMaterialResourceCount() const
 {
     return m_MaterialResources.Count();
+}
+bool Renderer::HasMesh(MeshHandle handle) const
+{ return handle.IsValid()&&handle.id<m_MeshResources.size()&&m_MeshResources[handle.id]!=nullptr; }
+std::size_t Renderer::EstimatedSceneResourceBytes() const
+{
+    std::size_t bytes=0;
+    for(const auto& mesh:m_MeshResources) if(mesh)
+        bytes+=static_cast<std::size_t>(mesh->GetVertexCount())*sizeof(Vertex)+static_cast<std::size_t>(mesh->GetIndexCount())*sizeof(std::uint32_t);
+    std::unordered_set<const Texture2D*> seen;
+    auto add=[&](const std::shared_ptr<Texture2D>& t) { if(t&&seen.insert(t.get()).second) bytes+=t->EstimatedBytes(); };
+    for(auto handle:m_MaterialResources.Handles()) {
+        const auto* material=m_MaterialResources.Get(handle);
+        for(std::size_t slot=0;slot<MaterialTextureSlotCount;++slot) {
+            add(material->effective.GetTexture(static_cast<MaterialTextureSlot>(slot)));
+            if(material->instance) add(material->instance->textures[slot].texture);
+        }
+    }
+    return bytes;
 }
 
 LightId Renderer::AddLight(LightSceneProxy light)
